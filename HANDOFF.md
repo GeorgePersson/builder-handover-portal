@@ -181,6 +181,13 @@ Supabase is not configured.
   document edits require a specific category/source support; maintenance edits
   require a clear care action and detail. The edit page maps these failures to
   readable review guidance instead of raw error slugs.
+- Extracted item edits now persist an internal reviewer note/reason in local
+  scaffold mode and Supabase mode when the `review_reason` column exists.
+  Builder/admin review queues display the note, low-confidence saves require
+  one, and new extracted rows get default reasons explaining whether they
+  matched an existing record or need admin review. Existing Supabase projects can
+  run `docs/supabase-add-extracted-item-review-reason.sql`; the app still
+  tolerates the old schema while that migration is pending.
 - The handover package can be published from `/builder/handover-package`.
   Local mode stores published item ids in `.local-data/specification-extractions.json`.
 - Supabase package publishing now uses the same package-ready statuses as local
@@ -280,6 +287,11 @@ Supabase is not configured.
 - Lint/build check for type-specific extracted item save validation and readable
   edit error banners. Direct edit-page browser smoke is still gated by Supabase
   sign-in while magic-link email is rate-limited.
+- Lint/build check for extracted item reviewer-note persistence, schema
+  compatibility fallbacks, and builder/admin review-note display.
+- HTTP smoke check after reviewer-note changes: `/` returns `200`, and
+  `/builder/specifications/review` returns the expected `307` redirect to
+  `/login?next=%2Fbuilder%2Fspecifications%2Freview` with Supabase auth active.
 - Browser smoke check for polished specification upload UI: main process action
   is present and disabled before PDF selection, selected-file state appears,
   advanced fallback tools are collapsed, and duplicate save-to-review action is
@@ -311,6 +323,8 @@ Both passed after the latest changes.
 ## Production Backend Notes
 
 - Apply `docs/supabase-schema.sql` to a Supabase project.
+- If the schema was applied before reviewer notes were added, also run
+  `docs/supabase-add-extracted-item-review-reason.sql`.
 - Add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` to
   `.env.local`.
 - Create a private Supabase Storage bucket named `handover-documents`.
@@ -337,9 +351,9 @@ Both passed after the latest changes.
    and admin review for low-confidence records.
 4. Tune the PDF intake progress and warning copy against real builder files,
    then add OCR fallback for scanned/image-only specifications.
-5. Persist reviewer notes/reasons on extracted item edits once the Supabase
-   schema has a dedicated field, then display those reasons through builder and
-   admin review.
+5. Apply `docs/supabase-add-extracted-item-review-reason.sql` to existing
+   Supabase projects so reviewer notes persist remotely, then remove the legacy
+   no-column fallback once all environments have the field.
 6. Replace `POST /api/ai/product-draft` deterministic enrichment with the real
    source-backed AI/search workflow.
 7. Add invite acceptance and client-specific route protection.

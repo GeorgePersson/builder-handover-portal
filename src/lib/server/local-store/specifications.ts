@@ -90,6 +90,9 @@ export async function saveLocalExtraction(input: {
     category: item.category,
     location: item.location,
     extractedText: item.extracted_text,
+    reviewReason: item.matched_existing_record
+      ? `Matched existing record ${item.matched_existing_record}.`
+      : "Needs review because no reusable source-backed record matched this extracted item.",
     matchedExistingRecord: item.matched_existing_record,
     confidenceScore: item.confidence_score,
     status: getInitialExtractedItemStatus(item),
@@ -132,6 +135,7 @@ export async function createLocalExtractionFromClientRequest(request: ClientRequ
     location: request.location,
     extractedText: request.details || "Client requested this missing handover item.",
     sourceSnippet: request.details || "Client requested this missing handover item.",
+    reviewReason: "Created from a client missing-item request and needs admin review before approval.",
     matchedExistingRecord: null,
     sourceClientRequestId: request.id,
     confidenceScore: request.confidenceScore,
@@ -184,6 +188,7 @@ export async function updateLocalExtractedItem(input: {
   extractedText: string;
   sourceSnippet?: string;
   sourcePage?: number;
+  reviewReason?: string;
   confidenceScore: number;
 }) {
   const store = await readStore();
@@ -204,6 +209,7 @@ export async function updateLocalExtractedItem(input: {
       extractedText: input.extractedText,
       sourceSnippet: input.sourceSnippet,
       sourcePage: input.sourcePage,
+      reviewReason: input.reviewReason,
       confidenceScore: input.confidenceScore,
       status: "edited" as const,
     };

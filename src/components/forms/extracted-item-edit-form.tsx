@@ -247,11 +247,17 @@ export function ExtractedItemEditForm({ item }: { item: ExtractedHandoverItem })
           defaultValue={item.sourceSnippet || item.extractedText}
           placeholder={guidance.snippetPlaceholder}
         />
+        <TextAreaField
+          label="Reviewer note"
+          name="reviewReason"
+          defaultValue={item.reviewReason || ""}
+          placeholder="Explain why this item was edited, held for review, or given a conservative confidence score."
+        />
       </div>
       <p className="mt-4 flex items-start gap-2 text-sm leading-6 text-slate-500">
         <ClipboardCheck className="mt-0.5 size-4 shrink-0 text-cyan-700" />
         Keep wording source-backed and builder-reviewed. If the item is uncertain, lower the
-        confidence score and leave enough source context for admin review.
+        confidence score, add a reviewer note, and leave enough source context for admin review.
       </p>
       <div className="mt-6 flex justify-end">
         <SubmitButton icon={Save} label="Save changes" />

@@ -132,6 +132,12 @@ export default async function AdminReviewPage() {
                       <p className="mt-1">{item.sourceSnippet}</p>
                     </div>
                   ) : null}
+                  {item.reviewReason ? (
+                    <div className="mt-3 rounded-md border border-amber-100 bg-amber-50 p-3 text-sm leading-6 text-amber-900">
+                      <p className="font-semibold text-amber-950">Review note</p>
+                      <p className="mt-1">{item.reviewReason}</p>
+                    </div>
+                  ) : null}
                   <div className="mt-4 flex flex-wrap gap-2">
                     <form action={approveExtractedItemGloballyAction}>
                       <input name="itemId" type="hidden" value={item.id} />

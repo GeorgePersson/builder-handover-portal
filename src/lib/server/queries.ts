@@ -36,6 +36,26 @@ const packageReadyStatuses = new Set([
   "builder_approved",
   "global_approved",
 ]);
+const extractedItemSelectWithReviewReason =
+  "id,specification_upload_id,item_type,title,category,location,extracted_text,source_snippet,source_page,review_reason,matched_existing_record,client_request_id,confidence_score,status";
+const extractedItemSelect =
+  "id,specification_upload_id,item_type,title,category,location,extracted_text,source_snippet,source_page,matched_existing_record,client_request_id,confidence_score,status";
+type ExtractedHandoverItemRow = {
+  id: string;
+  specification_upload_id: string;
+  item_type: ExtractedHandoverItem["itemType"];
+  title: string;
+  category: string | null;
+  location: string | null;
+  extracted_text: string | null;
+  source_snippet: string | null;
+  source_page: number | null;
+  review_reason?: string | null;
+  matched_existing_record: string | null;
+  client_request_id: string | null;
+  confidence_score: number;
+  status: ExtractedHandoverItem["status"];
+};
 
 export function isPackageReadyExtractedItem(item: Pick<ExtractedHandoverItem, "status">) {
   return packageReadyStatuses.has(item.status);
@@ -248,16 +268,31 @@ export async function getExtractedHandoverItems(
   const supabase = await createSupabaseServerClient();
   let query = supabase
     .from("extracted_handover_items")
-    .select(
-      "id,specification_upload_id,item_type,title,category,location,extracted_text,source_snippet,source_page,matched_existing_record,client_request_id,confidence_score,status",
-    )
+    .select(extractedItemSelectWithReviewReason)
     .order("confidence_score", { ascending: false });
 
   if (specificationId) {
     query = query.eq("specification_upload_id", specificationId);
   }
 
-  const { data, error } = await query;
+  const result = await query;
+  let data = result.data as ExtractedHandoverItemRow[] | null;
+  let error = result.error;
+
+  if (error?.message.includes("review_reason")) {
+    let fallbackQuery = supabase
+      .from("extracted_handover_items")
+      .select(extractedItemSelect)
+      .order("confidence_score", { ascending: false });
+
+    if (specificationId) {
+      fallbackQuery = fallbackQuery.eq("specification_upload_id", specificationId);
+    }
+
+    const fallback = await fallbackQuery;
+    data = fallback.data as ExtractedHandoverItemRow[] | null;
+    error = fallback.error;
+  }
 
   if (error || !data) {
     return specificationId
@@ -270,11 +305,12 @@ export async function getExtractedHandoverItems(
     specificationId: item.specification_upload_id,
     itemType: item.item_type,
     title: item.title,
-    category: item.category,
+    category: item.category || "To review",
     location: item.location || "",
     extractedText: item.extracted_text || "",
     sourceSnippet: item.source_snippet || undefined,
     sourcePage: item.source_page || undefined,
+    reviewReason: item.review_reason || undefined,
     matchedExistingRecord: item.matched_existing_record,
     sourceClientRequestId: item.client_request_id || undefined,
     confidenceScore: item.confidence_score,

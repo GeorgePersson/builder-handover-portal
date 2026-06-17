@@ -15,6 +15,7 @@ const editErrorMessages: Record<string, string> = {
   "maintenance-detail-required": "Add the maintenance detail, cadence, trigger, or source wording before saving.",
   "product-identity-required": "Product items need a specific product, material, fixture, brand, or model name before saving.",
   "product-location-required": "Product items need a project location before saving.",
+  "review-reason-required": "Low-confidence edits need a reviewer note explaining why the item is still uncertain.",
   "source-context-required": "High-confidence edits need a source page or source snippet so the decision stays traceable.",
   "update-item-failed": "The item could not be updated. Check the saved data path and try again.",
 };

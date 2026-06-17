@@ -21,6 +21,10 @@ function hasSupabaseConfig() {
   return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 }
 
+function isMissingReviewReasonColumn(error: { message?: string } | null) {
+  return Boolean(error?.message?.includes("review_reason"));
+}
+
 export async function POST(request: Request) {
   const body = (await request.json()) as SaveExtractionRequest;
 
@@ -70,21 +74,46 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Could not save specification." }, { status: 500 });
   }
 
-  const { error: itemsError } = await supabase.from("extracted_handover_items").insert(
-    body.proposedItems.map((item) => ({
+  const itemRows = body.proposedItems.map((item) => ({
       specification_upload_id: specification.id,
       item_type: item.item_type,
       title: item.title,
       category: item.category,
       location: item.location,
       extracted_text: item.extracted_text,
+      review_reason: item.matched_existing_record
+        ? `Matched existing record ${item.matched_existing_record}.`
+        : "Needs review because no reusable source-backed record matched this extracted item.",
       matched_existing_record: item.matched_existing_record,
       confidence_score: item.confidence_score,
       status: getInitialExtractedItemStatus(item),
-    })),
-  );
+    }));
+  const { error: itemsError } = await supabase.from("extracted_handover_items").insert(itemRows);
 
   if (itemsError) {
+    if (isMissingReviewReasonColumn(itemsError)) {
+      const legacyRows = itemRows.map((item) => ({
+        specification_upload_id: item.specification_upload_id,
+        item_type: item.item_type,
+        title: item.title,
+        category: item.category,
+        location: item.location,
+        extracted_text: item.extracted_text,
+        matched_existing_record: item.matched_existing_record,
+        confidence_score: item.confidence_score,
+        status: item.status,
+      }));
+      const { error: legacyItemsError } = await supabase.from("extracted_handover_items").insert(legacyRows);
+
+      if (!legacyItemsError) {
+        return NextResponse.json({
+          storage: "supabase",
+          specification_id: specification.id,
+          saved_count: body.proposedItems.length,
+        });
+      }
+    }
+
     return NextResponse.json({ error: "Could not save extracted items." }, { status: 500 });
   }
 

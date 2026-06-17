@@ -55,6 +55,7 @@ type ExtractedItemEditInput = {
   extractedText: string;
   sourceSnippet?: string;
   sourcePage?: number;
+  reviewReason?: string;
   confidenceScore: number;
 };
 
@@ -65,6 +66,10 @@ function redirectToExtractedItemEditError(itemId: string, error: string): never 
 function includesAnyTerm(value: string, terms: string[]) {
   const normalisedValue = value.toLowerCase();
   return terms.some((term) => normalisedValue.includes(term));
+}
+
+function isMissingReviewReasonColumn(error: { message?: string } | null) {
+  return Boolean(error?.message?.includes("review_reason"));
 }
 
 function validateExtractedItemEdit(input: ExtractedItemEditInput) {
@@ -83,6 +88,10 @@ function validateExtractedItemEdit(input: ExtractedItemEditInput) {
 
   if (input.confidenceScore >= 75 && sourceSnippetLength < 16 && !input.sourcePage) {
     return "source-context-required";
+  }
+
+  if (input.confidenceScore < 65 && (input.reviewReason?.length || 0) < 12) {
+    return "review-reason-required";
   }
 
   if (input.itemType === "product") {
@@ -640,6 +649,7 @@ export async function updateExtractedItemAction(formData: FormData) {
   const location = getOptional(formData, "location") || "";
   const extractedText = getRequired(formData, "extractedText");
   const sourceSnippet = getOptional(formData, "sourceSnippet") || undefined;
+  const reviewReason = getOptional(formData, "reviewReason") || undefined;
   const sourcePageValue = getOptional(formData, "sourcePage");
   const parsedSourcePage = sourcePageValue ? Number(sourcePageValue) : null;
   const sourcePage =
@@ -660,6 +670,7 @@ export async function updateExtractedItemAction(formData: FormData) {
     extractedText,
     sourceSnippet,
     sourcePage,
+    reviewReason,
     confidenceScore,
   });
 
@@ -673,22 +684,46 @@ export async function updateExtractedItemAction(formData: FormData) {
   const context = await getBuilderContext();
 
   if (context) {
+    const updatePayload = {
+      item_type: itemType,
+      title,
+      category,
+      location,
+      extracted_text: extractedText,
+      source_snippet: sourceSnippet || null,
+      source_page: sourcePage || null,
+      review_reason: reviewReason || null,
+      confidence_score: confidenceScore,
+      status: "edited",
+    };
     const { error } = await context.supabase
       .from("extracted_handover_items")
-      .update({
-        item_type: itemType,
-        title,
-        category,
-        location,
-        extracted_text: extractedText,
-        source_snippet: sourceSnippet || null,
-        source_page: sourcePage || null,
-        confidence_score: confidenceScore,
-        status: "edited",
-      })
+      .update(updatePayload)
       .eq("id", itemId);
 
     if (error) {
+      if (isMissingReviewReasonColumn(error)) {
+        const legacyPayload = {
+          item_type: updatePayload.item_type,
+          title: updatePayload.title,
+          category: updatePayload.category,
+          location: updatePayload.location,
+          extracted_text: updatePayload.extracted_text,
+          source_snippet: updatePayload.source_snippet,
+          source_page: updatePayload.source_page,
+          confidence_score: updatePayload.confidence_score,
+          status: updatePayload.status,
+        };
+        const { error: legacyError } = await context.supabase
+          .from("extracted_handover_items")
+          .update(legacyPayload)
+          .eq("id", itemId);
+
+        if (!legacyError) {
+          redirect(`/builder/specifications/review?draft=saved&storage=supabase`);
+        }
+      }
+
       redirectToExtractedItemEditError(itemId, "update-item-failed");
     }
   } else {
@@ -701,6 +736,7 @@ export async function updateExtractedItemAction(formData: FormData) {
       extractedText,
       sourceSnippet,
       sourcePage,
+      reviewReason,
       confidenceScore,
     });
   }
@@ -827,7 +863,7 @@ export async function convertClientRequestToReviewAction(formData: FormData) {
       redirect("/admin/review?error=create-client-request-review-failed");
     }
 
-    const { error: itemError } = await context.supabase.from("extracted_handover_items").insert({
+    const clientRequestItem = {
       specification_upload_id: specification.id,
       item_type: request.request_type,
       title: request.title,
@@ -835,13 +871,42 @@ export async function convertClientRequestToReviewAction(formData: FormData) {
       location: request.location,
       extracted_text: request.details,
       source_snippet: request.details,
+      review_reason: "Created from a client missing-item request and needs admin review before approval.",
       matched_existing_record: null,
       confidence_score: request.confidence_score,
       client_request_id: request.id,
       status: "admin_review",
-    });
+    };
+    const { error: itemError } = await context.supabase.from("extracted_handover_items").insert(clientRequestItem);
 
     if (itemError) {
+      if (isMissingReviewReasonColumn(itemError)) {
+        const legacyClientRequestItem = {
+          specification_upload_id: clientRequestItem.specification_upload_id,
+          item_type: clientRequestItem.item_type,
+          title: clientRequestItem.title,
+          category: clientRequestItem.category,
+          location: clientRequestItem.location,
+          extracted_text: clientRequestItem.extracted_text,
+          source_snippet: clientRequestItem.source_snippet,
+          matched_existing_record: clientRequestItem.matched_existing_record,
+          confidence_score: clientRequestItem.confidence_score,
+          client_request_id: clientRequestItem.client_request_id,
+          status: clientRequestItem.status,
+        };
+        const { error: legacyItemError } = await context.supabase
+          .from("extracted_handover_items")
+          .insert(legacyClientRequestItem);
+
+        if (!legacyItemError) {
+          await context.supabase
+            .from("client_requests")
+            .update({ status: "ai_checking" })
+            .eq("id", requestId);
+          redirect("/admin/review?draft=converted&storage=supabase");
+        }
+      }
+
       redirect("/admin/review?error=create-client-request-item-failed");
     }
 

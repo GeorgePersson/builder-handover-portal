@@ -97,6 +97,7 @@ export type ExtractedHandoverItem = {
   extractedText: string;
   sourceSnippet?: string;
   sourcePage?: number;
+  reviewReason?: string;
   matchedExistingRecord: string | null;
   sourceClientRequestId?: string;
   confidenceScore: number;
