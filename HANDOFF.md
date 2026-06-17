@@ -171,6 +171,10 @@ Supabase is not configured.
   category, confidence bounds, source page, and source snippet. Source context
   is persisted in local scaffold mode and Supabase mode, and appears in builder
   and admin review queues.
+- Extracted item editing now uses a type-aware client form: product, document,
+  and maintenance edits show different category options, evidence-note labels,
+  review checklists, and status-aware guidance before saving through the same
+  server action.
 - The handover package can be published from `/builder/handover-package`.
   Local mode stores published item ids in `.local-data/specification-extractions.json`.
 - Supabase package publishing now uses the same package-ready statuses as local
@@ -265,6 +269,8 @@ Supabase is not configured.
 - Browser smoke check for extracted item edit flow: edit page renders item type,
   category, source page, and source snippet controls; saving a local item returns
   to the review queue with source context visible.
+- Lint/build check for type-aware extracted-item editing while Supabase auth was
+  rate-limited; direct browser smoke was blocked by the expected auth proxy.
 - Browser smoke check for polished specification upload UI: main process action
   is present and disabled before PDF selection, selected-file state appears,
   advanced fallback tools are collapsed, and duplicate save-to-review action is
@@ -322,8 +328,8 @@ Both passed after the latest changes.
    and admin review for low-confidence records.
 4. Tune the PDF intake progress and warning copy against real builder files,
    then add OCR fallback for scanned/image-only specifications.
-5. Continue improving edit flow with status-aware validation messages and
-   stronger product/document/maintenance-specific field sets.
+5. Continue improving edit flow with persisted review reasons and
+   product/document/maintenance-specific validation on save.
 6. Replace `POST /api/ai/product-draft` deterministic enrichment with the real
    source-backed AI/search workflow.
 7. Add invite acceptance and client-specific route protection.
