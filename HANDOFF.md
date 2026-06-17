@@ -184,6 +184,9 @@ Supabase is not configured.
   scaffold mode, then require Supabase sessions when env vars are configured.
 - Auth proxy matcher now includes `/admin/:path*`, `/builder/:path*`, and
   `/client/:path*`.
+- Magic-link auth redirects through `/auth/callback`, which exchanges the
+  Supabase PKCE code for a cookie-backed session before sending users to their
+  original route.
 - Supabase schema includes `client_requests`, `client_request_type`, and
   `client_request_status` for homeowner request intake and admin triage.
 - Magic-link login scaffold at `/login`.
@@ -248,6 +251,9 @@ Supabase is not configured.
 - HTTP smoke check for unauthenticated `/builder` after the Next.js 16 proxy
   migration: route returns `307` to `/login?next=%2Fbuilder` when Supabase
   env vars are configured.
+- Login action now sends Supabase an absolute `/auth/callback` magic-link
+  redirect URL, and `/auth/callback` returns a setup-specific login error when
+  the Supabase code exchange fails.
 - Browser smoke check for `/builder/specifications/new` after extraction
   diagnostics changes: page loads with PDF process/preview actions.
 - API smoke check for `POST /api/specifications/extract-pdf` with a generated
@@ -288,6 +294,9 @@ Both passed after the latest changes.
 - Add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` to
   `.env.local`.
 - Create a private Supabase Storage bucket named `handover-documents`.
+- In Supabase Auth URL settings, add local redirect URLs:
+  `http://127.0.0.1:3000/auth/callback` and
+  `http://localhost:3000/auth/callback`.
 - Sign in once through `/login`, then run `docs/supabase-bootstrap.sql` with
   your email filled in so the first authenticated builder user has an
   organisation and demo project.
