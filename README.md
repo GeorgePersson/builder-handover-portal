@@ -1,36 +1,64 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Builder Handover Portal
+
+AI-assisted digital handover and maintenance portal for NZ builders and homeowners.
+
+The current build is an MVP foundation based on `handover_portal_master_plan.txt`.
+It includes the phase 0 setup plus a first working shell for projects, documents,
+manual product records, AI review queue, maintenance tasks, client portal preview,
+and audit history.
 
 ## Getting Started
 
-First, run the development server:
+Install dependencies and run the development server:
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) with your browser.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Environment
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Copy `.env.example` to `.env.local` when connecting real services.
 
-## Learn More
+Required later:
 
-To learn more about Next.js, take a look at the following resources:
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `OPENAI_API_KEY`
+- `RESEND_API_KEY`
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Current Scope
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- Next.js App Router with TypeScript and Tailwind.
+- Supabase browser client factory.
+- Typed domain models for projects, documents, product versions, maintenance, and audit logs.
+- Seed data that mirrors the intended MVP workflows.
+- Responsive builder dashboard and homeowner preview.
+- Shared builder/client layouts.
+- Server-action backed form routes for projects, documents, products, and maintenance.
+- Supabase-ready auth middleware and magic-link login scaffold.
+- AI product draft endpoint plus live product-form draft preview.
+- Specification PDF intake workflow with review pages and AI extraction contract.
+- Local specification extraction preview that turns pasted spec text into proposed
+  products, documents, and maintenance items.
+- Local PDF extraction endpoint that parses selected specification PDFs and
+  previews proposed package items.
+- Local review-queue persistence for extracted specification proposals.
+- Generated handover package preview from accepted extracted items.
+- Combined PDF process endpoint that uploads, parses, extracts, and saves review
+  proposals in one flow.
+- Edit-before-acceptance flow for extracted items.
+- Publish flow from builder package preview to client portal.
 
-## Deploy on Vercel
+## Next Build Steps
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Apply `docs/supabase-schema.sql` to Supabase.
+- Replace seed data with Supabase reads.
+- Connect actual Supabase Storage uploads for documents.
+- Improve PDF text/table parsing for uploaded specification PDFs.
+- Polish the combined PDF upload/extraction/review UI.
+- Add richer extracted-item editing controls and source snippets.
+- Connect AI product draft endpoint to source search, extraction, and critic scoring.
+- Add invite acceptance and client-specific route protection.

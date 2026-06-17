@@ -1,0 +1,768 @@
+"use server";
+
+import { redirect } from "next/navigation";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { prepareSpecificationPdf, saveLocalUpload } from "@/lib/server/upload-utils";
+import {
+  createLocalExtractionFromClientRequest,
+  getLocalExtractedItem,
+  publishLocalHandoverPackage,
+  updateLocalExtractedItem,
+  updateLocalExtractedItemStatus,
+} from "@/lib/server/local-store/specifications";
+import {
+  getLocalClientRequest,
+  saveLocalClientRequest,
+  updateLocalClientRequestStatus,
+} from "@/lib/server/local-store/client-requests";
+import { upsertLocalGlobalProductFromExtractedItem } from "@/lib/server/local-store/products";
+import { enrichExtractedProduct } from "@/lib/ai/source-enrichment";
+
+function getRequired(formData: FormData, key: string) {
+  const value = formData.get(key);
+
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error(`${key} is required`);
+  }
+
+  return value.trim();
+}
+
+function getOptional(formData: FormData, key: string) {
+  const value = formData.get(key);
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function hasSupabaseConfig() {
+  return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+}
+
+async function getBuilderContext() {
+  if (!hasSupabaseConfig()) {
+    return null;
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/login");
+  }
+
+  const { data: member, error } = await supabase
+    .from("organisation_members")
+    .select("organisation_id")
+    .eq("user_id", user.id)
+    .limit(1)
+    .single();
+
+  if (error || !member) {
+    redirect("/builder/projects?error=no-organisation");
+  }
+
+  return { supabase, userId: user.id, organisationId: member.organisation_id as string };
+}
+
+export async function createProjectAction(formData: FormData) {
+  const name = getRequired(formData, "name");
+  const address = getRequired(formData, "address");
+  const projectType = getRequired(formData, "projectType");
+  const clientName = getRequired(formData, "clientName");
+  const clientEmail = getRequired(formData, "clientEmail");
+  const handoverDate = getOptional(formData, "handoverDate");
+  const context = await getBuilderContext();
+
+  if (context) {
+    const { data: project, error: projectError } = await context.supabase
+      .from("projects")
+      .insert({
+        organisation_id: context.organisationId,
+        name,
+        address,
+        project_type: projectType,
+        handover_date: handoverDate,
+        created_by: context.userId,
+      })
+      .select("id")
+      .single();
+
+    if (projectError || !project) {
+      redirect("/builder/projects?error=create-project-failed");
+    }
+
+    await context.supabase.from("project_clients").insert({
+      project_id: project.id,
+      name: clientName,
+      email: clientEmail,
+    });
+
+    await context.supabase.from("audit_events").insert({
+      organisation_id: context.organisationId,
+      project_id: project.id,
+      actor_user_id: context.userId,
+      action: "Project created",
+      detail: `Created ${name} for ${clientName}.`,
+    });
+  }
+
+  redirect(`/builder/projects?draft=saved&storage=${hasSupabaseConfig() ? "supabase" : "stub"}`);
+}
+
+export async function createDocumentAction(formData: FormData) {
+  const projectId = getRequired(formData, "projectId");
+  const name = getRequired(formData, "name");
+  const documentType = getRequired(formData, "documentType");
+  const storagePath = getOptional(formData, "storagePath") || `pending/${name}`;
+  const visibleToClient = formData.get("visibleToClient") === "on";
+  const context = await getBuilderContext();
+
+  if (context) {
+    const { error } = await context.supabase.from("documents").insert({
+      project_id: projectId,
+      uploaded_by: context.userId,
+      name,
+      document_type: documentType,
+      storage_path: storagePath,
+      visible_to_client: visibleToClient,
+    });
+
+    if (error) {
+      redirect("/builder/documents?error=create-document-failed");
+    }
+
+    await context.supabase.from("audit_events").insert({
+      organisation_id: context.organisationId,
+      project_id: projectId,
+      actor_user_id: context.userId,
+      action: "Document registered",
+      detail: `Registered ${name}.`,
+    });
+  }
+
+  redirect(`/builder/documents?draft=saved&storage=${hasSupabaseConfig() ? "supabase" : "stub"}`);
+}
+
+export async function createProductAction(formData: FormData) {
+  const productName = getRequired(formData, "productName");
+  const category = getRequired(formData, "category");
+  const brand = getOptional(formData, "brand");
+  const model = getOptional(formData, "model");
+  const supplierUrl = getOptional(formData, "supplierUrl");
+  const notes = getOptional(formData, "notes");
+  const context = await getBuilderContext();
+
+  if (context) {
+    const { data: product, error: productError } = await context.supabase
+      .from("products")
+      .insert({
+        canonical_name: productName,
+        brand,
+        manufacturer: brand,
+        category,
+      })
+      .select("id")
+      .single();
+
+    if (productError || !product) {
+      redirect("/builder/products?error=create-product-failed");
+    }
+
+    const { data: version, error: versionError } = await context.supabase
+      .from("product_versions")
+      .insert({
+        product_id: product.id,
+        version_number: 1,
+        status: "draft",
+        maintenance_requirements: notes,
+        confidence_score: model || supplierUrl ? 55 : 22,
+        confidence_label: model || supplierUrl ? "low" : "blocked",
+        missing_fields: ["Official source URLs", "Warranty period", "Maintenance requirements"],
+      })
+      .select("id")
+      .single();
+
+    if (versionError || !version) {
+      redirect("/builder/products?error=create-product-version-failed");
+    }
+
+    if (supplierUrl) {
+      await context.supabase.from("product_sources").insert({
+        product_version_id: version.id,
+        title: "Builder supplied URL",
+        url: supplierUrl,
+        source_type: "supplier_page",
+      });
+    }
+  }
+
+  redirect(`/builder/products?draft=saved&storage=${hasSupabaseConfig() ? "supabase" : "stub"}`);
+}
+
+export async function createMaintenanceTaskAction(formData: FormData) {
+  const projectId = getRequired(formData, "projectId");
+  const title = getRequired(formData, "title");
+  const dueDate = getRequired(formData, "dueDate");
+  const frequency = getOptional(formData, "frequency");
+  const relatedProduct = getOptional(formData, "relatedProduct");
+  const description = getOptional(formData, "description");
+  const requiredForWarranty = formData.get("requiredForWarranty") === "on";
+  const context = await getBuilderContext();
+
+  if (context) {
+    const { error } = await context.supabase.from("maintenance_tasks").insert({
+      project_id: projectId,
+      title,
+      description,
+      due_date: dueDate,
+      frequency,
+      required_for_warranty: requiredForWarranty,
+    });
+
+    if (error) {
+      redirect("/builder/maintenance?error=create-maintenance-failed");
+    }
+
+    await context.supabase.from("audit_events").insert({
+      organisation_id: context.organisationId,
+      project_id: projectId,
+      actor_user_id: context.userId,
+      action: "Maintenance task created",
+      detail: `Created ${title}${relatedProduct ? ` for ${relatedProduct}` : ""}.`,
+    });
+  }
+
+  redirect(`/builder/maintenance?draft=saved&storage=${hasSupabaseConfig() ? "supabase" : "stub"}`);
+}
+
+export async function createSpecificationUploadAction(formData: FormData) {
+  const projectId = getRequired(formData, "projectId");
+  const upload = await prepareSpecificationPdf(formData);
+  const fileName = getOptional(formData, "fileName") || upload?.fileName || "Project specification.pdf";
+  const storagePath = getOptional(formData, "storagePath") || upload?.storagePath || `pending/specifications/${fileName}`;
+  const context = await getBuilderContext();
+
+  if (context) {
+    if (upload) {
+      const { error: uploadError } = await context.supabase.storage
+        .from("handover-documents")
+        .upload(storagePath, upload.bytes, {
+          contentType: upload.type,
+          upsert: false,
+        });
+
+      if (uploadError) {
+        redirect("/builder/specifications?error=upload-specification-failed");
+      }
+    }
+
+    const { data: specification, error } = await context.supabase
+      .from("specification_uploads")
+      .insert({
+        project_id: projectId,
+        uploaded_by: context.userId,
+        file_name: fileName,
+        storage_path: storagePath,
+        status: "uploaded",
+      })
+      .select("id")
+      .single();
+
+    if (error || !specification) {
+      redirect("/builder/specifications?error=create-specification-failed");
+    }
+
+    await context.supabase.from("audit_events").insert({
+      organisation_id: context.organisationId,
+      project_id: projectId,
+      actor_user_id: context.userId,
+      action: "Specification uploaded",
+      detail: `Registered specification PDF ${fileName}.`,
+    });
+  } else if (upload) {
+    await saveLocalUpload(storagePath, upload.bytes);
+  }
+
+  redirect(`/builder/specifications?draft=saved&storage=${hasSupabaseConfig() ? "supabase" : "stub"}`);
+}
+
+export async function acceptExtractedItemAction(formData: FormData) {
+  const itemId = getRequired(formData, "itemId");
+  const context = await getBuilderContext();
+
+  if (context) {
+    const { data: item } = await context.supabase
+      .from("extracted_handover_items")
+      .select("id,specification_upload_id,item_type,title,category,location,extracted_text")
+      .eq("id", itemId)
+      .single();
+
+    if (!item) {
+      redirect("/builder/specifications/review?error=item-not-found");
+    }
+
+    const { data: specification } = await context.supabase
+      .from("specification_uploads")
+      .select("project_id")
+      .eq("id", item.specification_upload_id)
+      .single();
+
+    if (!specification) {
+      redirect("/builder/specifications/review?error=specification-not-found");
+    }
+
+    const { error } = await context.supabase
+      .from("extracted_handover_items")
+      .update({ status: "builder_approved" })
+      .eq("id", itemId);
+
+    if (error) {
+      redirect("/builder/specifications/review?error=accept-item-failed");
+    }
+
+    if (item.item_type === "product") {
+      await context.supabase.from("audit_events").insert({
+        organisation_id: context.organisationId,
+        project_id: specification.project_id,
+        actor_user_id: context.userId,
+        action: "Project-scoped product approved",
+        detail: `${item.title} was approved by the builder for this project only. Platform admin approval is still required before it becomes a global product record.`,
+      });
+    }
+
+    if (item.item_type === "maintenance") {
+      await context.supabase.from("maintenance_tasks").insert({
+        project_id: specification.project_id,
+        title: item.title,
+        description: item.extracted_text,
+        due_date: new Date().toISOString().slice(0, 10),
+        frequency: "To confirm",
+      });
+    }
+
+    if (item.item_type === "document") {
+      await context.supabase.from("documents").insert({
+        project_id: specification.project_id,
+        uploaded_by: context.userId,
+        name: item.title,
+        document_type: "other",
+        storage_path: `requested/${item.id}`,
+        visible_to_client: false,
+      });
+    }
+  } else {
+    await updateLocalExtractedItemStatus(itemId, "builder_approved");
+  }
+
+  redirect(`/builder/specifications/review?draft=accepted&storage=${hasSupabaseConfig() ? "supabase" : "stub"}`);
+}
+
+export async function approveExtractedItemGloballyAction(formData: FormData) {
+  const itemId = getRequired(formData, "itemId");
+  const context = await getBuilderContext();
+
+  if (context) {
+    const { data: item } = await context.supabase
+      .from("extracted_handover_items")
+      .select("id,specification_upload_id,item_type,title,category,location,extracted_text,confidence_score,client_request_id")
+      .eq("id", itemId)
+      .single();
+
+    if (!item) {
+      redirect("/admin/review?error=item-not-found");
+    }
+
+    const { data: specification } = await context.supabase
+      .from("specification_uploads")
+      .select("project_id")
+      .eq("id", item.specification_upload_id)
+      .single();
+
+    const { error } = await context.supabase
+      .from("extracted_handover_items")
+      .update({ status: "global_approved" })
+      .eq("id", itemId);
+
+    if (error) {
+      redirect("/admin/review?error=global-approve-failed");
+    }
+
+    if (item.item_type === "product") {
+      const enrichment = enrichExtractedProduct({
+        id: item.id,
+        specificationId: item.specification_upload_id,
+        itemType: item.item_type,
+        title: item.title,
+        category: item.category || "Product",
+        location: item.location || "",
+        extractedText: item.extracted_text || "",
+        matchedExistingRecord: null,
+        sourceClientRequestId: item.client_request_id || undefined,
+        confidenceScore: item.confidence_score,
+        status: "global_approved",
+      });
+      const { data: product } = await context.supabase
+        .from("products")
+        .insert({
+          canonical_name: item.title,
+          brand: enrichment.brand === "Admin approved" ? null : enrichment.brand,
+          manufacturer: enrichment.manufacturer,
+          category: item.category,
+        })
+        .select("id")
+        .single();
+
+      if (product) {
+        const { data: version } = await context.supabase
+          .from("product_versions")
+          .insert({
+            product_id: product.id,
+            version_number: 1,
+            status: enrichment.status,
+            warranty_period: enrichment.warrantyPeriod,
+            void_conditions: enrichment.voidConditions,
+            maintenance_requirements: enrichment.maintenanceSummary,
+            confidence_score: enrichment.confidenceScore,
+            confidence_label: enrichment.confidenceLabel,
+            missing_fields: enrichment.missingFields,
+            approved_by: context.userId,
+            approved_at: new Date().toISOString(),
+          })
+          .select("id")
+          .single();
+
+        if (version && enrichment.sources.length > 0) {
+          await context.supabase.from("product_sources").insert(
+            enrichment.sources.map((source) => ({
+              product_version_id: version.id,
+              title: source.title,
+              url: source.url,
+              source_type: source.sourceType,
+              is_official: source.official,
+              is_nz_specific: source.nzSpecific,
+            })),
+          );
+        }
+      }
+    }
+
+    if (item.client_request_id) {
+      await context.supabase
+        .from("client_requests")
+        .update({ status: "global_approved" })
+        .eq("id", item.client_request_id);
+    }
+
+    await context.supabase.from("audit_events").insert({
+      organisation_id: context.organisationId,
+      project_id: specification?.project_id,
+      actor_user_id: context.userId,
+      action: "Global product library approval",
+      detail: `${item.title} was approved for reuse in the global product database.`,
+    });
+  } else {
+    const item = await getLocalExtractedItem(itemId);
+    await updateLocalExtractedItemStatus(itemId, "global_approved");
+    if (item?.itemType === "product") {
+      await upsertLocalGlobalProductFromExtractedItem({
+        ...item,
+        status: "global_approved",
+      });
+    }
+    const linkedClientRequestId =
+      item?.sourceClientRequestId ||
+      (item?.id.endsWith("-extracted-item") ? item.id.replace(/-extracted-item$/, "") : null);
+    if (linkedClientRequestId) {
+      await updateLocalClientRequestStatus(linkedClientRequestId, "global_approved");
+    }
+  }
+
+  redirect(`/admin/review?draft=accepted&storage=${hasSupabaseConfig() ? "supabase" : "stub"}`);
+}
+
+export async function rejectAdminReviewItemAction(formData: FormData) {
+  const itemId = getRequired(formData, "itemId");
+
+  if (hasSupabaseConfig()) {
+    const context = await getBuilderContext();
+
+    if (!context) {
+      redirect("/login");
+    }
+
+    const { data: item } = await context.supabase
+      .from("extracted_handover_items")
+      .select("id,title,client_request_id,specification_uploads(project_id)")
+      .eq("id", itemId)
+      .single();
+
+    const { error } = await context.supabase
+      .from("extracted_handover_items")
+      .update({ status: "rejected" })
+      .eq("id", itemId);
+
+    if (error) {
+      redirect("/admin/review?error=reject-admin-item-failed");
+    }
+
+    if (item?.client_request_id) {
+      await context.supabase
+        .from("client_requests")
+        .update({ status: "rejected" })
+        .eq("id", item.client_request_id);
+    }
+  } else {
+    const item = await getLocalExtractedItem(itemId);
+    await updateLocalExtractedItemStatus(itemId, "rejected");
+    const linkedClientRequestId =
+      item?.sourceClientRequestId ||
+      (item?.id.endsWith("-extracted-item") ? item.id.replace(/-extracted-item$/, "") : null);
+    if (linkedClientRequestId) {
+      await updateLocalClientRequestStatus(linkedClientRequestId, "rejected");
+    }
+  }
+
+  redirect(`/admin/review?draft=rejected&storage=${hasSupabaseConfig() ? "supabase" : "local"}`);
+}
+
+export async function rejectExtractedItemAction(formData: FormData) {
+  const itemId = getRequired(formData, "itemId");
+  const context = await getBuilderContext();
+
+  if (context) {
+    const { error } = await context.supabase
+      .from("extracted_handover_items")
+      .update({ status: "rejected" })
+      .eq("id", itemId);
+
+    if (error) {
+      redirect("/builder/specifications/review?error=reject-item-failed");
+    }
+  } else {
+    await updateLocalExtractedItemStatus(itemId, "rejected");
+  }
+
+  redirect(`/builder/specifications/review?draft=rejected&storage=${hasSupabaseConfig() ? "supabase" : "stub"}`);
+}
+
+export async function updateExtractedItemAction(formData: FormData) {
+  const itemId = getRequired(formData, "itemId");
+  const title = getRequired(formData, "title");
+  const category = getRequired(formData, "category");
+  const location = getOptional(formData, "location") || "";
+  const extractedText = getRequired(formData, "extractedText");
+  const confidenceScoreValue = Number(getRequired(formData, "confidenceScore"));
+  const confidenceScore = Number.isFinite(confidenceScoreValue)
+    ? Math.min(100, Math.max(0, Math.round(confidenceScoreValue)))
+    : 50;
+  const context = await getBuilderContext();
+
+  if (context) {
+    const { error } = await context.supabase
+      .from("extracted_handover_items")
+      .update({
+        title,
+        category,
+        location,
+        extracted_text: extractedText,
+        confidence_score: confidenceScore,
+        status: "edited",
+      })
+      .eq("id", itemId);
+
+    if (error) {
+      redirect(`/builder/specifications/review/${itemId}/edit?error=update-item-failed`);
+    }
+  } else {
+    await updateLocalExtractedItem({
+      itemId,
+      title,
+      category,
+      location,
+      extractedText,
+      confidenceScore,
+    });
+  }
+
+  redirect(`/builder/specifications/review?draft=saved&storage=${hasSupabaseConfig() ? "supabase" : "stub"}`);
+}
+
+export async function publishHandoverPackageAction() {
+  const context = await getBuilderContext();
+
+  if (context) {
+    const { data: acceptedItems } = await context.supabase
+      .from("extracted_handover_items")
+      .select("id,specification_uploads(project_id)")
+      .in("status", ["accepted", "auto_approved", "builder_approved", "global_approved"]);
+
+    const specification = acceptedItems?.[0]?.specification_uploads as
+      | Array<{ project_id?: string }>
+      | { project_id?: string }
+      | null
+      | undefined;
+    const projectId = Array.isArray(specification)
+      ? specification[0]?.project_id
+      : specification?.project_id;
+
+    if (projectId) {
+      await context.supabase.from("audit_events").insert({
+        organisation_id: context.organisationId,
+        project_id: projectId,
+        actor_user_id: context.userId,
+        action: "Handover package published",
+        detail: `Published ${acceptedItems?.length || 0} package-ready extracted items to the client portal.`,
+      });
+    }
+  } else {
+    await publishLocalHandoverPackage();
+  }
+
+  redirect(`/builder/handover-package?published=true&storage=${hasSupabaseConfig() ? "supabase" : "stub"}`);
+}
+
+export async function createClientRequestAction(formData: FormData) {
+  const projectId = getOptional(formData, "projectId") || "prj-bayview";
+  const requestType = getRequired(formData, "requestType") as "product" | "document" | "maintenance";
+  const title = getRequired(formData, "title");
+  const location = getOptional(formData, "location") || "";
+  const details = getOptional(formData, "details") || "";
+  const attachment = formData.get("attachment");
+  const attachmentName = attachment instanceof File && attachment.size > 0 ? attachment.name : undefined;
+
+  if (hasSupabaseConfig()) {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      redirect("/login");
+    }
+
+    const confidenceScore = title.length >= 8 && details.length >= 20 ? 55 : 25;
+    const { error } = await supabase.from("client_requests").insert({
+      project_id: projectId,
+      requested_by: user.id,
+      request_type: requestType,
+      title,
+      location,
+      details,
+      attachment_name: attachmentName,
+      status: "admin_review",
+      confidence_score: confidenceScore,
+    });
+
+    if (error) {
+      redirect("/client/request-product?error=create-request-failed");
+    }
+  } else {
+    await saveLocalClientRequest({
+      projectId,
+      requestType,
+      title,
+      location,
+      details,
+      attachmentName,
+    });
+  }
+
+  redirect(`/client/request-product?draft=saved&storage=${hasSupabaseConfig() ? "supabase" : "local"}`);
+}
+
+export async function convertClientRequestToReviewAction(formData: FormData) {
+  const requestId = getRequired(formData, "requestId");
+
+  if (hasSupabaseConfig()) {
+    const context = await getBuilderContext();
+
+    if (!context) {
+      redirect("/login");
+    }
+
+    const { data: request } = await context.supabase
+      .from("client_requests")
+      .select("id,project_id,request_type,title,location,details,confidence_score")
+      .eq("id", requestId)
+      .single();
+
+    if (!request) {
+      redirect("/admin/review?error=request-not-found");
+    }
+
+    const { data: specification, error: specificationError } = await context.supabase
+      .from("specification_uploads")
+      .insert({
+        project_id: request.project_id,
+        uploaded_by: context.userId,
+        file_name: `Client request - ${request.title}`,
+        storage_path: `client-requests/${request.id}`,
+        status: "needs_review",
+      })
+      .select("id")
+      .single();
+
+    if (specificationError || !specification) {
+      redirect("/admin/review?error=create-client-request-review-failed");
+    }
+
+    const { error: itemError } = await context.supabase.from("extracted_handover_items").insert({
+      specification_upload_id: specification.id,
+      item_type: request.request_type,
+      title: request.title,
+      category: request.request_type === "product" ? "Client requested product" : "Client request",
+      location: request.location,
+      extracted_text: request.details,
+      matched_existing_record: null,
+      confidence_score: request.confidence_score,
+      client_request_id: request.id,
+      status: "admin_review",
+    });
+
+    if (itemError) {
+      redirect("/admin/review?error=create-client-request-item-failed");
+    }
+
+    await context.supabase
+      .from("client_requests")
+      .update({ status: "ai_checking" })
+      .eq("id", requestId);
+  } else {
+    const request = await getLocalClientRequest(requestId);
+
+    if (!request) {
+      redirect("/admin/review?error=request-not-found");
+    }
+
+    await createLocalExtractionFromClientRequest(request);
+    await updateLocalClientRequestStatus(requestId, "ai_checking");
+  }
+
+  redirect(`/admin/review?draft=saved&storage=${hasSupabaseConfig() ? "supabase" : "local"}`);
+}
+
+export async function rejectClientRequestAction(formData: FormData) {
+  const requestId = getRequired(formData, "requestId");
+
+  if (hasSupabaseConfig()) {
+    const context = await getBuilderContext();
+
+    if (!context) {
+      redirect("/login");
+    }
+
+    const { error } = await context.supabase
+      .from("client_requests")
+      .update({ status: "rejected" })
+      .eq("id", requestId);
+
+    if (error) {
+      redirect("/admin/review?error=reject-client-request-failed");
+    }
+  } else {
+    await updateLocalClientRequestStatus(requestId, "rejected");
+  }
+
+  redirect(`/admin/review?draft=rejected&storage=${hasSupabaseConfig() ? "supabase" : "local"}`);
+}

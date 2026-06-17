@@ -1,65 +1,75 @@
-import Image from "next/image";
+import Link from "next/link";
+import { Building2, Home, ShieldCheck } from "lucide-react";
 
-export default function Home() {
+const portals = [
+  {
+    title: "Platform admin",
+    description:
+      "Operate the SaaS product, monitor builders, review low-confidence AI work, and manage global approval queues.",
+    href: "/admin",
+    icon: ShieldCheck,
+    cta: "Open admin",
+  },
+  {
+    title: "Builder portal",
+    description:
+      "Upload specification PDFs, manage projects, review extracted handover items, and publish packages to clients.",
+    href: "/builder",
+    icon: Building2,
+    cta: "Open builder portal",
+  },
+  {
+    title: "Client portal",
+    description:
+      "Homeowners see approved handover information only, with a simple request path for missing products or documents.",
+    href: "/client/portal",
+    icon: Home,
+    cta: "Open client portal",
+  },
+];
+
+export default function PortalSwitchboardPage() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
+    <main className="min-h-screen bg-slate-50 px-5 py-10 text-slate-950 sm:px-8">
+      <div className="mx-auto max-w-6xl">
+        <header className="max-w-3xl">
+          <p className="text-sm font-semibold text-cyan-700">Builder Handover Platform</p>
+          <h1 className="mt-2 text-3xl font-semibold tracking-normal text-slate-950">
+            Three separate portals for the product you are building
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+          <p className="mt-3 text-sm leading-6 text-slate-600">
+            Admin tools, builder workflows, and homeowner access are split so clients never see
+            review queues, AI confidence, or manual product management.
           </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+        </header>
+
+        <section className="mt-8 grid gap-5 lg:grid-cols-3">
+          {portals.map((portal) => (
+            <article className="rounded-lg border border-slate-200 bg-white p-5" key={portal.href}>
+              <div className="flex size-11 items-center justify-center rounded-lg bg-cyan-700 text-white">
+                <portal.icon className="size-5" />
+              </div>
+              <h2 className="mt-5 text-lg font-semibold text-slate-950">{portal.title}</h2>
+              <p className="mt-2 min-h-24 text-sm leading-6 text-slate-600">{portal.description}</p>
+              <Link
+                className="mt-5 inline-flex h-10 items-center rounded-md bg-slate-950 px-3 text-sm font-semibold text-white hover:bg-slate-800"
+                href={portal.href}
+              >
+                {portal.cta}
+              </Link>
+            </article>
+          ))}
+        </section>
+
+        <section className="mt-8 rounded-lg border border-amber-200 bg-amber-50 p-5">
+          <h2 className="font-semibold text-amber-950">Access model</h2>
+          <p className="mt-2 text-sm leading-6 text-amber-800">
+            Client routes should stay read-only except for requests. Builder routes belong to builder
+            companies. Admin routes belong to the platform owner and handle approvals, confidence
+            issues, subscriptions, and operational oversight.
+          </p>
+        </section>
+      </div>
+    </main>
   );
 }

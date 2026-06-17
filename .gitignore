@@ -32,6 +32,14 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
+
+# local dev server logs
+dev-server.*.log
+
+# local scaffold uploads
+.local-uploads/
+.local-data/
 
 # vercel
 .vercel
