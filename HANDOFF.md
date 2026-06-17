@@ -180,9 +180,9 @@ Supabase is not configured.
 - Supabase-ready server actions in `src/lib/server/actions.ts`. With env vars
   absent they redirect through local scaffold mode; with env vars present they
   attempt inserts into Supabase tables and audit logs.
-- Auth middleware in `middleware.ts`. Builder routes remain open in local
+- Auth proxy in `src/proxy.ts`. Builder routes remain open in local
   scaffold mode, then require Supabase sessions when env vars are configured.
-- Auth middleware matcher now includes `/admin/:path*`, `/builder/:path*`, and
+- Auth proxy matcher now includes `/admin/:path*`, `/builder/:path*`, and
   `/client/:path*`.
 - Supabase schema includes `client_requests`, `client_request_type`, and
   `client_request_status` for homeowner request intake and admin triage.
@@ -245,6 +245,9 @@ Supabase is not configured.
   source-backed copy and James Hardie source links.
 - Browser smoke check for `/` after source-enrichment changes: portal
   switchboard loads with links to `/admin`, `/builder`, and `/client/portal`.
+- HTTP smoke check for unauthenticated `/builder` after the Next.js 16 proxy
+  migration: route returns `307` to `/login?next=%2Fbuilder` when Supabase
+  env vars are configured.
 - Browser smoke check for `/builder/specifications/new` after extraction
   diagnostics changes: page loads with PDF process/preview actions.
 - API smoke check for `POST /api/specifications/extract-pdf` with a generated
@@ -289,7 +292,7 @@ Both passed after the latest changes.
   your email filled in so the first authenticated builder user has an
   organisation and demo project.
 - Once env vars are present, builder routes require Supabase auth via
-  `middleware.ts`.
+  `src/proxy.ts`.
 - Current AI routes are contracts/scaffolds. Real model calls still need
   `OPENAI_API_KEY`.
 
