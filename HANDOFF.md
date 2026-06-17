@@ -48,6 +48,9 @@ Supabase is not configured.
 - Phase 0 scaffold and dependencies.
 - Supabase browser/server client helpers and `.env.example`.
 - MVP schema/RLS draft in `docs/supabase-schema.sql`.
+- Supabase bootstrap script in `docs/supabase-bootstrap.sql` for creating the
+  first builder organisation, membership, demo project, and client after the
+  first magic-link sign-in.
 - Role helper scaffold in `src/lib/auth/roles.ts`.
 - Portal switchboard at `/`.
 - Platform admin portal at `/admin` with operator metrics, builder activity,
@@ -282,6 +285,9 @@ Both passed after the latest changes.
 - Add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` to
   `.env.local`.
 - Create a private Supabase Storage bucket named `handover-documents`.
+- Sign in once through `/login`, then run `docs/supabase-bootstrap.sql` with
+  your email filled in so the first authenticated builder user has an
+  organisation and demo project.
 - Once env vars are present, builder routes require Supabase auth via
   `middleware.ts`.
 - Current AI routes are contracts/scaffolds. Real model calls still need
