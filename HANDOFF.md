@@ -157,6 +157,9 @@ Supabase is not configured.
   pages using `tesseract.js`. It renders up to three sparse pages as screenshots,
   appends OCR text into the extraction input, reports OCR page/character counts,
   and leaves warnings when OCR is skipped, capped, or unable to recover text.
+- PDF preview/process endpoints now share
+  `src/lib/server/specification-response.ts` so file metadata, extraction
+  diagnostics, OCR counts, summary notes, and proposed items stay consistent.
 - `POST /api/specifications/process-pdf` now combines the main flow: upload PDF,
   parse text, save the file, generate proposals, and send proposals to the review
   queue in one request.
@@ -302,6 +305,9 @@ Supabase is not configured.
 - API smoke check for `POST /api/specifications/extract-pdf` with a generated
   image-only/scanned-style PDF: OCR recovered text from 1 page and proposals
   included cladding, maintenance, and producer statement items.
+- API smoke check after consolidating extraction response shaping: existing
+  selectable-text PDF still returns file metadata, OCR counts, summary notes,
+  and proposed items.
 - Browser smoke check for polished specification upload UI: main process action
   is present and disabled before PDF selection, selected-file state appears,
   advanced fallback tools are collapsed, and duplicate save-to-review action is
