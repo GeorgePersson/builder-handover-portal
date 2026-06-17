@@ -152,6 +152,10 @@ Supabase is not configured.
   maintenance.
 - Extracted items can be edited before acceptance at
   `/builder/specifications/review/[itemId]/edit`.
+- Extracted item editing now has validation-oriented controls for item type,
+  category, confidence bounds, source page, and source snippet. Source context
+  is persisted in local scaffold mode and Supabase mode, and appears in builder
+  and admin review queues.
 - The handover package can be published from `/builder/handover-package`.
   Local mode stores published item ids in `.local-data/specification-extractions.json`.
 - Supabase package publishing now uses the same package-ready statuses as local
@@ -234,6 +238,9 @@ Supabase is not configured.
 - API smoke check for `POST /api/specifications/extract-pdf` with a generated
   PDF: returned file metadata, chunk/table diagnostics, warnings, and proposed
   items.
+- Browser smoke check for extracted item edit flow: edit page renders item type,
+  category, source page, and source snippet controls; saving a local item returns
+  to the review queue with source context visible.
 
 Both passed after the latest changes.
 
@@ -272,8 +279,8 @@ Both passed after the latest changes.
    and admin review for low-confidence records.
 4. Polish the combined PDF process UI and remove the older separate preview/save
    affordances once the flow feels right.
-5. Improve edit flow with validation, item type/category controls, and source
-   snippet references.
+5. Continue improving edit flow with status-aware validation messages and
+   stronger product/document/maintenance-specific field sets.
 6. Connect `POST /api/ai/product-draft` to the same source-backed AI workflow.
 7. Add invite acceptance and client-specific route protection.
 

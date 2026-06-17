@@ -122,6 +122,14 @@ export default async function SpecificationReviewPage({
                     {item.category} - {item.location || "No location captured"}
                   </p>
                   <p className="mt-3 text-sm leading-6 text-slate-600">{item.extractedText}</p>
+                  {item.sourceSnippet ? (
+                    <div className="mt-3 rounded-md border border-cyan-100 bg-cyan-50 p-3 text-sm leading-6 text-cyan-900">
+                      <p className="font-semibold text-cyan-950">
+                        Source context{item.sourcePage ? ` - page ${item.sourcePage}` : ""}
+                      </p>
+                      <p className="mt-1">{item.sourceSnippet}</p>
+                    </div>
+                  ) : null}
                   {item.matchedExistingRecord ? (
                     <p className="mt-3 text-sm text-emerald-700">Matched to {item.matchedExistingRecord}</p>
                   ) : null}

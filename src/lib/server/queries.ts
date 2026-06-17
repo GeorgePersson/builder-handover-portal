@@ -249,7 +249,7 @@ export async function getExtractedHandoverItems(
   let query = supabase
     .from("extracted_handover_items")
     .select(
-      "id,specification_upload_id,item_type,title,category,location,extracted_text,matched_existing_record,client_request_id,confidence_score,status",
+      "id,specification_upload_id,item_type,title,category,location,extracted_text,source_snippet,source_page,matched_existing_record,client_request_id,confidence_score,status",
     )
     .order("confidence_score", { ascending: false });
 
@@ -273,6 +273,8 @@ export async function getExtractedHandoverItems(
     category: item.category,
     location: item.location || "",
     extractedText: item.extracted_text || "",
+    sourceSnippet: item.source_snippet || undefined,
+    sourcePage: item.source_page || undefined,
     matchedExistingRecord: item.matched_existing_record,
     sourceClientRequestId: item.client_request_id || undefined,
     confidenceScore: item.confidence_score,

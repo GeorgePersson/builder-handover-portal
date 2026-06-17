@@ -204,6 +204,8 @@ create table public.extracted_handover_items (
   category text,
   location text,
   extracted_text text,
+  source_snippet text,
+  source_page integer check (source_page is null or source_page > 0),
   matched_existing_record text,
   confidence_score integer not null default 0 check (confidence_score between 0 and 100),
   status public.extracted_item_status not null default 'proposed',

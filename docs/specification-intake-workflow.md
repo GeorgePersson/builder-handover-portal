@@ -43,6 +43,8 @@ package makes the portal feel much faster and more differentiated.
 - Local scaffold persistence in `.local-data/specification-extractions.json`
 - Handover package preview from accepted extracted items at
   `/builder/handover-package`
+- Extracted item edits can capture item type, category, source page, and source
+  snippet context before project or global approval.
 
 ## Next Engineering Step
 
@@ -59,5 +61,6 @@ Connect real PDF upload and parsing:
 5. Save proposed items to `extracted_handover_items`. The scaffold already saves
    preview proposals to the local/Supabase review queue.
 6. Extend accept/edit/reject actions so accepted items create products,
-   document requests, and maintenance tasks.
+   document requests, and maintenance tasks. Edit actions now persist review
+   metadata; accepted-item materialization is still pending.
 7. Publish accepted package items to the homeowner portal.

@@ -124,6 +124,14 @@ export default async function AdminReviewPage() {
                     {describeExtractedItemStatus(item.status)}
                   </p>
                   <p className="mt-3 text-sm leading-6 text-slate-600">{item.extractedText}</p>
+                  {item.sourceSnippet ? (
+                    <div className="mt-3 rounded-md border border-cyan-100 bg-cyan-50 p-3 text-sm leading-6 text-cyan-900">
+                      <p className="font-semibold text-cyan-950">
+                        Source context{item.sourcePage ? ` - page ${item.sourcePage}` : ""}
+                      </p>
+                      <p className="mt-1">{item.sourceSnippet}</p>
+                    </div>
+                  ) : null}
                   <div className="mt-4 flex flex-wrap gap-2">
                     <form action={approveExtractedItemGloballyAction}>
                       <input name="itemId" type="hidden" value={item.id} />

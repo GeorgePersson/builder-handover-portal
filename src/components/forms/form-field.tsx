@@ -5,6 +5,8 @@ type FieldProps = {
   placeholder?: string;
   required?: boolean;
   defaultValue?: string;
+  min?: string;
+  max?: string;
 };
 
 export function TextField({
@@ -14,6 +16,8 @@ export function TextField({
   placeholder,
   required,
   defaultValue,
+  min,
+  max,
 }: FieldProps) {
   return (
     <label className="block">
@@ -25,6 +29,8 @@ export function TextField({
         placeholder={placeholder}
         required={required}
         type={type}
+        min={min}
+        max={max}
       />
     </label>
   );
@@ -56,11 +62,13 @@ export function SelectField({
   name,
   options,
   required,
+  defaultValue,
 }: {
   label: string;
   name: string;
   options: Array<{ label: string; value: string }>;
   required?: boolean;
+  defaultValue?: string;
 }) {
   return (
     <label className="block">
@@ -69,6 +77,7 @@ export function SelectField({
         className="mt-2 h-11 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-950 outline-none ring-cyan-700/20 focus:border-cyan-700 focus:ring-4"
         name={name}
         required={required}
+        defaultValue={defaultValue}
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>

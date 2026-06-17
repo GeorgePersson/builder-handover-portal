@@ -131,6 +131,7 @@ export async function createLocalExtractionFromClientRequest(request: ClientRequ
     category: request.requestType === "product" ? "Client requested product" : "Client request",
     location: request.location,
     extractedText: request.details || "Client requested this missing handover item.",
+    sourceSnippet: request.details || "Client requested this missing handover item.",
     matchedExistingRecord: null,
     sourceClientRequestId: request.id,
     confidenceScore: request.confidenceScore,
@@ -176,10 +177,13 @@ export async function updateLocalExtractedItemStatus(
 
 export async function updateLocalExtractedItem(input: {
   itemId: string;
+  itemType: ExtractedHandoverItem["itemType"];
   title: string;
   category: string;
   location: string;
   extractedText: string;
+  sourceSnippet?: string;
+  sourcePage?: number;
   confidenceScore: number;
 }) {
   const store = await readStore();
@@ -193,10 +197,13 @@ export async function updateLocalExtractedItem(input: {
     didUpdate = true;
     return {
       ...item,
+      itemType: input.itemType,
       title: input.title,
       category: input.category,
       location: input.location,
       extractedText: input.extractedText,
+      sourceSnippet: input.sourceSnippet,
+      sourcePage: input.sourcePage,
       confidenceScore: input.confidenceScore,
       status: "edited" as const,
     };

@@ -17,6 +17,7 @@ import {
 } from "@/lib/server/local-store/client-requests";
 import { upsertLocalGlobalProductFromExtractedItem } from "@/lib/server/local-store/products";
 import { enrichExtractedProduct } from "@/lib/ai/source-enrichment";
+import type { ExtractedHandoverItem } from "@/lib/types";
 
 function getRequired(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -35,6 +36,14 @@ function getOptional(formData: FormData, key: string) {
 
 function hasSupabaseConfig() {
   return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+}
+
+function parseExtractedItemType(value: string): ExtractedHandoverItem["itemType"] | null {
+  if (value === "product" || value === "document" || value === "maintenance") {
+    return value;
+  }
+
+  return null;
 }
 
 async function getBuilderContext() {
@@ -548,24 +557,40 @@ export async function rejectExtractedItemAction(formData: FormData) {
 
 export async function updateExtractedItemAction(formData: FormData) {
   const itemId = getRequired(formData, "itemId");
+  const itemType = parseExtractedItemType(getRequired(formData, "itemType"));
   const title = getRequired(formData, "title");
   const category = getRequired(formData, "category");
   const location = getOptional(formData, "location") || "";
   const extractedText = getRequired(formData, "extractedText");
+  const sourceSnippet = getOptional(formData, "sourceSnippet") || undefined;
+  const sourcePageValue = getOptional(formData, "sourcePage");
+  const parsedSourcePage = sourcePageValue ? Number(sourcePageValue) : null;
+  const sourcePage =
+    parsedSourcePage && Number.isFinite(parsedSourcePage) && parsedSourcePage > 0
+      ? Math.round(parsedSourcePage)
+      : undefined;
   const confidenceScoreValue = Number(getRequired(formData, "confidenceScore"));
   const confidenceScore = Number.isFinite(confidenceScoreValue)
     ? Math.min(100, Math.max(0, Math.round(confidenceScoreValue)))
     : 50;
+
+  if (!itemType || title.length < 3 || category.length < 2 || extractedText.length < 8) {
+    redirect(`/builder/specifications/review/${itemId}/edit?error=check-required-fields`);
+  }
+
   const context = await getBuilderContext();
 
   if (context) {
     const { error } = await context.supabase
       .from("extracted_handover_items")
       .update({
+        item_type: itemType,
         title,
         category,
         location,
         extracted_text: extractedText,
+        source_snippet: sourceSnippet || null,
+        source_page: sourcePage || null,
         confidence_score: confidenceScore,
         status: "edited",
       })
@@ -577,10 +602,13 @@ export async function updateExtractedItemAction(formData: FormData) {
   } else {
     await updateLocalExtractedItem({
       itemId,
+      itemType,
       title,
       category,
       location,
       extractedText,
+      sourceSnippet,
+      sourcePage,
       confidenceScore,
     });
   }
@@ -714,6 +742,7 @@ export async function convertClientRequestToReviewAction(formData: FormData) {
       category: request.request_type === "product" ? "Client requested product" : "Client request",
       location: request.location,
       extracted_text: request.details,
+      source_snippet: request.details,
       matched_existing_record: null,
       confidence_score: request.confidence_score,
       client_request_id: request.id,
