@@ -2,7 +2,15 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Bot, CheckCircle2, FileText, FileUp, LoaderCircle, Search } from "lucide-react";
+import {
+  AlertTriangle,
+  Bot,
+  CheckCircle2,
+  FileText,
+  FileUp,
+  LoaderCircle,
+  Search,
+} from "lucide-react";
 
 type ProjectOption = {
   id: string;
@@ -21,6 +29,7 @@ type ProposedItem = {
 type SpecExtractResponse = {
   file?: {
     name: string;
+    size?: number;
     pages: number;
     text_length: number;
   };
@@ -41,6 +50,60 @@ type SpecExtractResponse = {
 };
 
 type ResultMode = "processed" | "preview" | "text-preview";
+type ActiveOperation = "process-pdf" | "preview-pdf" | "preview-text" | "save-preview" | null;
+
+const operationLabels: Record<Exclude<ActiveOperation, null>, string> = {
+  "preview-pdf": "Previewing PDF extraction",
+  "preview-text": "Previewing pasted text",
+  "process-pdf": "Processing PDF to review",
+  "save-preview": "Sending preview to review",
+};
+
+const operationSteps: Record<Exclude<ActiveOperation, null>, string[]> = {
+  "preview-pdf": ["Reading PDF", "Extracting text and tables", "Drafting proposed items"],
+  "preview-text": ["Reading pasted text", "Drafting proposed items", "Preparing preview"],
+  "process-pdf": ["Uploading PDF", "Extracting text and tables", "Saving proposed items"],
+  "save-preview": ["Preparing saved extraction", "Writing review items", "Refreshing queue state"],
+};
+
+function formatFileSize(bytes?: number) {
+  if (!bytes) {
+    return "Unknown size";
+  }
+
+  if (bytes < 1024 * 1024) {
+    return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  }
+
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function getExtractionQuality(result: SpecExtractResponse) {
+  const warnings = result.extraction?.warnings ?? [];
+  const averageCharactersPerPage = result.extraction?.average_characters_per_page ?? 0;
+
+  if (warnings.some((warning) => warning.toLowerCase().includes("scanned"))) {
+    return {
+      label: "Needs OCR",
+      tone: "amber",
+      description: "The file may be image-only, so extracted proposals should be checked closely.",
+    };
+  }
+
+  if (warnings.length || averageCharactersPerPage < 300) {
+    return {
+      label: "Needs review",
+      tone: "amber",
+      description: "Some pages produced sparse text or limited table structure.",
+    };
+  }
+
+  return {
+    label: "Readable source",
+    tone: "emerald",
+    description: "The PDF produced enough selectable text for a normal extraction pass.",
+  };
+}
 
 export function SpecExtractPanel({ projects }: { projects: ProjectOption[] }) {
   const [projectId, setProjectId] = useState(projects[0]?.id || "local-project");
@@ -52,11 +115,12 @@ export function SpecExtractPanel({ projects }: { projects: ProjectOption[] }) {
   const [selectedPdf, setSelectedPdf] = useState<File | null>(null);
   const [sourceFileName, setSourceFileName] = useState("Local specification demo.pdf");
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [activeOperation, setActiveOperation] = useState<ActiveOperation>(null);
   const [error, setError] = useState<string | null>(null);
+  const isLoading = activeOperation !== null;
 
   async function runExtraction() {
-    setIsLoading(true);
+    setActiveOperation("preview-text");
     setError(null);
     setResult(null);
     setResultMode(null);
@@ -74,13 +138,13 @@ export function SpecExtractPanel({ projects }: { projects: ProjectOption[] }) {
 
     if (!response.ok) {
       setError("Could not extract handover items from the supplied text.");
-      setIsLoading(false);
+      setActiveOperation(null);
       return;
     }
 
     setResult((await response.json()) as SpecExtractResponse);
     setResultMode("text-preview");
-    setIsLoading(false);
+    setActiveOperation(null);
   }
 
   async function runPdfExtraction() {
@@ -89,7 +153,7 @@ export function SpecExtractPanel({ projects }: { projects: ProjectOption[] }) {
       return;
     }
 
-    setIsLoading(true);
+    setActiveOperation("preview-pdf");
     setError(null);
     setResult(null);
     setResultMode(null);
@@ -106,13 +170,13 @@ export function SpecExtractPanel({ projects }: { projects: ProjectOption[] }) {
     if (!response.ok) {
       const payload = (await response.json()) as { error?: string };
       setError(payload.error || "Could not extract the uploaded PDF.");
-      setIsLoading(false);
+      setActiveOperation(null);
       return;
     }
 
     setResult((await response.json()) as SpecExtractResponse);
     setResultMode("preview");
-    setIsLoading(false);
+    setActiveOperation(null);
   }
 
   async function processPdfToReviewQueue() {
@@ -121,7 +185,7 @@ export function SpecExtractPanel({ projects }: { projects: ProjectOption[] }) {
       return;
     }
 
-    setIsLoading(true);
+    setActiveOperation("process-pdf");
     setError(null);
     setResult(null);
     setResultMode(null);
@@ -139,7 +203,7 @@ export function SpecExtractPanel({ projects }: { projects: ProjectOption[] }) {
     if (!response.ok) {
       const payload = (await response.json()) as { error?: string };
       setError(payload.error || "Could not process the uploaded PDF.");
-      setIsLoading(false);
+      setActiveOperation(null);
       return;
     }
 
@@ -150,7 +214,7 @@ export function SpecExtractPanel({ projects }: { projects: ProjectOption[] }) {
     setResult(payload);
     setResultMode("processed");
     setSaveMessage(`Processed PDF and sent ${payload.saved_count} items to the ${payload.storage} review queue.`);
-    setIsLoading(false);
+    setActiveOperation(null);
   }
 
   async function saveToReviewQueue() {
@@ -159,7 +223,7 @@ export function SpecExtractPanel({ projects }: { projects: ProjectOption[] }) {
       return;
     }
 
-    setIsLoading(true);
+    setActiveOperation("save-preview");
     setError(null);
     setSaveMessage(null);
 
@@ -176,18 +240,20 @@ export function SpecExtractPanel({ projects }: { projects: ProjectOption[] }) {
     if (!response.ok) {
       const payload = (await response.json()) as { error?: string };
       setError(payload.error || "Could not send extraction to review.");
-      setIsLoading(false);
+      setActiveOperation(null);
       return;
     }
 
     const payload = (await response.json()) as { saved_count: number; storage: string };
     setResultMode("processed");
     setSaveMessage(`Sent ${payload.saved_count} items to the ${payload.storage} review queue.`);
-    setIsLoading(false);
+    setActiveOperation(null);
   }
 
   const canProcessPdf = Boolean(selectedPdf) && !isLoading;
   const isPreviewResult = resultMode === "preview" || resultMode === "text-preview";
+  const progressSteps = activeOperation ? operationSteps[activeOperation] : [];
+  const quality = result ? getExtractionQuality(result) : null;
 
   return (
     <section className="mt-6 rounded-lg border border-cyan-200 bg-cyan-50 p-5">
@@ -255,7 +321,7 @@ export function SpecExtractPanel({ projects }: { projects: ProjectOption[] }) {
               </span>
               {selectedPdf ? (
                 <span className="rounded-md bg-white px-2 py-1 text-xs font-semibold text-slate-600">
-                  {Math.max(1, Math.round(selectedPdf.size / 1024))} KB
+                  {formatFileSize(selectedPdf.size)}
                 </span>
               ) : null}
             </div>
@@ -282,7 +348,11 @@ export function SpecExtractPanel({ projects }: { projects: ProjectOption[] }) {
               onClick={processPdfToReviewQueue}
               type="button"
             >
-              {isLoading ? <LoaderCircle className="size-4 animate-spin" /> : <Bot className="size-4" />}
+              {activeOperation === "process-pdf" ? (
+                <LoaderCircle className="size-4 animate-spin" />
+              ) : (
+                <Bot className="size-4" />
+              )}
               Process to review
             </button>
             <p className="text-xs leading-5 text-cyan-800">
@@ -305,7 +375,11 @@ export function SpecExtractPanel({ projects }: { projects: ProjectOption[] }) {
               onClick={runPdfExtraction}
               type="button"
             >
-              {isLoading ? <LoaderCircle className="size-4 animate-spin" /> : <Search className="size-4" />}
+              {activeOperation === "preview-pdf" ? (
+                <LoaderCircle className="size-4 animate-spin" />
+              ) : (
+                <Search className="size-4" />
+              )}
               Preview PDF only
             </button>
           </div>
@@ -321,11 +395,37 @@ export function SpecExtractPanel({ projects }: { projects: ProjectOption[] }) {
             onClick={runExtraction}
             type="button"
           >
-            {isLoading ? <LoaderCircle className="size-4 animate-spin" /> : <Bot className="size-4" />}
+            {activeOperation === "preview-text" ? (
+              <LoaderCircle className="size-4 animate-spin" />
+            ) : (
+              <Bot className="size-4" />
+            )}
             Preview from text
           </button>
         </details>
       </div>
+
+      {activeOperation ? (
+        <div className="mt-4 rounded-md border border-cyan-200 bg-white p-4">
+          <div className="flex items-center gap-2">
+            <LoaderCircle className="size-4 animate-spin text-cyan-700" />
+            <p className="text-sm font-semibold text-slate-950">{operationLabels[activeOperation]}</p>
+          </div>
+          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+            {progressSteps.map((step, index) => (
+              <div
+                className="flex items-center gap-2 rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600"
+                key={step}
+              >
+                <span className="flex size-5 items-center justify-center rounded-full bg-cyan-700 text-[11px] text-white">
+                  {index + 1}
+                </span>
+                {step}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {error ? <p className="mt-4 rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{error}</p> : null}
       {saveMessage ? (
@@ -342,7 +442,28 @@ export function SpecExtractPanel({ projects }: { projects: ProjectOption[] }) {
           {result.file ? (
             <div className="rounded-md border border-cyan-200 bg-white p-3 text-sm text-slate-700">
               <span className="font-semibold text-slate-950">{result.file.name}</span> parsed with{" "}
-              {result.file.pages} pages and {result.file.text_length} characters of text.
+              {result.file.pages} pages, {formatFileSize(result.file.size)}, and {result.file.text_length} characters of text.
+            </div>
+          ) : null}
+          {quality ? (
+            <div
+              className={`rounded-md border p-3 text-sm ${
+                quality.tone === "emerald"
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                  : "border-amber-200 bg-amber-50 text-amber-800"
+              }`}
+            >
+              <div className="flex items-start gap-2">
+                {quality.tone === "emerald" ? (
+                  <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
+                ) : (
+                  <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                )}
+                <div>
+                  <p className="font-semibold">{quality.label}</p>
+                  <p className="mt-1 leading-6">{quality.description}</p>
+                </div>
+              </div>
             </div>
           ) : null}
           {result.extraction ? (
@@ -365,8 +486,11 @@ export function SpecExtractPanel({ projects }: { projects: ProjectOption[] }) {
           ) : null}
           {result.extraction?.warnings.length ? (
             <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              <p className="font-semibold text-amber-950">Extraction warnings</p>
               {result.extraction.warnings.map((warning) => (
-                <p key={warning}>{warning}</p>
+                <p className="mt-1 leading-6" key={warning}>
+                  {warning}
+                </p>
               ))}
             </div>
           ) : null}
@@ -396,7 +520,11 @@ export function SpecExtractPanel({ projects }: { projects: ProjectOption[] }) {
                 onClick={saveToReviewQueue}
                 type="button"
               >
-                {isLoading ? <LoaderCircle className="size-4 animate-spin" /> : <Bot className="size-4" />}
+                {activeOperation === "save-preview" ? (
+                  <LoaderCircle className="size-4 animate-spin" />
+                ) : (
+                  <Bot className="size-4" />
+                )}
                 Send to review queue
               </button>
             </div>

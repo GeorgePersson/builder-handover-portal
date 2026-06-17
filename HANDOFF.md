@@ -143,6 +143,9 @@ Supabase is not configured.
   project/PDF/process flow with selected-file state and pipeline steps. Preview
   and pasted-text tools now live under advanced fallback controls, and the
   separate send-to-review action only appears for preview results.
+- The PDF intake panel now shows operation-specific progress states for
+  processing, previewing, and saving, plus a source-quality verdict from the
+  extraction diagnostics so sparse/scanned PDFs are flagged before review.
 - `/builder/specifications/new` can also preview from a selected PDF using
   `POST /api/specifications/extract-pdf`. This route parses PDF text locally
   with `pdf-parse`, then runs the shared proposal logic.
@@ -266,6 +269,8 @@ Supabase is not configured.
   is present and disabled before PDF selection, selected-file state appears,
   advanced fallback tools are collapsed, and duplicate save-to-review action is
   hidden until preview mode.
+- Lint/build check for the PDF intake progress and source-quality UI while
+  Supabase magic-link email was rate-limited.
 - API smoke check for `POST /api/ai/product-draft`: known Linea Weatherboard
   request returns high-confidence source-backed scaffold fields; vague bathroom
   fitting request remains blocked with missing-field guidance.
@@ -315,8 +320,8 @@ Both passed after the latest changes.
 3. Replace the deterministic source-enrichment scaffold with a real AI/search
    workflow: official source search, extraction, critic scoring, source storage,
    and admin review for low-confidence records.
-4. Continue refining the PDF intake UI with progress states for longer PDFs and
-   richer extraction warnings once real builder files are available.
+4. Tune the PDF intake progress and warning copy against real builder files,
+   then add OCR fallback for scanned/image-only specifications.
 5. Continue improving edit flow with status-aware validation messages and
    stronger product/document/maintenance-specific field sets.
 6. Replace `POST /api/ai/product-draft` deterministic enrichment with the real
