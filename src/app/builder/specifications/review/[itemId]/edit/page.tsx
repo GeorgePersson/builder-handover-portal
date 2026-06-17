@@ -7,6 +7,18 @@ import { StatusBanner } from "@/components/status-banner";
 import { getExtractedHandoverItems } from "@/lib/server/queries";
 import { describeExtractedItemStatus, formatStatus } from "@/lib/status-labels";
 
+const editErrorMessages: Record<string, string> = {
+  "check-required-fields": "Check the required fields before saving this item.",
+  "document-category-required": "Choose a specific document category before saving.",
+  "document-source-required": "Add enough source wording to show why this document belongs in the handover package.",
+  "maintenance-action-required": "Maintenance items need a clear care action, such as clean, inspect, service, replace, or test.",
+  "maintenance-detail-required": "Add the maintenance detail, cadence, trigger, or source wording before saving.",
+  "product-identity-required": "Product items need a specific product, material, fixture, brand, or model name before saving.",
+  "product-location-required": "Product items need a project location before saving.",
+  "source-context-required": "High-confidence edits need a source page or source snippet so the decision stays traceable.",
+  "update-item-failed": "The item could not be updated. Check the saved data path and try again.",
+};
+
 export default async function EditExtractedItemPage({
   params,
   searchParams,
@@ -39,7 +51,7 @@ export default async function EditExtractedItemPage({
           eyebrow="Specification review"
           title="Edit extracted item"
         />
-        <StatusBanner error={query.error} />
+        <StatusBanner error={query.error} errorMessages={editErrorMessages} />
 
         <section className="mt-6 rounded-lg border border-cyan-200 bg-cyan-50 p-5">
           <div className="flex flex-wrap items-center gap-2">

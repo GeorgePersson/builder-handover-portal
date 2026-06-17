@@ -175,6 +175,12 @@ Supabase is not configured.
   and maintenance edits show different category options, evidence-note labels,
   review checklists, and status-aware guidance before saving through the same
   server action.
+- Extracted item edits now run through product/document/maintenance-specific
+  server-side validation before saving. High-confidence edits require traceable
+  source context; product edits require location and a specific identity;
+  document edits require a specific category/source support; maintenance edits
+  require a clear care action and detail. The edit page maps these failures to
+  readable review guidance instead of raw error slugs.
 - The handover package can be published from `/builder/handover-package`.
   Local mode stores published item ids in `.local-data/specification-extractions.json`.
 - Supabase package publishing now uses the same package-ready statuses as local
@@ -271,6 +277,9 @@ Supabase is not configured.
   to the review queue with source context visible.
 - Lint/build check for type-aware extracted-item editing while Supabase auth was
   rate-limited; direct browser smoke was blocked by the expected auth proxy.
+- Lint/build check for type-specific extracted item save validation and readable
+  edit error banners. Direct edit-page browser smoke is still gated by Supabase
+  sign-in while magic-link email is rate-limited.
 - Browser smoke check for polished specification upload UI: main process action
   is present and disabled before PDF selection, selected-file state appears,
   advanced fallback tools are collapsed, and duplicate save-to-review action is
@@ -328,8 +337,9 @@ Both passed after the latest changes.
    and admin review for low-confidence records.
 4. Tune the PDF intake progress and warning copy against real builder files,
    then add OCR fallback for scanned/image-only specifications.
-5. Continue improving edit flow with persisted review reasons and
-   product/document/maintenance-specific validation on save.
+5. Persist reviewer notes/reasons on extracted item edits once the Supabase
+   schema has a dedicated field, then display those reasons through builder and
+   admin review.
 6. Replace `POST /api/ai/product-draft` deterministic enrichment with the real
    source-backed AI/search workflow.
 7. Add invite acceptance and client-specific route protection.

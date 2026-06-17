@@ -46,6 +46,83 @@ function parseExtractedItemType(value: string): ExtractedHandoverItem["itemType"
   return null;
 }
 
+type ExtractedItemEditInput = {
+  itemId: string;
+  itemType: ExtractedHandoverItem["itemType"] | null;
+  title: string;
+  category: string;
+  location: string;
+  extractedText: string;
+  sourceSnippet?: string;
+  sourcePage?: number;
+  confidenceScore: number;
+};
+
+function redirectToExtractedItemEditError(itemId: string, error: string): never {
+  redirect(`/builder/specifications/review/${itemId}/edit?error=${error}`);
+}
+
+function includesAnyTerm(value: string, terms: string[]) {
+  const normalisedValue = value.toLowerCase();
+  return terms.some((term) => normalisedValue.includes(term));
+}
+
+function validateExtractedItemEdit(input: ExtractedItemEditInput) {
+  const sourceSnippetLength = input.sourceSnippet?.length || 0;
+
+  if (
+    !input.itemType ||
+    input.title.length < 3 ||
+    input.category.length < 2 ||
+    input.extractedText.length < 8 ||
+    input.confidenceScore < 0 ||
+    input.confidenceScore > 100
+  ) {
+    return "check-required-fields";
+  }
+
+  if (input.confidenceScore >= 75 && sourceSnippetLength < 16 && !input.sourcePage) {
+    return "source-context-required";
+  }
+
+  if (input.itemType === "product") {
+    const productIdentityTerms = ["unknown", "unspecified", "generic", "tbc", "to confirm"];
+
+    if (input.location.length < 2) {
+      return "product-location-required";
+    }
+
+    if (input.confidenceScore >= 65 && includesAnyTerm(input.title, productIdentityTerms)) {
+      return "product-identity-required";
+    }
+  }
+
+  if (input.itemType === "document") {
+    if (input.category === "To review" || input.category === "Document") {
+      return "document-category-required";
+    }
+
+    if (sourceSnippetLength < 12 && input.extractedText.length < 20) {
+      return "document-source-required";
+    }
+  }
+
+  if (input.itemType === "maintenance") {
+    const maintenanceText = `${input.title} ${input.category} ${input.extractedText}`;
+    const maintenanceActionTerms = ["clean", "inspect", "maintain", "replace", "service", "test", "wash"];
+
+    if (!includesAnyTerm(maintenanceText, maintenanceActionTerms)) {
+      return "maintenance-action-required";
+    }
+
+    if (sourceSnippetLength < 12 && input.extractedText.length < 20) {
+      return "maintenance-detail-required";
+    }
+  }
+
+  return null;
+}
+
 async function getBuilderContext() {
   if (!hasSupabaseConfig()) {
     return null;
@@ -574,8 +651,23 @@ export async function updateExtractedItemAction(formData: FormData) {
     ? Math.min(100, Math.max(0, Math.round(confidenceScoreValue)))
     : 50;
 
-  if (!itemType || title.length < 3 || category.length < 2 || extractedText.length < 8) {
-    redirect(`/builder/specifications/review/${itemId}/edit?error=check-required-fields`);
+  const validationError = validateExtractedItemEdit({
+    itemId,
+    itemType,
+    title,
+    category,
+    location,
+    extractedText,
+    sourceSnippet,
+    sourcePage,
+    confidenceScore,
+  });
+
+  if (validationError) {
+    redirectToExtractedItemEditError(itemId, validationError);
+  }
+  if (!itemType) {
+    redirectToExtractedItemEditError(itemId, "check-required-fields");
   }
 
   const context = await getBuilderContext();
@@ -597,7 +689,7 @@ export async function updateExtractedItemAction(formData: FormData) {
       .eq("id", itemId);
 
     if (error) {
-      redirect(`/builder/specifications/review/${itemId}/edit?error=update-item-failed`);
+      redirectToExtractedItemEditError(itemId, "update-item-failed");
     }
   } else {
     await updateLocalExtractedItem({
