@@ -153,6 +153,10 @@ Supabase is not configured.
   available, appends normalized table text into the extraction input, chunks
   long extracted content for future AI calls, and returns extraction diagnostics
   to the upload UI.
+- PDF extraction now includes a bounded OCR fallback for sparse/image-only
+  pages using `tesseract.js`. It renders up to three sparse pages as screenshots,
+  appends OCR text into the extraction input, reports OCR page/character counts,
+  and leaves warnings when OCR is skipped, capped, or unable to recover text.
 - `POST /api/specifications/process-pdf` now combines the main flow: upload PDF,
   parse text, save the file, generate proposals, and send proposals to the review
   queue in one request.
@@ -292,6 +296,12 @@ Supabase is not configured.
 - HTTP smoke check after reviewer-note changes: `/` returns `200`, and
   `/builder/specifications/review` returns the expected `307` redirect to
   `/login?next=%2Fbuilder%2Fspecifications%2Freview` with Supabase auth active.
+- Lint/build check for OCR-assisted PDF extraction.
+- API smoke check for `POST /api/specifications/extract-pdf` with an existing
+  selectable-text PDF: OCR remains at 0 pages and normal proposals still return.
+- API smoke check for `POST /api/specifications/extract-pdf` with a generated
+  image-only/scanned-style PDF: OCR recovered text from 1 page and proposals
+  included cladding, maintenance, and producer statement items.
 - Browser smoke check for polished specification upload UI: main process action
   is present and disabled before PDF selection, selected-file state appears,
   advanced fallback tools are collapsed, and duplicate save-to-review action is
@@ -344,13 +354,12 @@ Both passed after the latest changes.
 1. Apply `docs/supabase-schema.sql` to a Supabase project and add env vars to
    `.env.local`.
 2. Continue improving PDF extraction for long, table-heavy specification files:
-   add OCR fallback for scanned PDFs and tune table extraction against real
-   builder specifications.
+   tune table extraction and OCR limits against real builder specifications.
 3. Replace the deterministic source-enrichment scaffold with a real AI/search
    workflow: official source search, extraction, critic scoring, source storage,
    and admin review for low-confidence records.
 4. Tune the PDF intake progress and warning copy against real builder files,
-   then add OCR fallback for scanned/image-only specifications.
+   especially long scanned/image-only specifications and table-heavy schedules.
 5. Apply `docs/supabase-add-extracted-item-review-reason.sql` to existing
    Supabase projects so reviewer notes persist remotely, then remove the legacy
    no-column fallback once all environments have the field.

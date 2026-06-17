@@ -37,6 +37,8 @@ type SpecExtractResponse = {
     table_count: number;
     chunk_count: number;
     average_characters_per_page: number;
+    ocr_page_count?: number;
+    ocr_character_count?: number;
     warnings: string[];
   };
   text_preview?: string;
@@ -60,9 +62,9 @@ const operationLabels: Record<Exclude<ActiveOperation, null>, string> = {
 };
 
 const operationSteps: Record<Exclude<ActiveOperation, null>, string[]> = {
-  "preview-pdf": ["Reading PDF", "Extracting text and tables", "Drafting proposed items"],
+  "preview-pdf": ["Reading PDF", "Extracting text, tables, and OCR fallback", "Drafting proposed items"],
   "preview-text": ["Reading pasted text", "Drafting proposed items", "Preparing preview"],
-  "process-pdf": ["Uploading PDF", "Extracting text and tables", "Saving proposed items"],
+  "process-pdf": ["Uploading PDF", "Extracting text, tables, and OCR fallback", "Saving proposed items"],
   "save-preview": ["Preparing saved extraction", "Writing review items", "Refreshing queue state"],
 };
 
@@ -87,6 +89,14 @@ function getExtractionQuality(result: SpecExtractResponse) {
       label: "Needs OCR",
       tone: "amber",
       description: "The file may be image-only, so extracted proposals should be checked closely.",
+    };
+  }
+
+  if ((result.extraction?.ocr_page_count ?? 0) > 0) {
+    return {
+      label: "OCR assisted",
+      tone: "amber",
+      description: "Sparse pages needed OCR fallback. Check extracted wording against the source PDF before approval.",
     };
   }
 
@@ -467,7 +477,7 @@ export function SpecExtractPanel({ projects }: { projects: ProjectOption[] }) {
             </div>
           ) : null}
           {result.extraction ? (
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-4">
               <div className="rounded-md border border-cyan-200 bg-white p-3">
                 <p className="text-xs font-semibold uppercase text-slate-500">Analysis chunks</p>
                 <p className="mt-1 text-lg font-semibold text-slate-950">{result.extraction.chunk_count}</p>
@@ -480,6 +490,12 @@ export function SpecExtractPanel({ projects }: { projects: ProjectOption[] }) {
                 <p className="text-xs font-semibold uppercase text-slate-500">Avg text/page</p>
                 <p className="mt-1 text-lg font-semibold text-slate-950">
                   {result.extraction.average_characters_per_page}
+                </p>
+              </div>
+              <div className="rounded-md border border-cyan-200 bg-white p-3">
+                <p className="text-xs font-semibold uppercase text-slate-500">OCR pages</p>
+                <p className="mt-1 text-lg font-semibold text-slate-950">
+                  {result.extraction.ocr_page_count ?? 0}
                 </p>
               </div>
             </div>

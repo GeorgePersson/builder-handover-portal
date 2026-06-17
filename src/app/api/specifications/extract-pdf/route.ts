@@ -40,6 +40,8 @@ export async function POST(request: Request) {
       table_count: parsed.diagnostics.tableCount,
       chunk_count: parsed.diagnostics.chunkCount,
       average_characters_per_page: parsed.diagnostics.averageCharactersPerPage,
+      ocr_page_count: parsed.diagnostics.ocrPageCount,
+      ocr_character_count: parsed.diagnostics.ocrCharacterCount,
       warnings: parsed.diagnostics.warnings,
     },
     summary: {

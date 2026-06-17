@@ -1,6 +1,7 @@
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { PDFParse } from "pdf-parse";
+import Tesseract from "tesseract.js";
 
 export type ExtractedPdfTable = {
   page: number;
@@ -23,12 +24,24 @@ export type ExtractedPdf = {
     tableCount: number;
     chunkCount: number;
     averageCharactersPerPage: number;
+    ocrPageCount: number;
+    ocrCharacterCount: number;
     warnings: string[];
   };
 };
 
 const maxChunkCharacters = 12000;
 const minUsefulPageCharacters = 80;
+const maxOcrPages = 3;
+const tesseractWorkerPath = path.join(
+  process.cwd(),
+  "node_modules/tesseract.js/src/worker-script/node/index.js",
+);
+const tesseractCorePath = path.join(
+  process.cwd(),
+  "node_modules/tesseract.js-core/tesseract-core-lstm.wasm.js",
+);
+const tesseractCachePath = path.join(process.cwd(), ".local-data/tesseract-cache");
 
 function normalizeText(text: string) {
   return text
@@ -105,6 +118,66 @@ function chunkText(text: string) {
   return chunks;
 }
 
+async function ocrSparsePages(parser: PDFParse, pageNumbers: number[]) {
+  if (pageNumbers.length === 0) {
+    return { text: "", pageCount: 0, characterCount: 0, warnings: [] as string[] };
+  }
+
+  const warnings: string[] = [];
+  const ocrPages: string[] = [];
+  const worker = await Tesseract.createWorker("eng", Tesseract.OEM.LSTM_ONLY, {
+    workerPath: tesseractWorkerPath,
+    corePath: tesseractCorePath,
+    cachePath: tesseractCachePath,
+  });
+
+  try {
+    await worker.setParameters({
+      tessedit_pageseg_mode: Tesseract.PSM.SPARSE_TEXT,
+      preserve_interword_spaces: "1",
+    });
+
+    for (const pageNumber of pageNumbers.slice(0, maxOcrPages)) {
+      try {
+        const screenshot = await parser.getScreenshot({
+          partial: [pageNumber],
+          desiredWidth: 1800,
+          imageBuffer: true,
+          imageDataUrl: false,
+        });
+        const image = screenshot.pages[0]?.data;
+
+        if (!image) {
+          warnings.push(`OCR could not render page ${pageNumber}.`);
+          continue;
+        }
+
+        const result = await worker.recognize(Buffer.from(image));
+        const pageText = normalizeText(result.data.text);
+
+        if (pageText) {
+          ocrPages.push(`OCR text from page ${pageNumber}\n${pageText}`);
+        } else {
+          warnings.push(`OCR found no readable text on page ${pageNumber}.`);
+        }
+      } catch {
+        warnings.push(`OCR failed on page ${pageNumber}.`);
+      }
+    }
+  } finally {
+    await worker.terminate();
+  }
+
+  const text = normalizeText(ocrPages.join("\n\n"));
+
+  return {
+    text,
+    pageCount: ocrPages.length,
+    characterCount: text.length,
+    warnings,
+  };
+}
+
 export async function extractPdfText(buffer: Buffer): Promise<ExtractedPdf> {
   PDFParse.setWorker(
     pathToFileURL(path.join(process.cwd(), "node_modules/pdf-parse/dist/worker/pdf.worker.mjs")).toString(),
@@ -133,17 +206,48 @@ export async function extractPdfText(buffer: Buffer): Promise<ExtractedPdf> {
         characterCount: text.length,
       };
     });
+    const sparsePageNumbers = pageTexts
+      .filter((page) => page.characterCount < minUsefulPageCharacters)
+      .map((page) => page.page);
+    let ocr = { text: "", pageCount: 0, characterCount: 0, warnings: [] as string[] };
+
+    if (sparsePageNumbers.length > 0) {
+      try {
+        ocr = await ocrSparsePages(parser, sparsePageNumbers);
+      } catch {
+        ocr.warnings.push("OCR fallback could not start for sparse PDF pages.");
+      }
+    }
+
     const tableText = tables.map(tableToText).filter(Boolean).join("\n\n");
-    const text = normalizeText([parsed.text, tableText ? `Extracted tables\n\n${tableText}` : ""].filter(Boolean).join("\n\n"));
+    const text = normalizeText(
+      [
+        parsed.text,
+        tableText ? `Extracted tables\n\n${tableText}` : "",
+        ocr.text ? `OCR fallback\n\n${ocr.text}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n\n"),
+    );
     const chunks = chunkText(text);
     const sparsePageCount = pageTexts.filter((page) => page.characterCount < minUsefulPageCharacters).length;
     const averageCharactersPerPage = parsed.total > 0 ? Math.round(text.length / parsed.total) : 0;
-    const warnings: string[] = [];
+    const warnings: string[] = [...ocr.warnings];
 
     if (text.length === 0) {
       warnings.push("No selectable text was found. The PDF may be scanned or image-only.");
     } else if (sparsePageCount > 0) {
       warnings.push(`${sparsePageCount} page${sparsePageCount === 1 ? "" : "s"} had very little selectable text.`);
+    }
+
+    if (ocr.pageCount > 0) {
+      warnings.push(`OCR fallback added text for ${ocr.pageCount} sparse page${ocr.pageCount === 1 ? "" : "s"}.`);
+    } else if (sparsePageNumbers.length > 0) {
+      warnings.push("OCR fallback did not recover additional text from sparse pages.");
+    }
+
+    if (sparsePageNumbers.length > maxOcrPages) {
+      warnings.push(`OCR fallback was limited to the first ${maxOcrPages} sparse pages.`);
     }
 
     if (tables.length === 0) {
@@ -160,6 +264,8 @@ export async function extractPdfText(buffer: Buffer): Promise<ExtractedPdf> {
         tableCount: tables.length,
         chunkCount: chunks.length,
         averageCharactersPerPage,
+        ocrPageCount: ocr.pageCount,
+        ocrCharacterCount: ocr.characterCount,
         warnings,
       },
     };
