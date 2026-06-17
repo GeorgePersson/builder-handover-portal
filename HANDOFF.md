@@ -131,6 +131,10 @@ Supabase is not configured.
 - `/builder/specifications/new` now makes the PDF-to-review flow the primary
   path: choose project, select PDF, process to review. Pasted-text demos and
   manual upload registration are collapsed as secondary fallbacks.
+- The combined PDF process UI has been polished so the main panel is a one-step
+  project/PDF/process flow with selected-file state and pipeline steps. Preview
+  and pasted-text tools now live under advanced fallback controls, and the
+  separate send-to-review action only appears for preview results.
 - `/builder/specifications/new` can also preview from a selected PDF using
   `POST /api/specifications/extract-pdf`. This route parses PDF text locally
   with `pdf-parse`, then runs the shared proposal logic.
@@ -241,6 +245,10 @@ Supabase is not configured.
 - Browser smoke check for extracted item edit flow: edit page renders item type,
   category, source page, and source snippet controls; saving a local item returns
   to the review queue with source context visible.
+- Browser smoke check for polished specification upload UI: main process action
+  is present and disabled before PDF selection, selected-file state appears,
+  advanced fallback tools are collapsed, and duplicate save-to-review action is
+  hidden until preview mode.
 
 Both passed after the latest changes.
 
@@ -277,8 +285,8 @@ Both passed after the latest changes.
 3. Replace the deterministic source-enrichment scaffold with a real AI/search
    workflow: official source search, extraction, critic scoring, source storage,
    and admin review for low-confidence records.
-4. Polish the combined PDF process UI and remove the older separate preview/save
-   affordances once the flow feels right.
+4. Continue refining the PDF intake UI with progress states for longer PDFs and
+   richer extraction warnings once real builder files are available.
 5. Continue improving edit flow with status-aware validation messages and
    stronger product/document/maintenance-specific field sets.
 6. Connect `POST /api/ai/product-draft` to the same source-backed AI workflow.
