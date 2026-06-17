@@ -160,6 +160,8 @@ Supabase is not configured.
 - PDF preview/process endpoints now share
   `src/lib/server/specification-response.ts` so file metadata, extraction
   diagnostics, OCR counts, summary notes, and proposed items stay consistent.
+- PDF table extraction now also infers simple table-like text sections when
+  a schedule header and repeated rows are present without drawn grid lines.
 - `POST /api/specifications/process-pdf` now combines the main flow: upload PDF,
   parse text, save the file, generate proposals, and send proposals to the review
   queue in one request.
@@ -308,6 +310,9 @@ Supabase is not configured.
 - API smoke check after consolidating extraction response shaping: existing
   selectable-text PDF still returns file metadata, OCR counts, summary notes,
   and proposed items.
+- API smoke check for an aligned text schedule PDF: table count increases to 1,
+  extraction text includes an `Extracted tables` section, and the warning
+  explains that a table-like text section was inferred.
 - Browser smoke check for polished specification upload UI: main process action
   is present and disabled before PDF selection, selected-file state appears,
   advanced fallback tools are collapsed, and duplicate save-to-review action is

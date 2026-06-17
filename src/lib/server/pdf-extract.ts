@@ -68,6 +68,98 @@ function tableToText(table: ExtractedPdfTable) {
   return [`Table on page ${table.page}`, ...rows.map((row) => row.join(" | "))].join("\n");
 }
 
+function parseTableLikeRow(line: string) {
+  const pipeCells = line.split("|").map(normalizeCell).filter(Boolean);
+
+  if (pipeCells.length >= 3) {
+    return pipeCells;
+  }
+
+  const spacedCells = line.split(/\s{2,}/).map(normalizeCell).filter(Boolean);
+
+  if (spacedCells.length >= 3) {
+    return spacedCells;
+  }
+
+  return null;
+}
+
+function parseLooseScheduleRow(line: string) {
+  const cells = line.split(/\s+/).map(normalizeCell).filter(Boolean);
+  return cells.length >= 3 ? cells : null;
+}
+
+function isLikelyScheduleHeader(row: string[]) {
+  const headerTerms = new Set([
+    "area",
+    "description",
+    "document",
+    "item",
+    "location",
+    "maintenance",
+    "notes",
+    "product",
+    "requirement",
+    "type",
+  ]);
+
+  return row.some((cell) => headerTerms.has(cell.toLowerCase()));
+}
+
+function detectTextTables(pageTexts: ExtractedPdf["pageTexts"]) {
+  const tables: ExtractedPdfTable[] = [];
+
+  for (const page of pageTexts) {
+    let currentRows: string[][] = [];
+
+    function flushRows() {
+      if (currentRows.length >= 2) {
+        tables.push({ page: page.page, rows: currentRows });
+      }
+
+      currentRows = [];
+    }
+
+    for (const rawLine of page.text.split("\n")) {
+      const row = parseTableLikeRow(rawLine);
+
+      if (row) {
+        currentRows.push(row);
+        continue;
+      }
+
+      flushRows();
+    }
+
+    flushRows();
+
+    let looseRows: string[][] = [];
+
+    function flushLooseRows() {
+      if (looseRows.length >= 3 && isLikelyScheduleHeader(looseRows[0])) {
+        tables.push({ page: page.page, rows: looseRows });
+      }
+
+      looseRows = [];
+    }
+
+    for (const rawLine of page.text.split("\n")) {
+      const row = parseLooseScheduleRow(rawLine);
+
+      if (row) {
+        looseRows.push(row);
+        continue;
+      }
+
+      flushLooseRows();
+    }
+
+    flushLooseRows();
+  }
+
+  return tables;
+}
+
 function chunkText(text: string) {
   const sections = text.split(/\n{2,}/).map((section) => section.trim()).filter(Boolean);
   const chunks: ExtractedPdfChunk[] = [];
@@ -191,7 +283,7 @@ export async function extractPdfText(buffer: Buffer): Promise<ExtractedPdf> {
       pageJoiner: "\n\n--- Page page_number of total_number ---\n\n",
     });
     const tableResult = await parser.getTable();
-    const tables = tableResult.pages.flatMap((page) =>
+    const gridTables = tableResult.pages.flatMap((page) =>
       page.tables.map((table) => ({
         page: page.num,
         rows: table.map((row) => row.map(normalizeCell)),
@@ -206,6 +298,8 @@ export async function extractPdfText(buffer: Buffer): Promise<ExtractedPdf> {
         characterCount: text.length,
       };
     });
+    const textTables = detectTextTables(pageTexts);
+    const tables = [...gridTables, ...textTables];
     const sparsePageNumbers = pageTexts
       .filter((page) => page.characterCount < minUsefulPageCharacters)
       .map((page) => page.page);
@@ -250,8 +344,12 @@ export async function extractPdfText(buffer: Buffer): Promise<ExtractedPdf> {
       warnings.push(`OCR fallback was limited to the first ${maxOcrPages} sparse pages.`);
     }
 
-    if (tables.length === 0) {
+    if (gridTables.length === 0 && textTables.length === 0) {
       warnings.push("No grid-based tables were detected. Text extraction still ran across all pages.");
+    } else if (gridTables.length === 0 && textTables.length > 0) {
+      warnings.push(
+        `${textTables.length} table-like text section${textTables.length === 1 ? " was" : "s were"} inferred from aligned text.`,
+      );
     }
 
     return {
