@@ -20,6 +20,16 @@ type SourceEnrichment = {
   reviewReason: string;
 };
 
+type ProductDraftInput = {
+  productName: string;
+  brand?: string;
+  category?: string;
+  model?: string;
+  supplierUrl?: string;
+  location?: string;
+  notes?: string;
+};
+
 function hasAny(text: string, terms: string[]) {
   return terms.some((term) => text.includes(term));
 }
@@ -142,4 +152,30 @@ export function buildGlobalProductFromExtractedItem(item: ExtractedHandoverItem)
     missingFields: enrichment.missingFields,
     reviewReason: enrichment.reviewReason,
   };
+}
+
+export function enrichManualProductDraft(input: ProductDraftInput): SourceEnrichment {
+  const identityParts = [
+    input.productName,
+    input.brand || "",
+    input.model || "",
+    input.category || "",
+    input.location || "",
+    input.notes || "",
+    input.supplierUrl || "",
+  ].filter(Boolean);
+  const identityScore = input.brand || input.model || input.supplierUrl ? 55 : 22;
+
+  return enrichExtractedProduct({
+    id: "manual-product-draft",
+    specificationId: "manual-product-draft",
+    itemType: "product",
+    title: input.productName,
+    category: input.category || "Product",
+    location: input.location || "",
+    extractedText: identityParts.join(" "),
+    matchedExistingRecord: null,
+    confidenceScore: identityScore,
+    status: "admin_review",
+  });
 }

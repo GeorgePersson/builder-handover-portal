@@ -3,8 +3,9 @@
 Endpoint: `POST /api/ai/product-draft`
 
 This route is intentionally provider-neutral for now. It validates the product
-lookup request and returns the strict JSON shape the builder review UI will
-eventually save to `product_versions`, `product_sources`, and audit logs.
+lookup request, runs the same deterministic source-enrichment scaffold used by
+admin global approval, and returns the strict JSON shape the builder review UI
+will eventually save to `product_versions`, `product_sources`, and audit logs.
 
 ## Request
 
@@ -66,7 +67,7 @@ eventually save to `product_versions`, `product_sources`, and audit logs.
 
 ## Next Implementation Step
 
-Wire this endpoint to an AI research service that:
+Replace the deterministic enrichment scaffold with an AI research service that:
 
 - Searches official manufacturer, warranty, care, installation, NZ distributor,
   and BRANZ/appraisal sources in that order.

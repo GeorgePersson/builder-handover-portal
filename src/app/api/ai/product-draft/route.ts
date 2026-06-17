@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { enrichManualProductDraft } from "@/lib/ai/source-enrichment";
 
 type ProductDraftRequest = {
   productName?: string;
@@ -6,6 +7,8 @@ type ProductDraftRequest = {
   category?: string;
   model?: string;
   supplierUrl?: string;
+  location?: string;
+  notes?: string;
   region?: string;
 };
 
@@ -13,6 +16,7 @@ export async function POST(request: Request) {
   const body = (await request.json()) as ProductDraftRequest;
   const productName = body.productName?.trim();
   const brand = body.brand?.trim();
+  const supplierUrl = body.supplierUrl?.trim();
   const region = body.region?.trim() || "New Zealand";
 
   if (!productName) {
@@ -22,32 +26,48 @@ export async function POST(request: Request) {
     );
   }
 
-  const hasEnoughIdentity = Boolean(brand || body.model || body.supplierUrl);
+  const hasEnoughIdentity = Boolean(brand || body.model || supplierUrl);
+  const enrichment = enrichManualProductDraft({
+    productName,
+    brand,
+    category: body.category?.trim(),
+    model: body.model?.trim(),
+    supplierUrl,
+    location: body.location?.trim(),
+    notes: body.notes?.trim(),
+  });
+  const sourceUrl = enrichment.sources[0]?.url || supplierUrl || "";
+  const missingFields = hasEnoughIdentity
+    ? enrichment.missingFields
+    : ["Brand, model, or supplier/manufacturer URL", ...enrichment.missingFields];
+  const score = hasEnoughIdentity ? enrichment.confidenceScore : 22;
+  const label = hasEnoughIdentity ? enrichment.confidenceLabel : "blocked";
+  const recommendedStatus = hasEnoughIdentity ? enrichment.status : "blocked";
 
   return NextResponse.json({
     product_identity: {
       canonical_name: productName,
-      brand: brand || "",
-      manufacturer: brand || "",
-      category: body.category || "",
-      model: body.model || "",
+      brand: enrichment.brand === "Admin approved" ? brand || "" : enrichment.brand,
+      manufacturer: enrichment.manufacturer || brand || "",
+      category: body.category?.trim() || "",
+      model: body.model?.trim() || "",
       region,
-      identity_confidence: hasEnoughIdentity ? 55 : 20,
+      identity_confidence: hasEnoughIdentity ? Math.max(55, score) : 20,
     },
-    sources: [],
+    sources: enrichment.sources,
     warranty: {
-      period: "",
+      period: hasEnoughIdentity ? enrichment.warrantyPeriod : "",
       start_condition: "",
       exclusions: "",
-      void_conditions: "",
-      source_url: "",
+      void_conditions: hasEnoughIdentity ? enrichment.voidConditions : "",
+      source_url: sourceUrl,
     },
     maintenance: {
-      requirements: "",
+      requirements: hasEnoughIdentity ? enrichment.maintenanceSummary : "",
       frequency: "",
       cleaning_instructions: "",
       inspection_requirements: "",
-      source_url: "",
+      source_url: sourceUrl,
     },
     special_conditions: {
       coastal_exposure: "",
@@ -56,14 +76,17 @@ export async function POST(request: Request) {
       owner_responsibilities: "",
     },
     confidence: {
-      score: hasEnoughIdentity ? 55 : 22,
-      label: hasEnoughIdentity ? "low" : "blocked",
+      score,
+      label,
       reasons: hasEnoughIdentity
-        ? ["AI provider not connected yet.", "Product identity has partial detail."]
+        ? [
+            enrichment.reviewReason,
+            "Official-source search is scaffolded until provider-backed AI is connected.",
+          ]
         : ["Product is too vague.", "Add brand, model, or supplier/manufacturer URL."],
-      missing_fields: ["Official source URLs", "Warranty period", "Maintenance requirements"],
+      missing_fields: missingFields,
       conflicts: [],
-      recommended_status: hasEnoughIdentity ? "needs_review" : "blocked",
+      recommended_status: recommendedStatus,
     },
   });
 }

@@ -112,9 +112,14 @@ Supabase is not configured.
   and raw client requests. Rejecting a linked extracted item also rejects the
   originating client request.
 - AI product draft contract at `POST /api/ai/product-draft`.
+- `POST /api/ai/product-draft` now runs through the same deterministic
+  source-enrichment scaffold as admin global approval. Known products can return
+  source-backed warranty/maintenance drafts; vague items remain blocked with
+  missing-field guidance until more identity detail is supplied.
 - AI specification extraction contract at `POST /api/ai/spec-extract`.
 - Product form has a live AI draft button that calls the endpoint and shows the
-  draft confidence result.
+  draft confidence result, source links, warranty/maintenance draft fields, and
+  missing fields.
 - Specification intake has seed data and schema for proposed products,
   documents, and maintenance tasks extracted from a PDF.
 - Specification review Approve-for-project/Reject buttons are wired to server
@@ -249,6 +254,13 @@ Supabase is not configured.
   is present and disabled before PDF selection, selected-file state appears,
   advanced fallback tools are collapsed, and duplicate save-to-review action is
   hidden until preview mode.
+- API smoke check for `POST /api/ai/product-draft`: known Linea Weatherboard
+  request returns high-confidence source-backed scaffold fields; vague bathroom
+  fitting request remains blocked with missing-field guidance.
+- Browser smoke check for product draft form shell: product page, draft button,
+  product identity fields, and notes field render. Full form-fill smoke was
+  blocked by the in-app browser clipboard/type limitation, but the endpoint
+  response consumed by the panel was verified directly.
 
 Both passed after the latest changes.
 
@@ -289,7 +301,8 @@ Both passed after the latest changes.
    richer extraction warnings once real builder files are available.
 5. Continue improving edit flow with status-aware validation messages and
    stronger product/document/maintenance-specific field sets.
-6. Connect `POST /api/ai/product-draft` to the same source-backed AI workflow.
+6. Replace `POST /api/ai/product-draft` deterministic enrichment with the real
+   source-backed AI/search workflow.
 7. Add invite acceptance and client-specific route protection.
 
 ## Good Resume Prompt
