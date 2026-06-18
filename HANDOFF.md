@@ -291,6 +291,11 @@ Supabase is not configured.
   `/api/documents/[documentId]/download`. The route reads the RLS-visible
   document row, creates a five-minute Supabase Storage signed URL, and redirects
   the browser. Local scaffold mode returns a setup response.
+- Billing now has a Stripe Checkout starter route at `/api/billing/checkout`.
+  It posts to Stripe's Checkout Session API using `STRIPE_SECRET_KEY` and
+  `NEXT_PUBLIC_STRIPE_PROJECT_CREDIT_PRICE_ID`, sets organisation metadata and
+  credit quantity, and redirects to the hosted Checkout URL. Settings exposes a
+  basic credit quantity form. Webhook credit top-ups are still outstanding.
 - Project-approving an extracted item in Supabase mode keeps it project-scoped.
   Platform admin global approval is the path that promotes reusable product
   records.
@@ -418,6 +423,8 @@ Supabase is not configured.
   requests, and the Stripe/project-credit database scaffold.
 - Lint/build check for best-effort credit deduction/ledger writes and signed
   document download route.
+- Lint/build check for the Stripe Checkout starter route and Settings checkout
+  form.
 - HTTP smoke check for unauthenticated `/builder/onboarding`: route returns
   `307` to `/login?next=%2Fbuilder%2Fonboarding` with Supabase auth active.
 - HTTP smoke check for unauthenticated
@@ -507,8 +514,8 @@ Both passed after the latest changes.
 6. Replace `POST /api/ai/product-draft` deterministic enrichment with the real
    source-backed AI/search workflow.
 7. Replace manual client invite links with real transactional email delivery.
-8. Replace the project-credit scaffold with real Stripe checkout/customer
-    credit purchase flows and webhook-backed credit balance updates.
+8. Add a Stripe webhook route that verifies signatures and credits
+   `project_credit_accounts` from completed checkout sessions.
 9. Replace best-effort credit deduction with a transactional Supabase RPC before
    production billing.
 10. Add a client-facing document preview/download history once signed URL

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Building2, CreditCard, Mail, Settings, ShieldCheck, UserRoundCog } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
+import { StatusBanner } from "@/components/status-banner";
 
 const settingsSections = [
   {
@@ -35,7 +36,13 @@ const settingsSections = [
   },
 ];
 
-export default function BuilderSettingsPage() {
+export default async function BuilderSettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ billing?: string; error?: string }>;
+}) {
+  const params = await searchParams;
+
   return (
     <main className="min-h-screen bg-slate-50 px-5 py-8 text-slate-950 sm:px-8">
       <div className="mx-auto max-w-6xl">
@@ -53,6 +60,47 @@ export default function BuilderSettingsPage() {
           icon={Settings}
           title="Settings"
         />
+        <StatusBanner
+          draft={params.billing === "success" ? "saved" : undefined}
+          error={params.error}
+          errorMessages={{
+            "billing-requires-supabase": "Billing checkout requires Supabase auth and organisation context.",
+            "stripe-checkout-failed": "Stripe checkout could not be started.",
+            "stripe-not-configured": "Stripe keys and project credit price id are not configured yet.",
+          }}
+        />
+
+        <section className="mt-6 rounded-lg border border-cyan-200 bg-cyan-50 p-5">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <CreditCard className="size-5 text-cyan-700" />
+                <h2 className="font-semibold text-slate-950">Buy project credits</h2>
+              </div>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-cyan-900">
+                This starts a Stripe Checkout session when billing keys are configured. Webhooks still need to be connected before purchased credits automatically increase the balance.
+              </p>
+            </div>
+            <form action="/api/billing/checkout" className="flex flex-wrap gap-2" method="post">
+              <select
+                className="h-10 rounded-md border border-cyan-200 bg-white px-3 text-sm text-slate-950"
+                name="quantity"
+                defaultValue="5"
+              >
+                <option value="1">1 credit</option>
+                <option value="5">5 credits</option>
+                <option value="10">10 credits</option>
+                <option value="25">25 credits</option>
+              </select>
+              <button
+                className="inline-flex h-10 items-center rounded-md bg-cyan-700 px-3 text-sm font-semibold text-white hover:bg-cyan-800"
+                type="submit"
+              >
+                Open checkout
+              </button>
+            </form>
+          </div>
+        </section>
 
         <section className="mt-6 grid gap-4 lg:grid-cols-2">
           {settingsSections.map((section) => (
