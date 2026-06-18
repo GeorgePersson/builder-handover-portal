@@ -296,6 +296,12 @@ Supabase is not configured.
   `NEXT_PUBLIC_STRIPE_PROJECT_CREDIT_PRICE_ID`, sets organisation metadata and
   credit quantity, and redirects to the hosted Checkout URL. Settings exposes a
   basic credit quantity form. Webhook credit top-ups are still outstanding.
+- Billing now has a Stripe webhook starter route at `/api/billing/webhook`.
+  It verifies the raw request body against `STRIPE_WEBHOOK_SECRET`, handles
+  `checkout.session.completed`, ignores duplicate Stripe event ids, and applies
+  credit top-ups to `project_credit_accounts` with a ledger row in
+  `project_credit_events`. It uses `SUPABASE_SERVICE_ROLE_KEY` because Stripe
+  calls the webhook without a logged-in user.
 - Project-approving an extracted item in Supabase mode keeps it project-scoped.
   Platform admin global approval is the path that promotes reusable product
   records.
@@ -425,6 +431,8 @@ Supabase is not configured.
   document download route.
 - Lint/build check for the Stripe Checkout starter route and Settings checkout
   form.
+- Lint/build check for Stripe webhook signature verification and credit top-up
+  handling.
 - HTTP smoke check for unauthenticated `/builder/onboarding`: route returns
   `307` to `/login?next=%2Fbuilder%2Fonboarding` with Supabase auth active.
 - HTTP smoke check for unauthenticated
@@ -483,8 +491,12 @@ Both passed after the latest changes.
   `docs/supabase-add-client-invite-acceptance.sql`.
 - If the schema was applied before builder onboarding was added, also run
   `docs/supabase-add-builder-workspace-bootstrap.sql`.
-- Add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` to
+- Add `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and
+  `SUPABASE_SERVICE_ROLE_KEY` to
   `.env.local`.
+- Add `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and
+  `NEXT_PUBLIC_STRIPE_PROJECT_CREDIT_PRICE_ID` to `.env.local` before testing
+  hosted Checkout.
 - Create a private Supabase Storage bucket named `handover-documents`.
 - In Supabase Auth URL settings, add local redirect URLs:
   `http://127.0.0.1:3000/auth/callback` and
@@ -514,10 +526,10 @@ Both passed after the latest changes.
 6. Replace `POST /api/ai/product-draft` deterministic enrichment with the real
    source-backed AI/search workflow.
 7. Replace manual client invite links with real transactional email delivery.
-8. Add a Stripe webhook route that verifies signatures and credits
-   `project_credit_accounts` from completed checkout sessions.
-9. Replace best-effort credit deduction with a transactional Supabase RPC before
-   production billing.
+8. Replace best-effort checkout credit top-ups and project-credit deductions
+   with transactional Supabase RPCs before production billing.
+9. Add Stripe webhook event replay/testing notes and a billing admin view for
+   failed or partial credit events.
 10. Add a client-facing document preview/download history once signed URL
     behaviour is stable with real uploads.
 
