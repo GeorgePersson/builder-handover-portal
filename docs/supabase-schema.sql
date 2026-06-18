@@ -385,6 +385,11 @@ create policy "Members can read their organisations"
 on public.organisations for select
 using (public.is_org_member(id));
 
+create policy "Members can update their organisations"
+on public.organisations for update
+using (public.is_org_member(id))
+with check (public.is_org_member(id));
+
 create policy "Users can read their own memberships"
 on public.organisation_members for select
 using (user_id = auth.uid());

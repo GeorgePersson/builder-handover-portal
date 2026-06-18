@@ -1,15 +1,12 @@
 import Link from "next/link";
 import { Building2, CreditCard, Mail, Settings, ShieldCheck, UserRoundCog } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
+import { SubmitButton } from "@/components/forms/submit-button";
 import { StatusBanner } from "@/components/status-banner";
+import { updateBuilderOrganisationAction } from "@/lib/server/actions";
+import { getBuilderCreditStatus, getBuilderOrganisationSettings } from "@/lib/server/queries";
 
 const settingsSections = [
-  {
-    icon: Building2,
-    title: "Organisation",
-    description: "Trading name, legal name, address, and public contact details for handover packages.",
-    fields: ["Organisation name", "Trading name", "Main phone", "Public email"],
-  },
   {
     icon: UserRoundCog,
     title: "Users",
@@ -39,9 +36,13 @@ const settingsSections = [
 export default async function BuilderSettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ billing?: string; error?: string }>;
+  searchParams: Promise<{ billing?: string; draft?: string; error?: string; storage?: string }>;
 }) {
   const params = await searchParams;
+  const [organisation, creditStatus] = await Promise.all([
+    getBuilderOrganisationSettings(),
+    getBuilderCreditStatus(),
+  ]);
 
   return (
     <main className="min-h-screen bg-slate-50 px-5 py-8 text-slate-950 sm:px-8">
@@ -61,14 +62,68 @@ export default async function BuilderSettingsPage({
           title="Settings"
         />
         <StatusBanner
-          draft={params.billing === "success" ? "saved" : undefined}
+          draft={params.billing === "success" || params.draft === "organisation-saved" ? "saved" : undefined}
           error={params.error}
           errorMessages={{
             "billing-requires-supabase": "Billing checkout requires Supabase auth and organisation context.",
             "stripe-checkout-failed": "Stripe checkout could not be started.",
             "stripe-not-configured": "Stripe keys and project credit price id are not configured yet.",
+            "update-organisation-failed": "Organisation settings could not be updated.",
           }}
+          storage={params.storage}
         />
+
+        <section className="mt-6 rounded-lg border border-slate-200 bg-white p-5">
+          <div className="flex items-start gap-3">
+            <Building2 className="mt-1 size-5 text-cyan-700" />
+            <div>
+              <h2 className="font-semibold text-slate-950">Organisation</h2>
+              <p className="mt-1 text-sm leading-6 text-slate-600">
+                These details appear in builder-side account records and can be reused for handover communications.
+              </p>
+            </div>
+          </div>
+          <form action={updateBuilderOrganisationAction} className="mt-5 grid gap-4 md:grid-cols-2">
+            <label className="grid gap-2 text-sm font-medium text-slate-700">
+              Organisation name
+              <input
+                className="h-10 rounded-md border border-slate-200 px-3 text-sm text-slate-950 outline-none focus:border-cyan-700"
+                defaultValue={organisation.name}
+                name="name"
+                required
+              />
+            </label>
+            <label className="grid gap-2 text-sm font-medium text-slate-700">
+              Trading name
+              <input
+                className="h-10 rounded-md border border-slate-200 px-3 text-sm text-slate-950 outline-none focus:border-cyan-700"
+                defaultValue={organisation.tradingName}
+                name="tradingName"
+              />
+            </label>
+            <label className="grid gap-2 text-sm font-medium text-slate-700">
+              Public email
+              <input
+                className="h-10 rounded-md border border-slate-200 px-3 text-sm text-slate-950 outline-none focus:border-cyan-700"
+                defaultValue={organisation.contactEmail}
+                name="contactEmail"
+                type="email"
+              />
+            </label>
+            <label className="grid gap-2 text-sm font-medium text-slate-700">
+              Main phone
+              <input
+                className="h-10 rounded-md border border-slate-200 px-3 text-sm text-slate-950 outline-none focus:border-cyan-700"
+                defaultValue={organisation.contactPhone}
+                name="contactPhone"
+                type="tel"
+              />
+            </label>
+            <div className="md:col-span-2">
+              <SubmitButton icon={Building2} label="Save organisation" />
+            </div>
+          </form>
+        </section>
 
         <section className="mt-6 rounded-lg border border-cyan-200 bg-cyan-50 p-5">
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
@@ -78,7 +133,8 @@ export default async function BuilderSettingsPage({
                 <h2 className="font-semibold text-slate-950">Buy project credits</h2>
               </div>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-cyan-900">
-                This starts a Stripe Checkout session when billing keys are configured. Webhooks still need to be connected before purchased credits automatically increase the balance.
+                This starts a Stripe Checkout session when billing keys are configured. Current balance:{" "}
+                {creditStatus.availableCredits === "infinite" ? "infinite" : creditStatus.availableCredits} credits.
               </p>
             </div>
             <form action="/api/billing/checkout" className="flex flex-wrap gap-2" method="post">

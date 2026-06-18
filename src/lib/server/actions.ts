@@ -426,6 +426,39 @@ export async function createBuilderWorkspaceAction(formData: FormData) {
   redirect(next);
 }
 
+export async function updateBuilderOrganisationAction(formData: FormData) {
+  const name = getRequired(formData, "name");
+  const tradingName = getOptional(formData, "tradingName");
+  const contactEmail = getOptional(formData, "contactEmail");
+  const contactPhone = getOptional(formData, "contactPhone");
+  const context = await getBuilderContext();
+
+  if (context) {
+    const { error } = await context.supabase
+      .from("organisations")
+      .update({
+        name,
+        trading_name: tradingName,
+        contact_email: contactEmail,
+        contact_phone: contactPhone,
+      })
+      .eq("id", context.organisationId);
+
+    if (error) {
+      redirect("/builder/settings?error=update-organisation-failed");
+    }
+
+    await context.supabase.from("audit_events").insert({
+      organisation_id: context.organisationId,
+      actor_user_id: context.userId,
+      action: "Organisation settings updated",
+      detail: `Updated organisation contact settings for ${name}.`,
+    });
+  }
+
+  redirect(`/builder/settings?draft=organisation-saved&storage=${hasSupabaseConfig() ? "supabase" : "stub"}`);
+}
+
 export async function createProjectAction(formData: FormData) {
   const name = getRequired(formData, "name");
   const address = getRequired(formData, "address");

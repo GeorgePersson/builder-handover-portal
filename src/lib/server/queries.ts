@@ -131,6 +131,70 @@ export async function hasBuilderWorkspace() {
   return Boolean(!error && data?.organisation_id);
 }
 
+export async function getBuilderOrganisationSettings(): Promise<{
+  id: string | null;
+  name: string;
+  tradingName: string;
+  contactEmail: string;
+  contactPhone: string;
+}> {
+  if (!hasSupabaseConfig()) {
+    return {
+      id: null,
+      name: "Local Builder Co",
+      tradingName: "Local Builder Co",
+      contactEmail: "builder@example.co.nz",
+      contactPhone: "",
+    };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return {
+      id: null,
+      name: "",
+      tradingName: "",
+      contactEmail: "",
+      contactPhone: "",
+    };
+  }
+
+  const { data: member } = await supabase
+    .from("organisation_members")
+    .select("organisation_id")
+    .eq("user_id", user.id)
+    .limit(1)
+    .maybeSingle();
+
+  if (!member?.organisation_id) {
+    return {
+      id: null,
+      name: "",
+      tradingName: "",
+      contactEmail: user.email || "",
+      contactPhone: "",
+    };
+  }
+
+  const { data: organisation } = await supabase
+    .from("organisations")
+    .select("id,name,trading_name,contact_email,contact_phone")
+    .eq("id", member.organisation_id)
+    .maybeSingle();
+
+  return {
+    id: organisation?.id || member.organisation_id,
+    name: organisation?.name || "",
+    tradingName: organisation?.trading_name || "",
+    contactEmail: organisation?.contact_email || user.email || "",
+    contactPhone: organisation?.contact_phone || "",
+  };
+}
+
 function mapExtractedHandoverItemRows(data: ExtractedHandoverItemRow[]) {
   return data.map((item) => ({
     id: item.id,
