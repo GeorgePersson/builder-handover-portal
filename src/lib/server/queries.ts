@@ -195,7 +195,7 @@ export async function getDocuments(projectId?: string): Promise<HandoverDocument
   const supabase = await createSupabaseServerClient();
   let query = supabase
     .from("documents")
-    .select("id,project_id,name,document_type,size_bytes,visible_to_client,created_at")
+    .select("id,project_id,name,document_type,storage_path,size_bytes,visible_to_client,created_at")
     .order("created_at", { ascending: false });
 
   if (projectId) {
@@ -214,6 +214,7 @@ export async function getDocuments(projectId?: string): Promise<HandoverDocument
     name: document.name,
     type: document.document_type,
     size: document.size_bytes ? `${Math.round(Number(document.size_bytes) / 1024)} KB` : "Pending upload",
+    storagePath: document.storage_path || undefined,
     uploadedAt: document.created_at,
     visibleToClient: document.visible_to_client,
   }));

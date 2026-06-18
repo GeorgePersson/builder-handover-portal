@@ -185,8 +185,12 @@ export function ProjectsWorkspace({
           errorMessages={{
             "client-already-accepted": "That client has already accepted their invite.",
             "client-not-found": "No client record was found for that project.",
+            "credit-check-failed": "Project credits could not be checked.",
+            "credit-deduct-failed": "The project credit could not be deducted.",
+            "credit-event-failed": "The project credit event could not be recorded.",
             "create-client-invite-failed": "The client invite link could not be created.",
             "create-request-failed": "The missing item request could not be created.",
+            "insufficient-project-credits": "This organisation does not have a project credit available yet.",
             "no-organisation": "No builder workspace exists for this account yet. Open Builder setup to finish account setup.",
             "publish-package-failed": "The handover package could not be published for this project.",
             "revoke-client-invite-failed": "The client invite link could not be revoked.",
@@ -564,6 +568,14 @@ function ProjectEditPanel({
               <p className="mt-3 text-xs text-slate-500">
                 {document.size} - Uploaded {formatDate(document.uploadedAt)}
               </p>
+              {document.storagePath ? (
+                <a
+                  className="mt-4 inline-flex h-9 items-center rounded-md border border-slate-200 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                  href={`/api/documents/${document.id}/download`}
+                >
+                  Download
+                </a>
+              ) : null}
             </div>
           )) : <p className="text-sm text-slate-500">No client documents have been added yet.</p>}
         </div>

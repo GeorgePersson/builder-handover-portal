@@ -38,6 +38,7 @@ export type HandoverDocument = {
   name: string;
   type: DocumentType;
   size: string;
+  storagePath?: string;
   uploadedAt: string;
   visibleToClient: boolean;
 };

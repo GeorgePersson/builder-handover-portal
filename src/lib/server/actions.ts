@@ -56,6 +56,102 @@ function hasUnlimitedProjectCredits(email?: string | null) {
   return email?.toLowerCase() === "test@gmail.com";
 }
 
+type ProjectCreditAccount = {
+  tableAvailable: boolean;
+  unlimited: boolean;
+  balance: number;
+};
+
+function isMissingBillingTable(error: { message?: string; code?: string } | null) {
+  return Boolean(
+    error?.code === "42P01" ||
+      error?.message?.includes("project_credit_accounts") ||
+      error?.message?.includes("project_credit_events"),
+  );
+}
+
+async function getProjectCreditAccount(input: {
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
+  organisationId: string;
+  email?: string | null;
+}): Promise<ProjectCreditAccount> {
+  const emailHasUnlimitedCredits = hasUnlimitedProjectCredits(input.email);
+  const { data, error } = await input.supabase
+    .from("project_credit_accounts")
+    .select("credit_balance,unlimited")
+    .eq("organisation_id", input.organisationId)
+    .maybeSingle();
+
+  if (isMissingBillingTable(error)) {
+    return {
+      tableAvailable: false,
+      unlimited: emailHasUnlimitedCredits,
+      balance: emailHasUnlimitedCredits ? Number.MAX_SAFE_INTEGER : 0,
+    };
+  }
+
+  if (error) {
+    redirect("/builder/projects?error=credit-check-failed");
+  }
+
+  if (!data && emailHasUnlimitedCredits) {
+    await input.supabase.from("project_credit_accounts").upsert({
+      organisation_id: input.organisationId,
+      unlimited: true,
+      credit_balance: 0,
+      updated_at: new Date().toISOString(),
+    });
+  }
+
+  return {
+    tableAvailable: true,
+    unlimited: Boolean(data?.unlimited) || emailHasUnlimitedCredits,
+    balance: data?.credit_balance || 0,
+  };
+}
+
+async function recordProjectCreditUse(input: {
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
+  organisationId: string;
+  projectId: string;
+  creditAccount: ProjectCreditAccount;
+}) {
+  if (!input.creditAccount.tableAvailable) {
+    return;
+  }
+
+  const balanceAfter = input.creditAccount.unlimited
+    ? input.creditAccount.balance
+    : input.creditAccount.balance - 1;
+
+  if (!input.creditAccount.unlimited) {
+    const { error: updateError } = await input.supabase
+      .from("project_credit_accounts")
+      .update({
+        credit_balance: balanceAfter,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("organisation_id", input.organisationId);
+
+    if (updateError) {
+      redirect("/builder/projects?error=credit-deduct-failed");
+    }
+  }
+
+  const { error: eventError } = await input.supabase.from("project_credit_events").insert({
+    organisation_id: input.organisationId,
+    project_id: input.projectId,
+    event_type: "project_created",
+    credit_delta: input.creditAccount.unlimited ? 0 : -1,
+    balance_after: input.creditAccount.unlimited ? null : balanceAfter,
+    notes: input.creditAccount.unlimited ? "Unlimited test credits." : "Project creation credit used.",
+  });
+
+  if (eventError && !isMissingBillingTable(eventError)) {
+    redirect("/builder/projects?error=credit-event-failed");
+  }
+}
+
 function parseExtractedItemType(value: string): ExtractedHandoverItem["itemType"] | null {
   if (value === "product" || value === "document" || value === "maintenance") {
     return value;
@@ -237,6 +333,16 @@ export async function createProjectAction(formData: FormData) {
       redirect("/builder/projects?error=project-credit-not-confirmed");
     }
 
+    const creditAccount = await getProjectCreditAccount({
+      supabase: context.supabase,
+      organisationId: context.organisationId,
+      email: user?.email,
+    });
+
+    if (!creditAccount.unlimited && creditAccount.tableAvailable && creditAccount.balance < 1) {
+      redirect("/builder/projects?error=insufficient-project-credits");
+    }
+
     const { data: project, error: projectError } = await context.supabase
       .from("projects")
       .insert({
@@ -253,6 +359,13 @@ export async function createProjectAction(formData: FormData) {
     if (projectError || !project) {
       redirect("/builder/projects?error=create-project-failed");
     }
+
+    await recordProjectCreditUse({
+      supabase: context.supabase,
+      organisationId: context.organisationId,
+      projectId: project.id,
+      creditAccount,
+    });
 
     await context.supabase.from("project_clients").insert({
       project_id: project.id,
@@ -510,6 +623,7 @@ export async function createDocumentAction(formData: FormData) {
       name,
       document_type: documentType,
       storage_path: storagePath,
+      mime_type: upload?.type || null,
       size_bytes: upload?.size || null,
       visible_to_client: visibleToClient,
     });

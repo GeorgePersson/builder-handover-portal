@@ -282,6 +282,15 @@ Supabase is not configured.
   and credit events, and settings-page placeholders for credit balance/customer
   status. `getBuilderCreditStatus()` reads the credit account table when it
   exists and still treats `test@gmail.com` as unlimited.
+- Project creation now performs best-effort credit enforcement when
+  `project_credit_accounts` exists: non-unlimited organisations need at least
+  one credit, successful project creation decrements the balance, and a
+  `project_credit_events` ledger row is written. This still needs a transactional
+  RPC before production billing because concurrent submissions can race.
+- Client-visible documents now have a signed download route at
+  `/api/documents/[documentId]/download`. The route reads the RLS-visible
+  document row, creates a five-minute Supabase Storage signed URL, and redirects
+  the browser. Local scaffold mode returns a setup response.
 - Project-approving an extracted item in Supabase mode keeps it project-scoped.
   Platform admin global approval is the path that promotes reusable product
   records.
@@ -407,6 +416,8 @@ Supabase is not configured.
   scaffold.
 - Lint/build check for project-scoped publishing, persistent builder missing-item
   requests, and the Stripe/project-credit database scaffold.
+- Lint/build check for best-effort credit deduction/ledger writes and signed
+  document download route.
 - HTTP smoke check for unauthenticated `/builder/onboarding`: route returns
   `307` to `/login?next=%2Fbuilder%2Fonboarding` with Supabase auth active.
 - HTTP smoke check for unauthenticated
@@ -496,12 +507,12 @@ Both passed after the latest changes.
 6. Replace `POST /api/ai/product-draft` deterministic enrichment with the real
    source-backed AI/search workflow.
 7. Replace manual client invite links with real transactional email delivery.
-8. Add client-visible signed document download links once storage access is
-   finalised.
-9. Replace the project-credit scaffold with real Stripe checkout/customer
+8. Replace the project-credit scaffold with real Stripe checkout/customer
     credit purchase flows and webhook-backed credit balance updates.
-10. Add credit deduction/ledger writes on project creation for non-unlimited
-    organisations.
+9. Replace best-effort credit deduction with a transactional Supabase RPC before
+   production billing.
+10. Add a client-facing document preview/download history once signed URL
+    behaviour is stable with real uploads.
 
 ## Good Resume Prompt
 

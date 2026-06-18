@@ -125,6 +125,14 @@ export default async function ClientPortalPage({
                     {document.type.replaceAll("_", " ")} - {document.size}
                   </p>
                   <p className="mt-2 text-xs text-slate-500">Uploaded {formatDate(document.uploadedAt)}</p>
+                  {document.storagePath ? (
+                    <Link
+                      className="mt-4 inline-flex h-9 items-center rounded-md border border-slate-200 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                      href={`/api/documents/${document.id}/download`}
+                    >
+                      Download
+                    </Link>
+                  ) : null}
                 </article>
               ))}
               {selectedSummary.visibleDocuments.length === 0 ? (
