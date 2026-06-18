@@ -311,6 +311,13 @@ Supabase is not configured.
   client to show credit accounts, balances, Stripe customer links, and recent
   credit ledger events. The admin sidebar links to it, and the page is forced
   dynamic so balances are read at request time.
+- `/admin/billing` now includes a manual credit adjustment form for metered
+  accounts. Adjustments require a logged-in Supabase session, use the
+  service-role client server-side, and write a `manual_adjustment` ledger event
+  with the operator note.
+- Stripe billing setup and recovery notes live in
+  `docs/stripe-billing-runbook.md`, including Stripe CLI webhook forwarding,
+  test-card flow, and manual adjustment guidance.
 - Project-approving an extracted item in Supabase mode keeps it project-scoped.
   Platform admin global approval is the path that promotes reusable product
   records.
@@ -508,6 +515,10 @@ Both passed after the latest changes.
 - Add `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and
   `NEXT_PUBLIC_STRIPE_PROJECT_CREDIT_PRICE_ID` to `.env.local` before testing
   hosted Checkout.
+- Set `ADMIN_EMAILS` in `.env.local` for manual billing-adjustment access. It
+  defaults to `test@gmail.com` in local/test scaffolding.
+- See `docs/stripe-billing-runbook.md` for the Stripe CLI webhook setup,
+  Checkout test flow, and operator recovery process.
 - Create a private Supabase Storage bucket named `handover-documents`.
 - In Supabase Auth URL settings, add local redirect URLs:
   `http://127.0.0.1:3000/auth/callback` and
@@ -537,8 +548,9 @@ Both passed after the latest changes.
 6. Replace `POST /api/ai/product-draft` deterministic enrichment with the real
    source-backed AI/search workflow.
 7. Replace manual client invite links with real transactional email delivery.
-8. Add Stripe webhook event replay/testing notes and operator handling for
-   failed or partial credit events.
+8. Test the Stripe Checkout/webhook flow against a real Stripe test account and
+   confirm the `/admin/billing` manual adjustment path works for support
+   recovery.
 9. Add a client-facing document preview/download history once signed URL
     behaviour is stable with real uploads.
 
