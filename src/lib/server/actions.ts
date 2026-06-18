@@ -1,5 +1,6 @@
 "use server";
 
+import { createHash, randomBytes } from "node:crypto";
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { prepareSpecificationPdf, saveLocalUpload } from "@/lib/server/upload-utils";
@@ -44,6 +45,14 @@ function parseExtractedItemType(value: string): ExtractedHandoverItem["itemType"
   }
 
   return null;
+}
+
+function createInviteToken() {
+  return randomBytes(32).toString("base64url");
+}
+
+function hashInviteToken(token: string) {
+  return createHash("sha256").update(token).digest("hex");
 }
 
 type ExtractedItemEditInput = {
@@ -203,6 +212,90 @@ export async function createProjectAction(formData: FormData) {
   }
 
   redirect(`/builder/projects?draft=saved&storage=${hasSupabaseConfig() ? "supabase" : "stub"}`);
+}
+
+export async function createClientInviteAction(formData: FormData) {
+  const projectId = getRequired(formData, "projectId");
+  const context = await getBuilderContext();
+
+  if (!context) {
+    redirect("/builder/projects?error=invite-requires-supabase");
+  }
+
+  const { data: client, error: clientError } = await context.supabase
+    .from("project_clients")
+    .select("id,name,email,accepted_at")
+    .eq("project_id", projectId)
+    .limit(1)
+    .single();
+
+  if (clientError || !client) {
+    redirect("/builder/projects?error=client-not-found");
+  }
+
+  if (client.accepted_at) {
+    redirect("/builder/projects?error=client-already-accepted");
+  }
+
+  const token = createInviteToken();
+  const { error: inviteError } = await context.supabase
+    .from("project_clients")
+    .update({
+      invite_token_hash: hashInviteToken(token),
+      invited_at: new Date().toISOString(),
+    })
+    .eq("id", client.id);
+
+  if (inviteError) {
+    redirect("/builder/projects?error=create-client-invite-failed");
+  }
+
+  await context.supabase.from("audit_events").insert({
+    organisation_id: context.organisationId,
+    project_id: projectId,
+    actor_user_id: context.userId,
+    action: "Client invite link created",
+    detail: `Created an invite link for ${client.name || client.email}.`,
+  });
+
+  const params = new URLSearchParams({
+    draft: "invite-created",
+    storage: "supabase",
+    projectId,
+    inviteToken: token,
+  });
+
+  redirect(`/builder/projects?${params.toString()}`);
+}
+
+export async function acceptClientInviteAction(formData: FormData) {
+  const token = getRequired(formData, "token");
+
+  if (!hasSupabaseConfig()) {
+    redirect(`/client/accept-invite?mode=stub&token=${encodeURIComponent(token)}`);
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    const params = new URLSearchParams({
+      next: `/client/accept-invite?token=${token}`,
+    });
+    redirect(`/login?${params.toString()}`);
+  }
+
+  const { error } = await supabase.rpc("accept_project_client_invite", {
+    raw_token: token,
+  });
+
+  if (error) {
+    redirect(`/client/accept-invite?error=invalid-invite&token=${encodeURIComponent(token)}`);
+  }
+
+  redirect("/client/portal?invite=accepted");
 }
 
 export async function createDocumentAction(formData: FormData) {

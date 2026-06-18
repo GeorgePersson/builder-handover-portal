@@ -215,6 +215,15 @@ Supabase is not configured.
   extracted handover items so assigned clients can see published package details.
   Existing Supabase projects can run
   `docs/supabase-add-client-extracted-items-policy.sql`.
+- Builder projects now show client invite status and can generate a one-time
+  client invite link. The link points to `/client/accept-invite?token=...`; it is
+  shown to the builder for manual sending until transactional email is wired.
+- Client invite acceptance is implemented at `/client/accept-invite`. It expects
+  the client to be signed in through Supabase magic link, then calls the
+  `accept_project_client_invite` RPC to attach `project_clients.user_id`, set
+  `accepted_at`, clear the token hash, and open `/client/portal`.
+- Supabase schema now includes the invite-acceptance RPC. Existing Supabase
+  projects can run `docs/supabase-add-client-invite-acceptance.sql`.
 - Project-approving an extracted item in Supabase mode keeps it project-scoped.
   Platform admin global approval is the path that promotes reusable product
   records.
@@ -228,6 +237,8 @@ Supabase is not configured.
 - Auth proxy enforcement now matches the proxy route coverage: when Supabase
   env vars are configured, unauthenticated admin, builder, and client portal
   routes redirect to `/login`.
+- Auth redirects now preserve query strings inside the `next` parameter so
+  client invite tokens survive the magic-link login round trip.
 - Magic-link auth redirects through `/auth/callback`, which exchanges the
   Supabase PKCE code for a cookie-backed session before sending users to their
   original route.
@@ -321,6 +332,12 @@ Supabase is not configured.
 - HTTP smoke check after client route protection: unauthenticated
   `/client/portal`, `/admin`, and `/builder` each return `307` to their
   respective `/login?next=...` URL with Supabase auth active.
+- Lint/build check for builder client invite generation, invite status display,
+  the client invite acceptance page, and the invite acceptance Supabase RPC.
+- HTTP smoke check for unauthenticated
+  `/client/accept-invite?token=test-token`: route returns `307` to
+  `/login?next=%2Fclient%2Faccept-invite%3Ftoken%3Dtest-token`, preserving the
+  invite token through the login redirect.
 - Lint/build check for OCR-assisted PDF extraction.
 - API smoke check for `POST /api/specifications/extract-pdf` with an existing
   selectable-text PDF: OCR remains at 0 pages and normal proposals still return.
@@ -368,6 +385,8 @@ Both passed after the latest changes.
   `docs/supabase-add-extracted-item-review-reason.sql`.
 - If the schema was applied before the client package item policy was added,
   also run `docs/supabase-add-client-extracted-items-policy.sql`.
+- If the schema was applied before invite acceptance was added, also run
+  `docs/supabase-add-client-invite-acceptance.sql`.
 - Add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` to
   `.env.local`.
 - Create a private Supabase Storage bucket named `handover-documents`.
@@ -398,9 +417,8 @@ Both passed after the latest changes.
    no-column fallback once all environments have the field.
 6. Replace `POST /api/ai/product-draft` deterministic enrichment with the real
    source-backed AI/search workflow.
-7. Add invite acceptance: token creation, invite email/link handling, accepted
-   client user attachment to `project_clients.user_id`, and builder-facing
-   invite status.
+7. Replace manual client invite links with real transactional email delivery and
+   expiry/revocation controls.
 
 ## Good Resume Prompt
 

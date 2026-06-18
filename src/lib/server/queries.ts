@@ -88,7 +88,7 @@ export async function getProjects(): Promise<Project[]> {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
     .from("projects")
-    .select("id,name,address,project_type,status,handover_date,created_at,project_clients(name,email)")
+    .select("id,name,address,project_type,status,handover_date,created_at,project_clients(name,email,invited_at,accepted_at)")
     .order("created_at", { ascending: false });
 
   if (error || !data) {
@@ -104,6 +104,8 @@ export async function getProjects(): Promise<Project[]> {
       address: project.address,
       clientName: client?.name || "Client not added",
       clientEmail: client?.email || "",
+      clientInviteStatus: client?.accepted_at ? "accepted" : client?.invited_at ? "invited" : "not_invited",
+      clientInvitedAt: client?.invited_at || undefined,
       projectType: project.project_type,
       handoverDate: project.handover_date || project.created_at,
       status: project.status,

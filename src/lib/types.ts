@@ -20,6 +20,8 @@ export type Project = {
   address: string;
   clientName: string;
   clientEmail: string;
+  clientInviteStatus?: "not_invited" | "invited" | "accepted";
+  clientInvitedAt?: string;
   projectType: string;
   handoverDate: string;
   status: ProjectStatus;

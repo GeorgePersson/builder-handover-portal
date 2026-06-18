@@ -1,17 +1,28 @@
 import Link from "next/link";
-import { Building2, Plus } from "lucide-react";
+import { Building2, Link2, Plus } from "lucide-react";
 import { StatusPill } from "@/components/status-pill";
 import { StatusBanner } from "@/components/status-banner";
+import { SubmitButton } from "@/components/forms/submit-button";
+import { createClientInviteAction } from "@/lib/server/actions";
 import { getProjects } from "@/lib/server/queries";
 import { formatDate } from "@/lib/utils";
 
 export default async function ProjectsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ draft?: string; storage?: string; error?: string }>;
+  searchParams: Promise<{
+    draft?: string;
+    storage?: string;
+    error?: string;
+    projectId?: string;
+    inviteToken?: string;
+  }>;
 }) {
   const params = await searchParams;
   const projects = await getProjects();
+  const invitePath = params.inviteToken
+    ? `/client/accept-invite?token=${encodeURIComponent(params.inviteToken)}`
+    : null;
 
   return (
     <main className="min-h-screen bg-slate-50 px-5 py-8 text-slate-950 sm:px-8">
@@ -29,7 +40,31 @@ export default async function ProjectsPage({
             New project
           </Link>
         </header>
-        <StatusBanner draft={params.draft} error={params.error} storage={params.storage} />
+        <StatusBanner
+          draft={params.draft === "invite-created" ? undefined : params.draft}
+          error={params.error}
+          errorMessages={{
+            "client-already-accepted": "That client has already accepted their invite.",
+            "client-not-found": "No client record was found for that project.",
+            "create-client-invite-failed": "The client invite link could not be created.",
+          }}
+          storage={params.storage}
+        />
+        {invitePath ? (
+          <div className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+            <p className="font-semibold">Client invite link created</p>
+            <p className="mt-2 leading-6">
+              Send this link to the client after they have a Supabase magic-link login available.
+            </p>
+            <Link
+              className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-md border border-emerald-200 bg-white px-3 py-2 font-semibold text-emerald-900 hover:bg-emerald-100"
+              href={invitePath}
+            >
+              <Link2 className="size-4" />
+              {invitePath}
+            </Link>
+          </div>
+        ) : null}
 
         <section className="mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white">
           <div className="border-b border-slate-100 px-5 py-4">
@@ -51,11 +86,22 @@ export default async function ProjectsPage({
                     {project.clientName} - {project.projectType} - Handover{" "}
                     {formatDate(project.handoverDate)}
                   </p>
+                  <p className="mt-2 text-xs font-medium text-slate-500">
+                    Invite: {formatInviteStatus(project.clientInviteStatus, project.clientInvitedAt)}
+                  </p>
                 </div>
-                <div className="grid grid-cols-3 gap-4 text-right text-sm">
-                  <Stat label="Docs" value={project.documentCount} />
-                  <Stat label="Products" value={project.productCount} />
-                  <Stat label="Tasks" value={project.openTasks} />
+                <div className="flex flex-col gap-4 md:items-end">
+                  <div className="grid grid-cols-3 gap-4 text-right text-sm">
+                    <Stat label="Docs" value={project.documentCount} />
+                    <Stat label="Products" value={project.productCount} />
+                    <Stat label="Tasks" value={project.openTasks} />
+                  </div>
+                  {project.clientInviteStatus === "accepted" ? null : (
+                    <form action={createClientInviteAction}>
+                      <input name="projectId" type="hidden" value={project.id} />
+                      <SubmitButton icon={Link2} label="Create invite link" />
+                    </form>
+                  )}
                 </div>
               </article>
             ))}
@@ -64,6 +110,18 @@ export default async function ProjectsPage({
       </div>
     </main>
   );
+}
+
+function formatInviteStatus(status?: string, invitedAt?: string) {
+  if (status === "accepted") {
+    return "Accepted";
+  }
+
+  if (status === "invited") {
+    return invitedAt ? `Invited ${formatDate(invitedAt)}` : "Invited";
+  }
+
+  return "Not invited";
 }
 
 function Stat({ label, value }: { label: string; value: number }) {

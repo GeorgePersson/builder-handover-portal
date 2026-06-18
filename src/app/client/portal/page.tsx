@@ -3,7 +3,12 @@ import { CalendarCheck2, FileText, Home, PackageCheck, Send } from "lucide-react
 import { getClientPortalData } from "@/lib/server/queries";
 import { formatDate } from "@/lib/utils";
 
-export default async function ClientPortalPage() {
+export default async function ClientPortalPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ invite?: string }>;
+}) {
+  const params = await searchParams;
   const {
     project: assignedProject,
     visibleDocuments,
@@ -69,6 +74,11 @@ export default async function ClientPortalPage() {
             </Link>
           </div>
         </header>
+        {params.invite === "accepted" ? (
+          <p className="mt-5 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm leading-6 text-emerald-800">
+            Invite accepted. This home manual is now connected to your signed-in account.
+          </p>
+        ) : null}
 
         <section className="mt-6 grid gap-4 md:grid-cols-3">
           <PortalSummary icon={FileText} label="Documents" value={`${visibleDocuments.length} available`} />

@@ -1,6 +1,8 @@
 -- Builder Handover Portal MVP schema draft.
 -- Apply after creating a Supabase project. Review RLS before production use.
 
+create extension if not exists pgcrypto with schema extensions;
+
 create type public.org_role as enum ('owner', 'builder_admin');
 create type public.project_status as enum ('draft', 'in_review', 'published', 'archived');
 create type public.product_status as enum ('draft', 'needs_review', 'approved', 'blocked');
@@ -275,6 +277,38 @@ as $$
       and pc.user_id = auth.uid()
   );
 $$;
+
+create or replace function public.accept_project_client_invite(raw_token text)
+returns uuid
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  v_project_id uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'not_authenticated';
+  end if;
+
+  update public.project_clients
+  set
+    user_id = auth.uid(),
+    accepted_at = now(),
+    invite_token_hash = null
+  where invite_token_hash = encode(digest(raw_token, 'sha256'), 'hex')
+    and accepted_at is null
+  returning project_id into v_project_id;
+
+  if v_project_id is null then
+    raise exception 'invalid_invite';
+  end if;
+
+  return v_project_id;
+end;
+$$;
+
+grant execute on function public.accept_project_client_invite(text) to authenticated;
 
 create policy "Members can read their organisations"
 on public.organisations for select

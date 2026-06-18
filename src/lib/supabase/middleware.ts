@@ -34,7 +34,8 @@ export async function updateSession(request: NextRequest) {
   if (!user && protectedRoutePrefixes.some((prefix) => request.nextUrl.pathname.startsWith(prefix))) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
-    loginUrl.searchParams.set("next", request.nextUrl.pathname);
+    loginUrl.search = "";
+    loginUrl.searchParams.set("next", `${request.nextUrl.pathname}${request.nextUrl.search}`);
     return NextResponse.redirect(loginUrl);
   }
 
