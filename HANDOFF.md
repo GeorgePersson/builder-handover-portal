@@ -242,6 +242,24 @@ Supabase is not configured.
 - Builder Projects and New Project pages now check for a builder workspace
   before rendering. First-time builders are redirected to onboarding first, so
   project form details are not lost on submit.
+- Builder Projects now uses a consolidated project workspace. Builders can open
+  an 80%-style modal from the projects list to create or edit project/client
+  details, optionally attach a spec PDF, search existing products, see
+  package-ready/admin-review/manual item sections, manage client invite links,
+  and run the send-package confirmation from one place.
+- Builder navigation has been simplified to Dashboard, Projects, Product
+  Library, Maintenance, Settings, and Portal Switchboard. Specifications,
+  documents, approvals, and package routes still exist as supporting routes, but
+  are no longer the primary sidebar flow.
+- Builder dashboard now focuses on active projects, admin review notifications,
+  package-ready items, handed-over projects, client requests, and upcoming
+  maintenance instead of sending users into separate workflow tabs first.
+- Builder Product Library now has URL filters for all, approved, and awaiting
+  global approval, and surfaces project-extracted items waiting for admin review.
+- Builder Maintenance now shows per-project cards, including projects with no
+  maintenance tasks sorted to the bottom.
+- Builder Settings scaffold added at `/builder/settings` for organisation,
+  users, client messaging, and builder review/liability confirmation settings.
 - Project-approving an extracted item in Supabase mode keeps it project-scoped.
   Platform admin global approval is the path that promotes reusable product
   records.
@@ -359,6 +377,9 @@ Supabase is not configured.
   `ensure_builder_workspace` Supabase RPC.
 - Lint/build check for pre-render builder workspace guards on Projects and New
   Project routes.
+- Lint/build check for the streamlined builder dashboard, project workspace
+  modal, product-library filters, per-project maintenance cards, simplified
+  sidebar, and settings scaffold.
 - HTTP smoke check for unauthenticated `/builder/onboarding`: route returns
   `307` to `/login?next=%2Fbuilder%2Fonboarding` with Supabase auth active.
 - HTTP smoke check for unauthenticated
@@ -448,6 +469,10 @@ Both passed after the latest changes.
 6. Replace `POST /api/ai/product-draft` deterministic enrichment with the real
    source-backed AI/search workflow.
 7. Replace manual client invite links with real transactional email delivery.
+8. Make project package publishing project-scoped. The current send-package
+   action still uses the existing global package publishing flow.
+9. Wire the in-modal product request button into persistent project/admin review
+   data instead of leaving it as a visual affordance.
 
 ## Good Resume Prompt
 

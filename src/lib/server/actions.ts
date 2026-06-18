@@ -221,6 +221,7 @@ export async function createProjectAction(formData: FormData) {
   const clientName = getRequired(formData, "clientName");
   const clientEmail = getRequired(formData, "clientEmail");
   const handoverDate = getOptional(formData, "handoverDate");
+  const upload = await prepareSpecificationPdf(formData);
   const context = await getBuilderContext();
 
   if (context) {
@@ -247,12 +248,91 @@ export async function createProjectAction(formData: FormData) {
       email: clientEmail,
     });
 
+    if (upload) {
+      const storagePath = upload.storagePath;
+      const { error: uploadError } = await context.supabase.storage
+        .from("handover-documents")
+        .upload(storagePath, upload.bytes, {
+          contentType: upload.type,
+          upsert: false,
+        });
+
+      if (!uploadError) {
+        await context.supabase.from("specification_uploads").insert({
+          project_id: project.id,
+          uploaded_by: context.userId,
+          file_name: upload.fileName,
+          storage_path: storagePath,
+          status: "uploaded",
+        });
+      }
+    }
+
     await context.supabase.from("audit_events").insert({
       organisation_id: context.organisationId,
       project_id: project.id,
       actor_user_id: context.userId,
       action: "Project created",
       detail: `Created ${name} for ${clientName}.`,
+    });
+  } else if (upload) {
+    await saveLocalUpload(upload.storagePath, upload.bytes);
+  }
+
+  redirect(`/builder/projects?draft=saved&storage=${hasSupabaseConfig() ? "supabase" : "stub"}`);
+}
+
+export async function updateProjectAction(formData: FormData) {
+  const projectId = getRequired(formData, "projectId");
+  const name = getRequired(formData, "name");
+  const address = getRequired(formData, "address");
+  const projectType = getRequired(formData, "projectType");
+  const clientName = getRequired(formData, "clientName");
+  const clientEmail = getRequired(formData, "clientEmail");
+  const handoverDate = getOptional(formData, "handoverDate");
+  const context = await getBuilderContext();
+
+  if (context) {
+    const { error: projectError } = await context.supabase
+      .from("projects")
+      .update({
+        name,
+        address,
+        project_type: projectType,
+        handover_date: handoverDate,
+      })
+      .eq("id", projectId);
+
+    if (projectError) {
+      redirect("/builder/projects?error=update-project-failed");
+    }
+
+    const { data: existingClient } = await context.supabase
+      .from("project_clients")
+      .select("id")
+      .eq("project_id", projectId)
+      .limit(1)
+      .maybeSingle();
+
+    if (existingClient?.id) {
+      await context.supabase
+        .from("project_clients")
+        .update({ name: clientName, email: clientEmail })
+        .eq("id", existingClient.id);
+    } else {
+      await context.supabase.from("project_clients").insert({
+        project_id: projectId,
+        name: clientName,
+        email: clientEmail,
+      });
+    }
+
+    await context.supabase.from("audit_events").insert({
+      organisation_id: context.organisationId,
+      project_id: projectId,
+      actor_user_id: context.userId,
+      action: "Project updated",
+      detail: `Updated ${name}.`,
     });
   }
 

@@ -1,137 +1,144 @@
 import Link from "next/link";
 import {
-  Bot,
+  Bell,
   Building2,
-  FileUp,
-  LayoutList,
+  CalendarCheck2,
+  LayoutDashboard,
   PackageCheck,
-  ScrollText,
+  Send,
+  UserRoundSearch,
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import {
-  getAcceptedHandoverPackagePreview,
+  getClientRequests,
   getExtractedHandoverItems,
+  getMaintenanceTasks,
   getProjects,
   getSpecificationUploads,
 } from "@/lib/server/queries";
 import { formatDate } from "@/lib/utils";
 
+const packageReadyStatuses = new Set(["accepted", "auto_approved", "builder_approved", "global_approved"]);
+const adminReviewStatuses = new Set(["admin_review", "edited", "proposed"]);
+
 export default async function BuilderPortalPage() {
-  const [projects, specifications, extractedItems, packagePreview] = await Promise.all([
-    getProjects(),
-    getSpecificationUploads(),
-    getExtractedHandoverItems(),
-    getAcceptedHandoverPackagePreview(),
-  ]);
-  const builderReviewCount = extractedItems.filter((item) =>
-    ["admin_review", "edited", "proposed"].includes(item.status),
-  ).length;
-  const packageReadyCount = extractedItems.filter((item) =>
-    ["accepted", "auto_approved", "builder_approved", "global_approved"].includes(item.status),
-  ).length;
-  const packageTotal =
-    packagePreview.products.length + packagePreview.documents.length + packagePreview.maintenance.length;
+  const [projects, specifications, extractedItems, maintenanceTasks, clientRequests] =
+    await Promise.all([
+      getProjects(),
+      getSpecificationUploads(),
+      getExtractedHandoverItems(),
+      getMaintenanceTasks(),
+      getClientRequests(),
+    ]);
+
+  const readyItems = extractedItems.filter((item) => packageReadyStatuses.has(item.status));
+  const awaitingAdmin = extractedItems.filter((item) => adminReviewStatuses.has(item.status));
+  const handedOverProjects = projects.filter((project) => project.status === "published");
+  const openClientRequests = clientRequests.filter((request) =>
+    ["submitted", "ai_checking", "admin_review"].includes(request.status),
+  );
 
   return (
     <main className="px-5 py-8 sm:px-8">
       <div className="mx-auto max-w-6xl">
         <PageHeader
           actions={
-            <>
-              <Link
-                className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                href="/builder/specifications/review"
-              >
-                <Bot className="size-4" />
-                Review queue
-              </Link>
-              <Link
-                className="inline-flex h-10 items-center gap-2 rounded-md bg-cyan-700 px-3 text-sm font-semibold text-white hover:bg-cyan-800"
-                href="/builder/specifications/new"
-              >
-                <FileUp className="size-4" />
-                Upload specification
-              </Link>
-            </>
+            <Link
+              className="inline-flex h-10 items-center gap-2 rounded-md bg-cyan-700 px-3 text-sm font-semibold text-white hover:bg-cyan-800"
+              href="/builder/projects"
+            >
+              <Building2 className="size-4" />
+              Open projects
+            </Link>
           }
-          description="Builder-company workspace for creating and publishing homeowner handover packages from specification PDFs."
+          description="A single view of active projects, admin review noise, packages ready to send, and client request follow-up."
           eyebrow="Builder company"
-          icon={Building2}
-          title="Builder portal"
+          icon={LayoutDashboard}
+          title="Dashboard"
         />
 
-        <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <Metric label="Projects" value={projects.length} icon={Building2} />
-          <Metric label="Spec uploads" value={specifications.length} icon={ScrollText} />
-          <Metric label="Optional builder review" value={builderReviewCount} icon={Bot} />
-          <Metric label="Package items" value={packageTotal || packageReadyCount} icon={PackageCheck} />
+        <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          <Metric icon={Building2} label="Active projects" value={projects.length} />
+          <Metric icon={Bell} label="Admin review" value={awaitingAdmin.length} />
+          <Metric icon={Send} label="Ready to send" value={readyItems.length} />
+          <Metric icon={PackageCheck} label="Handed over" value={handedOverProjects.length} />
+          <Metric icon={UserRoundSearch} label="Client requests" value={openClientRequests.length} />
         </section>
 
-        <section className="mt-6 grid gap-5 xl:grid-cols-[1fr_0.85fr]">
-          <div className="rounded-lg border border-slate-200 bg-white">
-            <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
-              <div>
-                <h2 className="font-semibold text-slate-950">Active projects</h2>
-                <p className="mt-1 text-sm text-slate-500">Builder teams manage handover packs per project.</p>
-              </div>
-              <Link
-                className="inline-flex h-9 items-center rounded-md border border-slate-200 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                href="/builder/projects"
-              >
-                View all
-              </Link>
-            </div>
-            <div className="divide-y divide-slate-100">
-              {projects.map((project) => (
-                <article className="p-5" key={project.id}>
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <h3 className="font-semibold text-slate-950">{project.name}</h3>
-                      <p className="mt-1 text-sm text-slate-600">{project.address}</p>
-                    </div>
-                    <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-semibold capitalize text-slate-700">
-                      {project.status.replaceAll("_", " ")}
-                    </span>
-                  </div>
-                  <p className="mt-3 text-xs text-slate-500">
-                    Handover {formatDate(project.handoverDate)} - {project.documentCount} docs -{" "}
-                    {project.productCount} products
-                  </p>
-                </article>
-              ))}
-            </div>
-          </div>
+        <section className="mt-6 grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
+          <DashboardPanel
+            actionHref="/builder/projects"
+            actionLabel="Manage projects"
+            icon={Building2}
+            title="Active projects"
+          >
+            {projects.map((project) => (
+              <Row
+                detail={`${project.clientName} - handover ${formatDate(project.handoverDate)}`}
+                key={project.id}
+                label={project.name}
+                meta={project.status.replaceAll("_", " ")}
+              />
+            ))}
+          </DashboardPanel>
 
-          <div className="space-y-5">
-            <section className="rounded-lg border border-cyan-200 bg-cyan-50 p-5">
-              <FileUp className="size-5 text-cyan-700" />
-              <h2 className="mt-3 font-semibold text-slate-950">Main builder workflow</h2>
-              <p className="mt-2 text-sm leading-6 text-cyan-900">
-                Upload a specification PDF. Known database matches are pre-approved, while new or
-                uncertain items go to admin review and can be project-approved by the builder if needed.
-              </p>
-              <Link
-                className="mt-4 inline-flex h-10 items-center rounded-md bg-cyan-700 px-3 text-sm font-semibold text-white hover:bg-cyan-800"
-                href="/builder/specifications/new"
-              >
-                Start with a PDF
-              </Link>
-            </section>
+          <DashboardPanel
+            actionHref="/builder/projects"
+            actionLabel="Open review items"
+            icon={Bell}
+            title="Admin review notifications"
+          >
+            {awaitingAdmin.length ? (
+              awaitingAdmin.slice(0, 5).map((item) => (
+                <Row
+                  detail={item.reviewReason || item.extractedText}
+                  key={item.id}
+                  label={item.title}
+                  meta={`${item.confidenceScore}%`}
+                />
+              ))
+            ) : (
+              <EmptyRow text="No admin review items are waiting." />
+            )}
+          </DashboardPanel>
 
-            <section className="rounded-lg border border-slate-200 bg-white p-5">
-              <LayoutList className="size-5 text-cyan-700" />
-              <h2 className="mt-3 font-semibold text-slate-950">Package preview</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-600">
-                Accepted items become the draft package. Clients only see what builders publish.
-              </p>
-              <Link
-                className="mt-4 inline-flex h-10 items-center rounded-md border border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                href="/builder/handover-package"
-              >
-                Preview package
-              </Link>
-            </section>
-          </div>
+          <DashboardPanel
+            actionHref="/builder/projects"
+            actionLabel="Send package"
+            icon={Send}
+            title="Packages ready to send"
+          >
+            {projects.map((project) => {
+              const projectSpecIds = new Set(
+                specifications.filter((specification) => specification.projectId === project.id).map((specification) => specification.id),
+              );
+              const projectReadyCount = readyItems.filter((item) => projectSpecIds.has(item.specificationId)).length;
+              return (
+                <Row
+                  detail={projectReadyCount ? `${projectReadyCount} items ready for builder confirmation` : "No package-ready items yet"}
+                  key={project.id}
+                  label={project.name}
+                  meta={projectReadyCount ? "ready" : "draft"}
+                />
+              );
+            })}
+          </DashboardPanel>
+
+          <DashboardPanel
+            actionHref="/builder/maintenance"
+            actionLabel="Open maintenance"
+            icon={CalendarCheck2}
+            title="Upcoming maintenance"
+          >
+            {maintenanceTasks.slice(0, 5).map((task) => (
+              <Row
+                detail={`${task.relatedProduct} - due ${formatDate(task.dueDate)}`}
+                key={task.id}
+                label={task.title}
+                meta={task.status}
+              />
+            ))}
+          </DashboardPanel>
         </section>
       </div>
     </main>
@@ -149,11 +156,59 @@ function Metric({
 }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-5">
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-medium text-slate-500">{label}</p>
-        <Icon className="size-5 text-cyan-700" />
-      </div>
-      <p className="mt-4 text-3xl font-semibold tracking-normal text-slate-950">{value}</p>
+      <Icon className="size-5 text-cyan-700" />
+      <p className="mt-3 text-sm font-medium text-slate-500">{label}</p>
+      <p className="mt-1 text-3xl font-semibold tracking-normal text-slate-950">{value}</p>
     </div>
   );
+}
+
+function DashboardPanel({
+  actionHref,
+  actionLabel,
+  children,
+  icon: Icon,
+  title,
+}: {
+  actionHref: string;
+  actionLabel: string;
+  children: React.ReactNode;
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+}) {
+  return (
+    <section className="rounded-lg border border-slate-200 bg-white">
+      <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
+        <div className="flex items-center gap-2">
+          <Icon className="size-5 text-cyan-700" />
+          <h2 className="font-semibold text-slate-950">{title}</h2>
+        </div>
+        <Link
+          className="inline-flex h-9 items-center rounded-md border border-slate-200 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+          href={actionHref}
+        >
+          {actionLabel}
+        </Link>
+      </div>
+      <div className="divide-y divide-slate-100">{children}</div>
+    </section>
+  );
+}
+
+function Row({ detail, label, meta }: { detail: string; label: string; meta: string }) {
+  return (
+    <article className="grid gap-2 px-5 py-4 sm:grid-cols-[1fr_auto] sm:items-start">
+      <div>
+        <p className="text-sm font-semibold text-slate-950">{label}</p>
+        <p className="mt-1 text-sm leading-6 text-slate-600">{detail}</p>
+      </div>
+      <span className="w-fit rounded-md bg-slate-100 px-2.5 py-1 text-xs font-semibold capitalize text-slate-700">
+        {meta}
+      </span>
+    </article>
+  );
+}
+
+function EmptyRow({ text }: { text: string }) {
+  return <p className="px-5 py-4 text-sm text-slate-500">{text}</p>;
 }
