@@ -43,6 +43,15 @@ export type HandoverDocument = {
   visibleToClient: boolean;
 };
 
+export type DocumentDownloadEvent = {
+  id: string;
+  documentId: string;
+  projectId: string;
+  downloadedBy?: string;
+  downloadedAt: string;
+  userAgent?: string;
+};
+
 export type Source = {
   title: string;
   url: string;

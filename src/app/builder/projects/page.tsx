@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { ProjectsWorkspace } from "@/components/builder/projects-workspace";
 import {
   getBuilderCreditStatus,
+  getDocumentDownloadEvents,
   getDocuments,
   getExtractedHandoverItems,
   getMaintenanceTasks,
@@ -27,7 +28,7 @@ export default async function ProjectsPage({
     redirect("/builder/onboarding?next=/builder/projects");
   }
 
-  const [projects, specifications, extractedItems, maintenanceTasks, productVersions, documents, creditStatus] =
+  const [projects, specifications, extractedItems, maintenanceTasks, productVersions, documents, downloadEvents, creditStatus] =
     await Promise.all([
       getProjects(),
       getSpecificationUploads(),
@@ -35,6 +36,7 @@ export default async function ProjectsPage({
       getMaintenanceTasks(),
       getProductVersions(),
       getDocuments(),
+      getDocumentDownloadEvents(),
       getBuilderCreditStatus(),
     ]);
 
@@ -42,6 +44,7 @@ export default async function ProjectsPage({
     <ProjectsWorkspace
       creditStatus={creditStatus}
       draft={params.draft}
+      downloadEvents={downloadEvents}
       documents={documents}
       error={params.error}
       extractedItems={extractedItems}

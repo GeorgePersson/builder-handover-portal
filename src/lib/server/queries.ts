@@ -10,6 +10,7 @@ import {
 import type {
   AuditEvent,
   ClientRequest,
+  DocumentDownloadEvent,
   HandoverDocument,
   MaintenanceTask,
   ProductVersion,
@@ -217,6 +218,37 @@ export async function getDocuments(projectId?: string): Promise<HandoverDocument
     storagePath: document.storage_path || undefined,
     uploadedAt: document.created_at,
     visibleToClient: document.visible_to_client,
+  }));
+}
+
+export async function getDocumentDownloadEvents(projectId?: string): Promise<DocumentDownloadEvent[]> {
+  if (!hasSupabaseConfig()) {
+    return [];
+  }
+
+  const supabase = await createSupabaseServerClient();
+  let query = supabase
+    .from("document_download_events")
+    .select("id,document_id,project_id,downloaded_by,downloaded_at,user_agent")
+    .order("downloaded_at", { ascending: false });
+
+  if (projectId) {
+    query = query.eq("project_id", projectId);
+  }
+
+  const { data, error } = await query;
+
+  if (error || !data) {
+    return [];
+  }
+
+  return data.map((event) => ({
+    id: event.id,
+    documentId: event.document_id,
+    projectId: event.project_id,
+    downloadedBy: event.downloaded_by || undefined,
+    downloadedAt: event.downloaded_at,
+    userAgent: event.user_agent || undefined,
   }));
 }
 

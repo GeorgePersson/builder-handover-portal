@@ -15,9 +15,12 @@ export async function GET(_request: Request, context: RouteContext<"/api/documen
   }
 
   const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   const { data: document, error: documentError } = await supabase
     .from("documents")
-    .select("id,storage_path")
+    .select("id,project_id,name,storage_path")
     .eq("id", documentId)
     .single();
 
@@ -31,6 +34,15 @@ export async function GET(_request: Request, context: RouteContext<"/api/documen
 
   if (signedUrlError || !signedUrl?.signedUrl) {
     return Response.json({ error: "Could not create download link." }, { status: 500 });
+  }
+
+  if (user) {
+    await supabase.from("document_download_events").insert({
+      document_id: document.id,
+      project_id: document.project_id,
+      downloaded_by: user.id,
+      user_agent: _request.headers.get("user-agent"),
+    });
   }
 
   return Response.redirect(signedUrl.signedUrl, 302);

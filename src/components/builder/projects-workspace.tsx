@@ -34,6 +34,7 @@ import {
 } from "@/lib/server/actions";
 import { formatDate } from "@/lib/utils";
 import type {
+  DocumentDownloadEvent,
   ExtractedHandoverItem,
   HandoverDocument,
   MaintenanceTask,
@@ -53,6 +54,7 @@ type ProjectsWorkspaceProps = {
     availableCredits: number | "infinite";
     projectCost: number;
   };
+  downloadEvents: DocumentDownloadEvent[];
   documents: HandoverDocument[];
   projects: Project[];
   specifications: SpecificationUpload[];
@@ -81,6 +83,7 @@ export function ProjectsWorkspace({
   storage,
   inviteToken,
   creditStatus,
+  downloadEvents,
   documents,
   projects,
   specifications,
@@ -107,17 +110,19 @@ export function ProjectsWorkspace({
         const awaitingAdmin = projectItems.filter((item) => adminReviewStatuses.has(item.status));
         const tasks = maintenanceTasks.filter((task) => task.projectId === project.id);
         const projectDocuments = documents.filter((document) => document.projectId === project.id);
+        const projectDownloadEvents = downloadEvents.filter((event) => event.projectId === project.id);
 
         return {
           project,
           awaitingAdmin,
+          downloadEvents: projectDownloadEvents,
           documents: projectDocuments,
           readyItems,
           specifications: specifications.filter((specification) => specification.projectId === project.id),
           tasks,
         };
       }),
-    [documents, extractedItems, maintenanceTasks, projects, specifications],
+    [documents, downloadEvents, extractedItems, maintenanceTasks, projects, specifications],
   );
 
   const selectedSnapshot = projectSnapshots.find((snapshot) => snapshot.project.id === selectedProject?.id) ?? null;
@@ -427,6 +432,7 @@ function ProjectEditPanel({
   setProductQuery: (value: string) => void;
   snapshot: {
     awaitingAdmin: ExtractedHandoverItem[];
+    downloadEvents: DocumentDownloadEvent[];
     documents: HandoverDocument[];
     readyItems: ExtractedHandoverItem[];
     specifications: SpecificationUpload[];
@@ -556,28 +562,38 @@ function ProjectEditPanel({
       <section className="rounded-lg border border-slate-200 p-5">
         <h3 className="font-semibold text-slate-950">Documents in this project</h3>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
-          {snapshot.documents.length ? snapshot.documents.map((document) => (
-            <div className="rounded-md border border-slate-200 p-4" key={document.id}>
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="font-medium text-slate-950">{document.name}</p>
-                  <p className="mt-1 text-sm capitalize text-slate-600">{document.type.replaceAll("_", " ")}</p>
+          {snapshot.documents.length ? snapshot.documents.map((document) => {
+            const documentDownloads = snapshot.downloadEvents.filter((event) => event.documentId === document.id);
+            const latestDownload = documentDownloads[0];
+
+            return (
+              <div className="rounded-md border border-slate-200 p-4" key={document.id}>
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="font-medium text-slate-950">{document.name}</p>
+                    <p className="mt-1 text-sm capitalize text-slate-600">{document.type.replaceAll("_", " ")}</p>
+                  </div>
+                  <StatusPill variant={document.visibleToClient ? "client_visible" : "private"} />
                 </div>
-                <StatusPill variant={document.visibleToClient ? "client_visible" : "private"} />
+                <p className="mt-3 text-xs text-slate-500">
+                  {document.size} - Uploaded {formatDate(document.uploadedAt)}
+                </p>
+                <p className="mt-2 text-xs text-slate-500">
+                  {documentDownloads.length
+                    ? `${documentDownloads.length} download${documentDownloads.length === 1 ? "" : "s"} - last ${formatDate(latestDownload.downloadedAt)}`
+                    : "No downloads recorded yet"}
+                </p>
+                {document.storagePath ? (
+                  <a
+                    className="mt-4 inline-flex h-9 items-center rounded-md border border-slate-200 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                    href={`/api/documents/${document.id}/download`}
+                  >
+                    Download
+                  </a>
+                ) : null}
               </div>
-              <p className="mt-3 text-xs text-slate-500">
-                {document.size} - Uploaded {formatDate(document.uploadedAt)}
-              </p>
-              {document.storagePath ? (
-                <a
-                  className="mt-4 inline-flex h-9 items-center rounded-md border border-slate-200 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                  href={`/api/documents/${document.id}/download`}
-                >
-                  Download
-                </a>
-              ) : null}
-            </div>
-          )) : <p className="text-sm text-slate-500">No client documents have been added yet.</p>}
+            );
+          }) : <p className="text-sm text-slate-500">No client documents have been added yet.</p>}
         </div>
       </section>
 
