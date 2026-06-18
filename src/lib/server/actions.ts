@@ -268,6 +268,52 @@ export async function createClientInviteAction(formData: FormData) {
   redirect(`/builder/projects?${params.toString()}`);
 }
 
+export async function revokeClientInviteAction(formData: FormData) {
+  const projectId = getRequired(formData, "projectId");
+  const context = await getBuilderContext();
+
+  if (!context) {
+    redirect("/builder/projects?error=invite-requires-supabase");
+  }
+
+  const { data: client, error: clientError } = await context.supabase
+    .from("project_clients")
+    .select("id,name,email,accepted_at")
+    .eq("project_id", projectId)
+    .limit(1)
+    .single();
+
+  if (clientError || !client) {
+    redirect("/builder/projects?error=client-not-found");
+  }
+
+  if (client.accepted_at) {
+    redirect("/builder/projects?error=client-already-accepted");
+  }
+
+  const { error: revokeError } = await context.supabase
+    .from("project_clients")
+    .update({
+      invite_token_hash: null,
+      invited_at: null,
+    })
+    .eq("id", client.id);
+
+  if (revokeError) {
+    redirect("/builder/projects?error=revoke-client-invite-failed");
+  }
+
+  await context.supabase.from("audit_events").insert({
+    organisation_id: context.organisationId,
+    project_id: projectId,
+    actor_user_id: context.userId,
+    action: "Client invite link revoked",
+    detail: `Revoked the invite link for ${client.name || client.email}.`,
+  });
+
+  redirect("/builder/projects?draft=invite-revoked&storage=supabase");
+}
+
 export async function acceptClientInviteAction(formData: FormData) {
   const token = getRequired(formData, "token");
 

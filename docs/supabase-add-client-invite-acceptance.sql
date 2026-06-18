@@ -24,6 +24,7 @@ begin
     invite_token_hash = null
   where invite_token_hash = encode(digest(raw_token, 'sha256'), 'hex')
     and accepted_at is null
+    and invited_at > now() - interval '14 days'
   returning project_id into v_project_id;
 
   if v_project_id is null then

@@ -3,7 +3,7 @@ import { Building2, Link2, Plus } from "lucide-react";
 import { StatusPill } from "@/components/status-pill";
 import { StatusBanner } from "@/components/status-banner";
 import { SubmitButton } from "@/components/forms/submit-button";
-import { createClientInviteAction } from "@/lib/server/actions";
+import { createClientInviteAction, revokeClientInviteAction } from "@/lib/server/actions";
 import { getProjects } from "@/lib/server/queries";
 import { formatDate } from "@/lib/utils";
 
@@ -41,12 +41,13 @@ export default async function ProjectsPage({
           </Link>
         </header>
         <StatusBanner
-          draft={params.draft === "invite-created" ? undefined : params.draft}
+          draft={params.draft === "invite-created" || params.draft === "invite-revoked" ? undefined : params.draft}
           error={params.error}
           errorMessages={{
             "client-already-accepted": "That client has already accepted their invite.",
             "client-not-found": "No client record was found for that project.",
             "create-client-invite-failed": "The client invite link could not be created.",
+            "revoke-client-invite-failed": "The client invite link could not be revoked.",
           }}
           storage={params.storage}
         />
@@ -64,6 +65,11 @@ export default async function ProjectsPage({
               {invitePath}
             </Link>
           </div>
+        ) : null}
+        {params.draft === "invite-revoked" ? (
+          <p className="mt-5 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm leading-6 text-emerald-800">
+            Client invite link revoked.
+          </p>
         ) : null}
 
         <section className="mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white">
@@ -96,12 +102,28 @@ export default async function ProjectsPage({
                     <Stat label="Products" value={project.productCount} />
                     <Stat label="Tasks" value={project.openTasks} />
                   </div>
-                  {project.clientInviteStatus === "accepted" ? null : (
-                    <form action={createClientInviteAction}>
-                      <input name="projectId" type="hidden" value={project.id} />
-                      <SubmitButton icon={Link2} label="Create invite link" />
-                    </form>
-                  )}
+                  <div className="flex flex-wrap justify-end gap-2">
+                    {project.clientInviteStatus === "accepted" ? null : (
+                      <form action={createClientInviteAction}>
+                        <input name="projectId" type="hidden" value={project.id} />
+                        <SubmitButton
+                          icon={Link2}
+                          label={project.clientInviteStatus === "invited" ? "Regenerate invite" : "Create invite link"}
+                        />
+                      </form>
+                    )}
+                    {project.clientInviteStatus === "invited" ? (
+                      <form action={revokeClientInviteAction}>
+                        <input name="projectId" type="hidden" value={project.id} />
+                        <button
+                          className="inline-flex h-10 items-center justify-center rounded-md border border-rose-200 px-3 text-sm font-semibold text-rose-700 hover:bg-rose-50"
+                          type="submit"
+                        >
+                          Revoke
+                        </button>
+                      </form>
+                    ) : null}
+                  </div>
                 </div>
               </article>
             ))}
@@ -118,7 +140,15 @@ function formatInviteStatus(status?: string, invitedAt?: string) {
   }
 
   if (status === "invited") {
-    return invitedAt ? `Invited ${formatDate(invitedAt)}` : "Invited";
+    if (!invitedAt) {
+      return "Invited";
+    }
+
+    const expiresAt = new Date(invitedAt);
+    expiresAt.setDate(expiresAt.getDate() + 14);
+    const isExpired = expiresAt < new Date();
+
+    return `${isExpired ? "Expired" : "Invited"} ${formatDate(invitedAt)} - expires ${formatDate(expiresAt.toISOString())}`;
   }
 
   return "Not invited";

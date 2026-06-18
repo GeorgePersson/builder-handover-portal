@@ -218,10 +218,13 @@ Supabase is not configured.
 - Builder projects now show client invite status and can generate a one-time
   client invite link. The link points to `/client/accept-invite?token=...`; it is
   shown to the builder for manual sending until transactional email is wired.
+- Builder projects can regenerate or revoke outstanding invite links. Invite
+  status shows the original invite date plus a 14-day expiry window.
 - Client invite acceptance is implemented at `/client/accept-invite`. It expects
   the client to be signed in through Supabase magic link, then calls the
   `accept_project_client_invite` RPC to attach `project_clients.user_id`, set
-  `accepted_at`, clear the token hash, and open `/client/portal`.
+  `accepted_at`, clear the token hash, and open `/client/portal`. The RPC
+  rejects invite tokens older than 14 days.
 - Supabase schema now includes the invite-acceptance RPC. Existing Supabase
   projects can run `docs/supabase-add-client-invite-acceptance.sql`.
 - Project-approving an extracted item in Supabase mode keeps it project-scoped.
@@ -334,6 +337,8 @@ Supabase is not configured.
   respective `/login?next=...` URL with Supabase auth active.
 - Lint/build check for builder client invite generation, invite status display,
   the client invite acceptance page, and the invite acceptance Supabase RPC.
+- Lint/build check for invite regeneration/revocation controls and 14-day RPC
+  expiry enforcement.
 - HTTP smoke check for unauthenticated
   `/client/accept-invite?token=test-token`: route returns `307` to
   `/login?next=%2Fclient%2Faccept-invite%3Ftoken%3Dtest-token`, preserving the
@@ -417,8 +422,7 @@ Both passed after the latest changes.
    no-column fallback once all environments have the field.
 6. Replace `POST /api/ai/product-draft` deterministic enrichment with the real
    source-backed AI/search workflow.
-7. Replace manual client invite links with real transactional email delivery and
-   expiry/revocation controls.
+7. Replace manual client invite links with real transactional email delivery.
 
 ## Good Resume Prompt
 
