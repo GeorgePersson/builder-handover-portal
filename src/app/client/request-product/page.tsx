@@ -2,13 +2,19 @@ import Link from "next/link";
 import { ArrowLeft, Send } from "lucide-react";
 import { StatusBanner } from "@/components/status-banner";
 import { createClientRequestAction } from "@/lib/server/actions";
+import { getProjects } from "@/lib/server/queries";
 
 export default async function ClientRequestProductPage({
   searchParams,
 }: {
-  searchParams: Promise<{ draft?: string; storage?: string; error?: string }>;
+  searchParams: Promise<{ draft?: string; storage?: string; error?: string; projectId?: string }>;
 }) {
   const params = await searchParams;
+  const projects = await getProjects();
+  const selectedProject =
+    projects.find((project) => project.id === params.projectId) ||
+    projects[0] ||
+    null;
 
   return (
     <main className="px-5 py-8 sm:px-8">
@@ -35,7 +41,17 @@ export default async function ClientRequestProductPage({
         <StatusBanner draft={params.draft} error={params.error} storage={params.storage} />
 
         <form action={createClientRequestAction} className="mt-6 rounded-lg border border-slate-200 bg-white p-5">
-          <input name="projectId" type="hidden" value="prj-bayview" />
+          <input name="projectId" type="hidden" value={selectedProject?.id || ""} />
+          {selectedProject ? (
+            <div className="mb-5 rounded-md border border-cyan-100 bg-cyan-50 p-3 text-sm leading-6 text-cyan-900">
+              Requesting an addition for {selectedProject.address}.
+            </div>
+          ) : (
+            <div className="mb-5 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-800">
+              No assigned project is available yet. The builder needs to connect this client to a
+              project before requests can be submitted.
+            </div>
+          )}
           <div className="grid gap-5">
             <label className="block">
               <span className="text-sm font-medium text-slate-700">Request type</span>
@@ -94,7 +110,8 @@ export default async function ClientRequestProductPage({
 
           <div className="mt-6 flex justify-end">
             <button
-              className="inline-flex h-10 items-center gap-2 rounded-md bg-cyan-700 px-4 text-sm font-semibold text-white hover:bg-cyan-800"
+              className="inline-flex h-10 items-center gap-2 rounded-md bg-cyan-700 px-4 text-sm font-semibold text-white hover:bg-cyan-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+              disabled={!selectedProject}
               type="submit"
             >
               <Send className="size-4" />

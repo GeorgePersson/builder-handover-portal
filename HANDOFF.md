@@ -203,6 +203,18 @@ Supabase is not configured.
   mode: `accepted`, `auto_approved`, `builder_approved`, and `global_approved`.
 - `/client/portal` now shows published package counts and item details after
   publish.
+- `/client/portal` now reads through a scoped client portal data accessor. It
+  selects the first project visible to the signed-in client/builder through
+  Supabase RLS, filters documents, maintenance, and published package items to
+  that project, and shows a no-assigned-project state instead of falling back to
+  global data.
+- Client missing-item requests now use the RLS-visible project id from the
+  portal/request route instead of a hard-coded demo project id. The server action
+  no longer falls back to the scaffold project when Supabase is configured.
+- Supabase schema now includes a client-readable policy for package-ready
+  extracted handover items so assigned clients can see published package details.
+  Existing Supabase projects can run
+  `docs/supabase-add-client-extracted-items-policy.sql`.
 - Project-approving an extracted item in Supabase mode keeps it project-scoped.
   Platform admin global approval is the path that promotes reusable product
   records.
@@ -213,6 +225,9 @@ Supabase is not configured.
   scaffold mode, then require Supabase sessions when env vars are configured.
 - Auth proxy matcher now includes `/admin/:path*`, `/builder/:path*`, and
   `/client/:path*`.
+- Auth proxy enforcement now matches the proxy route coverage: when Supabase
+  env vars are configured, unauthenticated admin, builder, and client portal
+  routes redirect to `/login`.
 - Magic-link auth redirects through `/auth/callback`, which exchanges the
   Supabase PKCE code for a cookie-backed session before sending users to their
   original route.
@@ -301,6 +316,11 @@ Supabase is not configured.
 - HTTP smoke check after reviewer-note changes: `/` returns `200`, and
   `/builder/specifications/review` returns the expected `307` redirect to
   `/login?next=%2Fbuilder%2Fspecifications%2Freview` with Supabase auth active.
+- Lint/build check for scoped client portal data, client request project
+  selection, auth proxy coverage, and the client package item RLS migration.
+- HTTP smoke check after client route protection: unauthenticated
+  `/client/portal`, `/admin`, and `/builder` each return `307` to their
+  respective `/login?next=...` URL with Supabase auth active.
 - Lint/build check for OCR-assisted PDF extraction.
 - API smoke check for `POST /api/specifications/extract-pdf` with an existing
   selectable-text PDF: OCR remains at 0 pages and normal proposals still return.
@@ -346,6 +366,8 @@ Both passed after the latest changes.
 - Apply `docs/supabase-schema.sql` to a Supabase project.
 - If the schema was applied before reviewer notes were added, also run
   `docs/supabase-add-extracted-item-review-reason.sql`.
+- If the schema was applied before the client package item policy was added,
+  also run `docs/supabase-add-client-extracted-items-policy.sql`.
 - Add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` to
   `.env.local`.
 - Create a private Supabase Storage bucket named `handover-documents`.
@@ -376,7 +398,9 @@ Both passed after the latest changes.
    no-column fallback once all environments have the field.
 6. Replace `POST /api/ai/product-draft` deterministic enrichment with the real
    source-backed AI/search workflow.
-7. Add invite acceptance and client-specific route protection.
+7. Add invite acceptance: token creation, invite email/link handling, accepted
+   client user attachment to `project_clients.user_id`, and builder-facing
+   invite status.
 
 ## Good Resume Prompt
 

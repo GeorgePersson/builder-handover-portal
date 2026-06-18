@@ -779,7 +779,8 @@ export async function publishHandoverPackageAction() {
 }
 
 export async function createClientRequestAction(formData: FormData) {
-  const projectId = getOptional(formData, "projectId") || "prj-bayview";
+  const submittedProjectId = getOptional(formData, "projectId");
+  const projectId = submittedProjectId || (hasSupabaseConfig() ? null : "prj-bayview");
   const requestType = getRequired(formData, "requestType") as "product" | "document" | "maintenance";
   const title = getRequired(formData, "title");
   const location = getOptional(formData, "location") || "";
@@ -788,6 +789,10 @@ export async function createClientRequestAction(formData: FormData) {
   const attachmentName = attachment instanceof File && attachment.size > 0 ? attachment.name : undefined;
 
   if (hasSupabaseConfig()) {
+    if (!projectId) {
+      redirect("/client/request-product?error=no-client-project");
+    }
+
     const supabase = await createSupabaseServerClient();
     const {
       data: { user },
@@ -815,7 +820,7 @@ export async function createClientRequestAction(formData: FormData) {
     }
   } else {
     await saveLocalClientRequest({
-      projectId,
+      projectId: projectId || "prj-bayview",
       requestType,
       title,
       location,

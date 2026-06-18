@@ -61,6 +61,25 @@ export function isPackageReadyExtractedItem(item: Pick<ExtractedHandoverItem, "s
   return packageReadyStatuses.has(item.status);
 }
 
+function mapExtractedHandoverItemRows(data: ExtractedHandoverItemRow[]) {
+  return data.map((item) => ({
+    id: item.id,
+    specificationId: item.specification_upload_id,
+    itemType: item.item_type,
+    title: item.title,
+    category: item.category || "To review",
+    location: item.location || "",
+    extractedText: item.extracted_text || "",
+    sourceSnippet: item.source_snippet || undefined,
+    sourcePage: item.source_page || undefined,
+    reviewReason: item.review_reason || undefined,
+    matchedExistingRecord: item.matched_existing_record,
+    sourceClientRequestId: item.client_request_id || undefined,
+    confidenceScore: item.confidence_score,
+    status: item.status,
+  }));
+}
+
 export async function getProjects(): Promise<Project[]> {
   if (!hasSupabaseConfig()) {
     return projects;
@@ -96,19 +115,25 @@ export async function getProjects(): Promise<Project[]> {
   });
 }
 
-export async function getDocuments(): Promise<HandoverDocument[]> {
+export async function getDocuments(projectId?: string): Promise<HandoverDocument[]> {
   if (!hasSupabaseConfig()) {
-    return documents;
+    return projectId ? documents.filter((document) => document.projectId === projectId) : documents;
   }
 
   const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase
+  let query = supabase
     .from("documents")
     .select("id,project_id,name,document_type,size_bytes,visible_to_client,created_at")
     .order("created_at", { ascending: false });
 
+  if (projectId) {
+    query = query.eq("project_id", projectId);
+  }
+
+  const { data, error } = await query;
+
   if (error || !data) {
-    return documents;
+    return projectId ? documents.filter((document) => document.projectId === projectId) : documents;
   }
 
   return data.map((document) => ({
@@ -172,19 +197,25 @@ export async function getProductVersions(): Promise<ProductVersion[]> {
   });
 }
 
-export async function getMaintenanceTasks(): Promise<MaintenanceTask[]> {
+export async function getMaintenanceTasks(projectId?: string): Promise<MaintenanceTask[]> {
   if (!hasSupabaseConfig()) {
-    return maintenanceTasks;
+    return projectId ? maintenanceTasks.filter((task) => task.projectId === projectId) : maintenanceTasks;
   }
 
   const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase
+  let query = supabase
     .from("maintenance_tasks")
     .select("id,project_id,title,due_date,frequency,required_for_warranty,created_at")
     .order("due_date", { ascending: true });
 
+  if (projectId) {
+    query = query.eq("project_id", projectId);
+  }
+
+  const { data, error } = await query;
+
   if (error || !data) {
-    return maintenanceTasks;
+    return projectId ? maintenanceTasks.filter((task) => task.projectId === projectId) : maintenanceTasks;
   }
 
   return data.map((task) => ({
@@ -225,20 +256,29 @@ export async function getAuditEvents(): Promise<AuditEvent[]> {
   }));
 }
 
-export async function getSpecificationUploads(): Promise<SpecificationUpload[]> {
+export async function getSpecificationUploads(projectId?: string): Promise<SpecificationUpload[]> {
   if (!hasSupabaseConfig()) {
     const localUploads = await getLocalSpecificationUploads();
-    return [...localUploads, ...specificationUploads];
+    const uploads = [...localUploads, ...specificationUploads];
+    return projectId ? uploads.filter((specification) => specification.projectId === projectId) : uploads;
   }
 
   const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase
+  let query = supabase
     .from("specification_uploads")
     .select("id,project_id,file_name,status,created_at")
     .order("created_at", { ascending: false });
 
+  if (projectId) {
+    query = query.eq("project_id", projectId);
+  }
+
+  const { data, error } = await query;
+
   if (error || !data) {
-    return specificationUploads;
+    return projectId
+      ? specificationUploads.filter((specification) => specification.projectId === projectId)
+      : specificationUploads;
   }
 
   return data.map((specification) => ({
@@ -300,22 +340,7 @@ export async function getExtractedHandoverItems(
       : extractedHandoverItems;
   }
 
-  return data.map((item) => ({
-    id: item.id,
-    specificationId: item.specification_upload_id,
-    itemType: item.item_type,
-    title: item.title,
-    category: item.category || "To review",
-    location: item.location || "",
-    extractedText: item.extracted_text || "",
-    sourceSnippet: item.source_snippet || undefined,
-    sourcePage: item.source_page || undefined,
-    reviewReason: item.review_reason || undefined,
-    matchedExistingRecord: item.matched_existing_record,
-    sourceClientRequestId: item.client_request_id || undefined,
-    confidenceScore: item.confidence_score,
-    status: item.status,
-  }));
+  return mapExtractedHandoverItemRows(data);
 }
 
 export async function getAcceptedHandoverPackagePreview() {
@@ -334,15 +359,56 @@ export async function getAcceptedHandoverPackagePreview() {
   };
 }
 
-export async function getPublishedClientPackagePreview() {
+async function getProjectExtractedHandoverItems(projectId: string) {
+  if (hasSupabaseConfig()) {
+    const supabase = await createSupabaseServerClient();
+    const selectWithProject = `${extractedItemSelectWithReviewReason},specification_uploads!inner(project_id)`;
+    const selectWithProjectFallback = `${extractedItemSelect},specification_uploads!inner(project_id)`;
+    const result = await supabase
+      .from("extracted_handover_items")
+      .select(selectWithProject)
+      .eq("specification_uploads.project_id", projectId)
+      .order("confidence_score", { ascending: false });
+    let data = result.data as ExtractedHandoverItemRow[] | null;
+    let error = result.error;
+
+    if (error?.message.includes("review_reason")) {
+      const fallback = await supabase
+        .from("extracted_handover_items")
+        .select(selectWithProjectFallback)
+        .eq("specification_uploads.project_id", projectId)
+        .order("confidence_score", { ascending: false });
+      data = fallback.data as ExtractedHandoverItemRow[] | null;
+      error = fallback.error;
+    }
+
+    if (error || !data) {
+      return [];
+    }
+
+    return mapExtractedHandoverItemRows(data);
+  }
+
+  const specifications = await getSpecificationUploads(projectId);
+  const projectItems = await Promise.all(
+    specifications.map((specification) => getExtractedHandoverItems(specification.id)),
+  );
+
+  return projectItems.flat();
+}
+
+export async function getPublishedClientPackagePreview(projectId?: string) {
   if (!hasSupabaseConfig()) {
     const [{ items, publishedAt }, projectList] = await Promise.all([
-      getLocalPublishedItems(),
+      getLocalPublishedItems(projectId),
       getProjects(),
     ]);
+    const project = projectId
+      ? projectList.find((candidate) => candidate.id === projectId)
+      : projectList[0];
 
     return {
-      project: projectList[0],
+      project,
       publishedAt,
       products: items.filter((item) => item.itemType === "product"),
       documents: items.filter((item) => item.itemType === "document"),
@@ -351,17 +417,53 @@ export async function getPublishedClientPackagePreview() {
   }
 
   const [items, projectList] = await Promise.all([
-    getExtractedHandoverItems(),
+    projectId ? getProjectExtractedHandoverItems(projectId) : getExtractedHandoverItems(),
     getProjects(),
   ]);
   const acceptedItems = items.filter(isPackageReadyExtractedItem);
+  const project = projectId
+    ? projectList.find((candidate) => candidate.id === projectId)
+    : projectList[0];
 
   return {
-    project: projectList[0],
+    project,
     publishedAt: acceptedItems.length ? new Date().toISOString() : null,
     products: acceptedItems.filter((item) => item.itemType === "product"),
     documents: acceptedItems.filter((item) => item.itemType === "document"),
     maintenance: acceptedItems.filter((item) => item.itemType === "maintenance"),
+  };
+}
+
+export async function getClientPortalData() {
+  const projectsForViewer = await getProjects();
+  const project = projectsForViewer[0] || null;
+
+  if (!project) {
+    return {
+      project: null,
+      visibleDocuments: [],
+      maintenanceTasks: [],
+      publishedPackage: {
+        project: undefined,
+        publishedAt: null,
+        products: [],
+        documents: [],
+        maintenance: [],
+      },
+    };
+  }
+
+  const [documentsForProject, maintenanceTasksForProject, publishedPackage] = await Promise.all([
+    getDocuments(project.id),
+    getMaintenanceTasks(project.id),
+    getPublishedClientPackagePreview(project.id),
+  ]);
+
+  return {
+    project,
+    visibleDocuments: documentsForProject.filter((document) => document.visibleToClient),
+    maintenanceTasks: maintenanceTasksForProject,
+    publishedPackage,
   };
 }
 

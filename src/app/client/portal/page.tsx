@@ -1,32 +1,47 @@
 import Link from "next/link";
 import { CalendarCheck2, FileText, Home, PackageCheck, Send } from "lucide-react";
-import {
-  getDocuments,
-  getMaintenanceTasks,
-  getPublishedClientPackagePreview,
-  getProductVersions,
-  getProjects,
-} from "@/lib/server/queries";
+import { getClientPortalData } from "@/lib/server/queries";
 import { formatDate } from "@/lib/utils";
 
 export default async function ClientPortalPage() {
-  const [projects, documents, productVersions, maintenanceTasks, publishedPackage] = await Promise.all([
-    getProjects(),
-    getDocuments(),
-    getProductVersions(),
-    getMaintenanceTasks(),
-    getPublishedClientPackagePreview(),
-  ]);
+  const {
+    project: assignedProject,
+    visibleDocuments,
+    maintenanceTasks,
+    publishedPackage,
+  } = await getClientPortalData();
+
+  if (!assignedProject) {
+    return (
+      <main className="min-h-screen bg-slate-50 px-5 py-8 text-slate-950 sm:px-8">
+        <div className="mx-auto max-w-5xl">
+          <header className="rounded-lg border border-slate-200 bg-white p-6">
+            <div className="flex items-start gap-4">
+              <div className="flex size-11 items-center justify-center rounded-lg bg-cyan-700 text-white">
+                <Home className="size-5" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-cyan-700">Home manual</p>
+                <h1 className="mt-1 text-2xl font-semibold tracking-normal">No assigned project yet</h1>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  Once the builder adds this client to a project, the published handover package will
+                  appear here.
+                </p>
+              </div>
+            </div>
+          </header>
+        </div>
+      </main>
+    );
+  }
+
   const project =
-    projects[0] ||
+    publishedPackage.project ||
     ({
-      id: "empty",
-      address: "Create a project to begin",
-      clientName: "Homeowner",
+      id: assignedProject.id,
+      address: assignedProject.address,
+      clientName: assignedProject.clientName,
     } as const);
-  const visibleDocuments = documents.filter((document) => document.visibleToClient);
-  const approvedProducts = productVersions.filter((product) => product.status === "approved");
-  const projectTasks = maintenanceTasks.filter((task) => task.projectId === project.id);
 
   return (
     <main className="min-h-screen bg-slate-50 px-5 py-8 text-slate-950 sm:px-8">
@@ -47,7 +62,7 @@ export default async function ClientPortalPage() {
             </div>
             <Link
               className="inline-flex h-10 shrink-0 items-center gap-2 rounded-md border border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              href="/client/request-product"
+              href={`/client/request-product?projectId=${project.id}`}
             >
               <Send className="size-4" />
               Request missing item
@@ -57,8 +72,8 @@ export default async function ClientPortalPage() {
 
         <section className="mt-6 grid gap-4 md:grid-cols-3">
           <PortalSummary icon={FileText} label="Documents" value={`${visibleDocuments.length} available`} />
-          <PortalSummary icon={PackageCheck} label="Products" value={`${approvedProducts.length} approved`} />
-          <PortalSummary icon={CalendarCheck2} label="Maintenance" value={`${projectTasks.length} scheduled`} />
+          <PortalSummary icon={PackageCheck} label="Products" value={`${publishedPackage.products.length} published`} />
+          <PortalSummary icon={CalendarCheck2} label="Maintenance" value={`${maintenanceTasks.length} scheduled`} />
         </section>
 
         {publishedPackage.publishedAt ? (
@@ -112,7 +127,7 @@ export default async function ClientPortalPage() {
           <div className="rounded-lg border border-slate-200 bg-white">
             <h2 className="border-b border-slate-100 px-5 py-4 font-semibold">Upcoming care</h2>
             <div className="divide-y divide-slate-100">
-              {projectTasks.map((task) => (
+              {maintenanceTasks.map((task) => (
                 <div className="p-5" key={task.id}>
                   <p className="font-medium">{task.title}</p>
                   <p className="mt-1 text-sm text-slate-600">{task.relatedProduct}</p>
@@ -121,6 +136,9 @@ export default async function ClientPortalPage() {
                   </p>
                 </div>
               ))}
+              {maintenanceTasks.length === 0 ? (
+                <p className="p-5 text-sm text-slate-500">No upcoming care items have been published yet.</p>
+              ) : null}
             </div>
           </div>
         </section>

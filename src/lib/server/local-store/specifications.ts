@@ -241,12 +241,26 @@ export async function publishLocalHandoverPackage() {
   return { itemIds, publishedAt: new Date().toISOString() };
 }
 
-export async function getLocalPublishedItems() {
+export async function getLocalPublishedItems(projectId?: string) {
   const store = await readStore();
   const publishedIds = new Set(store.publishedPackage?.itemIds || []);
+  const projectSpecificationIds = projectId
+    ? new Set(
+        store.specifications
+          .filter((specification) => specification.projectId === projectId)
+          .map((specification) => specification.id),
+      )
+    : null;
+  const items = store.extractedItems.filter((item) => {
+    if (!publishedIds.has(item.id)) {
+      return false;
+    }
+
+    return projectSpecificationIds ? projectSpecificationIds.has(item.specificationId) : true;
+  });
 
   return {
-    publishedAt: store.publishedPackage?.publishedAt || null,
-    items: store.extractedItems.filter((item) => publishedIds.has(item.id)),
+    publishedAt: items.length ? store.publishedPackage?.publishedAt || null : null,
+    items,
   };
 }
