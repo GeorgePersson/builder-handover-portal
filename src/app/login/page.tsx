@@ -6,6 +6,8 @@ import { requestMagicLinkAction } from "@/lib/server/auth-actions";
 const errorMessages: Record<string, string> = {
   "callback-failed": "The sign-in link could not be verified. Request a fresh magic link and try again.",
   "callback-missing-code": "The sign-in link was missing its verification code. Request a fresh magic link.",
+  "confirm-failed": "The sign-in token could not be verified. Request a fresh magic link and try again.",
+  "confirm-missing-token": "The sign-in link was missing its token. Request a fresh magic link.",
   "email-provider": "Supabase could not send the email. Check Auth email provider settings or wait for the built-in email limit to reset.",
   "magic-link-failed": "Sign-in could not be completed. Check the Supabase auth settings and try again.",
   "rate-limit": "Supabase is rate-limiting magic links right now. Wait a bit, then request another link.",
