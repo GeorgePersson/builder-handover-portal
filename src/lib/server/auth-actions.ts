@@ -50,6 +50,34 @@ function getLoginErrorCode(message: string) {
   return "magic-link-failed";
 }
 
+function getPasswordAuthErrorCode(message: string) {
+  const lowerMessage = message.toLowerCase();
+
+  if (lowerMessage.includes("invalid") || lowerMessage.includes("credentials")) {
+    return "invalid-credentials";
+  }
+
+  if (lowerMessage.includes("confirm")) {
+    return "email-not-confirmed";
+  }
+
+  if (lowerMessage.includes("rate") || lowerMessage.includes("too many")) {
+    return "rate-limit";
+  }
+
+  return "password-auth-failed";
+}
+
+function getPassword(formData: FormData) {
+  const password = formData.get("password");
+
+  if (typeof password !== "string" || password.length < 8) {
+    return null;
+  }
+
+  return password;
+}
+
 export async function requestMagicLinkAction(formData: FormData) {
   const email = formData.get("email");
   const next = formData.get("next");
@@ -91,6 +119,77 @@ export async function requestMagicLinkAction(formData: FormData) {
 
   const params = new URLSearchParams({
     sent: "true",
+    next: redirectTo,
+  });
+
+  redirect(`/login?${params.toString()}`);
+}
+
+export async function signInWithPasswordAction(formData: FormData) {
+  const email = formData.get("email");
+  const password = getPassword(formData);
+  const redirectTo = getSafeNext(formData.get("next"));
+
+  if (typeof email !== "string" || email.trim().length === 0 || !password) {
+    redirect(`/login?error=invalid-credentials&next=${encodeURIComponent(redirectTo)}`);
+  }
+
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    redirect("/login?mode=stub");
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.auth.signInWithPassword({
+    email: email.trim(),
+    password,
+  });
+
+  if (error) {
+    const params = new URLSearchParams({
+      error: getPasswordAuthErrorCode(error.message),
+      next: redirectTo,
+    });
+
+    redirect(`/login?${params.toString()}`);
+  }
+
+  redirect(redirectTo);
+}
+
+export async function signUpWithPasswordAction(formData: FormData) {
+  const email = formData.get("email");
+  const password = getPassword(formData);
+  const redirectTo = getSafeNext(formData.get("next"));
+
+  if (typeof email !== "string" || email.trim().length === 0 || !password) {
+    redirect(`/login?error=password-too-short&next=${encodeURIComponent(redirectTo)}`);
+  }
+
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    redirect("/login?mode=stub");
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.auth.signUp({
+    email: email.trim(),
+    password,
+  });
+
+  if (error) {
+    const params = new URLSearchParams({
+      error: getPasswordAuthErrorCode(error.message),
+      next: redirectTo,
+    });
+
+    redirect(`/login?${params.toString()}`);
+  }
+
+  if (data.session) {
+    redirect(redirectTo);
+  }
+
+  const params = new URLSearchParams({
+    created: "true",
     next: redirectTo,
   });
 

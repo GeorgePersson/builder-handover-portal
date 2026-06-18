@@ -1,7 +1,11 @@
 import { Mail } from "lucide-react";
 import { TextField } from "@/components/forms/form-field";
 import { SubmitButton } from "@/components/forms/submit-button";
-import { requestMagicLinkAction } from "@/lib/server/auth-actions";
+import {
+  requestMagicLinkAction,
+  signInWithPasswordAction,
+  signUpWithPasswordAction,
+} from "@/lib/server/auth-actions";
 
 const errorMessages: Record<string, string> = {
   "callback-failed": "The sign-in link could not be verified. Request a fresh magic link and try again.",
@@ -9,7 +13,11 @@ const errorMessages: Record<string, string> = {
   "confirm-failed": "The sign-in token could not be verified. Request a fresh magic link and try again.",
   "confirm-missing-token": "The sign-in link was missing its token. Request a fresh magic link.",
   "email-provider": "Supabase could not send the email. Check Auth email provider settings or wait for the built-in email limit to reset.",
+  "email-not-confirmed": "This email still needs confirmation. For local testing, disable email confirmations in Supabase Auth settings or use magic link after SMTP is configured.",
+  "invalid-credentials": "The email or password did not match an account.",
   "magic-link-failed": "Sign-in could not be completed. Check the Supabase auth settings and try again.",
+  "password-auth-failed": "Password sign-in could not be completed. Check the Supabase auth settings and try again.",
+  "password-too-short": "Password must be at least 8 characters.",
   "rate-limit": "Supabase is rate-limiting magic links right now. Wait a bit, then request another link.",
   "redirect-url":
     "Supabase rejected the redirect URL. Add this app's /auth/callback URL in Supabase Auth redirect settings.",
@@ -18,7 +26,7 @@ const errorMessages: Record<string, string> = {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string; sent?: string; mode?: string; error?: string }>;
+  searchParams: Promise<{ next?: string; sent?: string; created?: string; mode?: string; error?: string }>;
 }) {
   const params = await searchParams;
 
@@ -40,6 +48,11 @@ export default async function LoginPage({
             Magic link requested. Check your email to continue.
           </p>
         ) : null}
+        {params.created ? (
+          <p className="mt-5 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm leading-6 text-emerald-800">
+            Account created. Sign in with your email and password to continue.
+          </p>
+        ) : null}
         {params.mode === "stub" ? (
           <p className="mt-5 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-800">
             Supabase keys are not configured yet, so auth is running in local scaffold mode.
@@ -51,13 +64,33 @@ export default async function LoginPage({
           </p>
         ) : null}
 
-        <form action={requestMagicLinkAction} className="mt-6 space-y-5">
+        <form action={signInWithPasswordAction} className="mt-6 space-y-5">
           <input name="next" type="hidden" value={params.next || "/builder/projects"} />
           <TextField label="Email address" name="email" placeholder="you@example.co.nz" required type="email" />
+          <TextField label="Password" name="password" placeholder="At least 8 characters" required type="password" />
           <div className="flex justify-end">
-            <SubmitButton icon={Mail} label="Send magic link" />
+            <SubmitButton icon={Mail} label="Sign in" />
           </div>
         </form>
+
+        <details className="mt-5 rounded-md border border-slate-200 bg-slate-50 p-3">
+          <summary className="cursor-pointer text-sm font-semibold text-slate-700">Create an account or use email link</summary>
+          <form action={signUpWithPasswordAction} className="mt-4 space-y-4">
+            <input name="next" type="hidden" value={params.next || "/builder/projects"} />
+            <TextField label="Email address" name="email" placeholder="client@example.co.nz" required type="email" />
+            <TextField label="Password" name="password" placeholder="At least 8 characters" required type="password" />
+            <div className="flex justify-end">
+              <SubmitButton icon={Mail} label="Create account" />
+            </div>
+          </form>
+          <form action={requestMagicLinkAction} className="mt-5 space-y-4 border-t border-slate-200 pt-4">
+            <input name="next" type="hidden" value={params.next || "/builder/projects"} />
+            <TextField label="Email address" name="email" placeholder="you@example.co.nz" required type="email" />
+            <div className="flex justify-end">
+              <SubmitButton icon={Mail} label="Send magic link" />
+            </div>
+          </form>
+        </details>
       </section>
     </main>
   );

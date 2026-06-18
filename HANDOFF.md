@@ -227,6 +227,13 @@ Supabase is not configured.
   rejects invite tokens older than 14 days.
 - Supabase schema now includes the invite-acceptance RPC. Existing Supabase
   projects can run `docs/supabase-add-client-invite-acceptance.sql`.
+- Invite acceptance now requires the signed-in account email to match the
+  invited `project_clients.email`, so a builder opening a client invite link
+  cannot accidentally consume it.
+- Login now supports email/password sign-in and sign-up alongside the existing
+  magic-link path. This avoids relying on editable Supabase email templates
+  during early setup; OTP-code login can still be added later once custom SMTP
+  allows the `{{ .Token }}` template.
 - Project-approving an extracted item in Supabase mode keeps it project-scoped.
   Platform admin global approval is the path that promotes reusable product
   records.
@@ -339,6 +346,7 @@ Supabase is not configured.
   the client invite acceptance page, and the invite acceptance Supabase RPC.
 - Lint/build check for invite regeneration/revocation controls and 14-day RPC
   expiry enforcement.
+- Lint/build check for email/password login/sign-up and invite email matching.
 - HTTP smoke check for unauthenticated
   `/client/accept-invite?token=test-token`: route returns `307` to
   `/login?next=%2Fclient%2Faccept-invite%3Ftoken%3Dtest-token`, preserving the
@@ -390,7 +398,8 @@ Both passed after the latest changes.
   `docs/supabase-add-extracted-item-review-reason.sql`.
 - If the schema was applied before the client package item policy was added,
   also run `docs/supabase-add-client-extracted-items-policy.sql`.
-- If the schema was applied before invite acceptance was added, also run
+- If the schema was applied before invite acceptance or invite email matching
+  was added, also run
   `docs/supabase-add-client-invite-acceptance.sql`.
 - Add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` to
   `.env.local`.

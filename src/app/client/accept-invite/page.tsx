@@ -4,7 +4,7 @@ import { SubmitButton } from "@/components/forms/submit-button";
 import { acceptClientInviteAction } from "@/lib/server/actions";
 
 const errorMessages: Record<string, string> = {
-  "invalid-invite": "This invite link could not be accepted. Ask the builder for a fresh link.",
+  "invalid-invite": "This invite link could not be accepted. Sign in with the invited email address, or ask the builder for a fresh link.",
 };
 
 export default async function ClientAcceptInvitePage({
@@ -27,7 +27,8 @@ export default async function ClientAcceptInvitePage({
             <h1 className="mt-1 text-xl font-semibold tracking-normal">Connect your home manual</h1>
             <p className="mt-2 text-sm leading-6 text-slate-600">
               Accepting this invite connects your signed-in account to the builder project, then
-              opens the client portal for the published handover package.
+              opens the client portal for the published handover package. Use the same email address
+              the builder invited.
             </p>
           </div>
         </div>
