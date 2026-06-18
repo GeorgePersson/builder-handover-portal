@@ -234,6 +234,11 @@ Supabase is not configured.
   magic-link path. This avoids relying on editable Supabase email templates
   during early setup; OTP-code login can still be added later once custom SMTP
   allows the `{{ .Token }}` template.
+- First-time builders without an `organisation_members` row now go to
+  `/builder/onboarding` instead of hitting a dead-end `no-organisation` error.
+  The onboarding form captures organisation name, trading name, and contact
+  phone, then calls the `ensure_builder_workspace` RPC to create the
+  organisation and owner membership for the signed-in account.
 - Project-approving an extracted item in Supabase mode keeps it project-scoped.
   Platform admin global approval is the path that promotes reusable product
   records.
@@ -347,6 +352,10 @@ Supabase is not configured.
 - Lint/build check for invite regeneration/revocation controls and 14-day RPC
   expiry enforcement.
 - Lint/build check for email/password login/sign-up and invite email matching.
+- Lint/build check for first-builder onboarding and the
+  `ensure_builder_workspace` Supabase RPC.
+- HTTP smoke check for unauthenticated `/builder/onboarding`: route returns
+  `307` to `/login?next=%2Fbuilder%2Fonboarding` with Supabase auth active.
 - HTTP smoke check for unauthenticated
   `/client/accept-invite?token=test-token`: route returns `307` to
   `/login?next=%2Fclient%2Faccept-invite%3Ftoken%3Dtest-token`, preserving the
@@ -401,6 +410,8 @@ Both passed after the latest changes.
 - If the schema was applied before invite acceptance or invite email matching
   was added, also run
   `docs/supabase-add-client-invite-acceptance.sql`.
+- If the schema was applied before builder onboarding was added, also run
+  `docs/supabase-add-builder-workspace-bootstrap.sql`.
 - Add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` to
   `.env.local`.
 - Create a private Supabase Storage bucket named `handover-documents`.

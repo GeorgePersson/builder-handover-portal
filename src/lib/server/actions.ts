@@ -35,6 +35,19 @@ function getOptional(formData: FormData, key: string) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
+function getSafeBuilderNext(value: FormDataEntryValue | string | null) {
+  if (
+    typeof value !== "string" ||
+    !value.startsWith("/builder") ||
+    value.startsWith("//") ||
+    value.startsWith("/builder/onboarding")
+  ) {
+    return "/builder/projects";
+  }
+
+  return value;
+}
+
 function hasSupabaseConfig() {
   return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 }
@@ -163,10 +176,42 @@ async function getBuilderContext() {
     .single();
 
   if (error || !member) {
-    redirect("/builder/projects?error=no-organisation");
+    redirect("/builder/onboarding?next=/builder/projects");
   }
 
   return { supabase, userId: user.id, organisationId: member.organisation_id as string };
+}
+
+export async function createBuilderWorkspaceAction(formData: FormData) {
+  const orgName = getRequired(formData, "orgName");
+  const tradingName = getOptional(formData, "tradingName");
+  const contactPhone = getOptional(formData, "contactPhone");
+  const next = getSafeBuilderNext(formData.get("next"));
+
+  if (!hasSupabaseConfig()) {
+    redirect(next);
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect(`/login?next=${encodeURIComponent("/builder/onboarding")}`);
+  }
+
+  const { error } = await supabase.rpc("ensure_builder_workspace", {
+    org_name: orgName,
+    trading_name: tradingName,
+    contact_phone: contactPhone,
+  });
+
+  if (error) {
+    redirect("/builder/onboarding?error=create-workspace-failed");
+  }
+
+  redirect(next);
 }
 
 export async function createProjectAction(formData: FormData) {

@@ -47,6 +47,7 @@ export default async function ProjectsPage({
             "client-already-accepted": "That client has already accepted their invite.",
             "client-not-found": "No client record was found for that project.",
             "create-client-invite-failed": "The client invite link could not be created.",
+            "no-organisation": "No builder workspace exists for this account yet. Open Builder setup to finish account setup.",
             "revoke-client-invite-failed": "The client invite link could not be revoked.",
           }}
           storage={params.storage}
