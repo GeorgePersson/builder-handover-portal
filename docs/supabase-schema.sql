@@ -570,6 +570,29 @@ create policy "Accessible users can read maintenance tasks"
 on public.maintenance_tasks for select
 using (public.can_access_project(project_id));
 
+create policy "Accessible users can create maintenance completions"
+on public.maintenance_completions for insert
+with check (
+  completed_by = auth.uid()
+  and exists (
+    select 1
+    from public.maintenance_tasks mt
+    where mt.id = maintenance_task_id
+      and public.can_access_project(mt.project_id)
+  )
+);
+
+create policy "Accessible users can read maintenance completions"
+on public.maintenance_completions for select
+using (
+  exists (
+    select 1
+    from public.maintenance_tasks mt
+    where mt.id = maintenance_task_id
+      and public.can_access_project(mt.project_id)
+  )
+);
+
 create policy "Members can manage extracted handover items"
 on public.extracted_handover_items for all
 using (

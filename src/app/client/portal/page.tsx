@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { CalendarCheck2, FileText, FolderOpen, Home, PackageCheck, Send } from "lucide-react";
+import { completeMaintenanceTaskAction } from "@/lib/server/actions";
 import { getClientPortalData } from "@/lib/server/queries";
 import { cn, formatDate } from "@/lib/utils";
 
 export default async function ClientPortalPage({
   searchParams,
 }: {
-  searchParams: Promise<{ invite?: string; projectId?: string }>;
+  searchParams: Promise<{ error?: string; invite?: string; maintenance?: string; projectId?: string }>;
 }) {
   const params = await searchParams;
   const { projectSummaries } = await getClientPortalData();
@@ -67,6 +68,16 @@ export default async function ClientPortalPage({
         {params.invite === "accepted" ? (
           <p className="mt-5 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm leading-6 text-emerald-800">
             Invite accepted. This home manual is now connected to your signed-in account.
+          </p>
+        ) : null}
+        {params.maintenance === "completed" ? (
+          <p className="mt-5 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm leading-6 text-emerald-800">
+            Maintenance task marked complete.
+          </p>
+        ) : null}
+        {params.error ? (
+          <p className="mt-5 rounded-md border border-rose-200 bg-rose-50 p-3 text-sm leading-6 text-rose-800">
+            Action failed: {params.error.replaceAll("-", " ")}.
           </p>
         ) : null}
 
@@ -146,11 +157,42 @@ export default async function ClientPortalPage({
             <div className="divide-y divide-slate-100">
               {selectedSummary.maintenanceTasks.map((task) => (
                 <div className="p-5" key={task.id}>
-                  <p className="font-medium">{task.title}</p>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <p className="font-medium">{task.title}</p>
+                    <span
+                      className={cn(
+                        "rounded-md px-2 py-1 text-xs font-semibold capitalize",
+                        task.status === "complete"
+                          ? "bg-emerald-100 text-emerald-800"
+                          : task.status === "overdue"
+                            ? "bg-rose-100 text-rose-800"
+                            : "bg-slate-100 text-slate-700",
+                      )}
+                    >
+                      {task.status}
+                    </span>
+                  </div>
                   <p className="mt-1 text-sm text-slate-600">{task.relatedProduct}</p>
                   <p className="mt-2 text-xs text-slate-500">
                     Due {formatDate(task.dueDate)} - {task.cadence}
                   </p>
+                  {task.status !== "complete" ? (
+                    <form action={completeMaintenanceTaskAction} className="mt-4 space-y-2">
+                      <input name="taskId" type="hidden" value={task.id} />
+                      <input
+                        className="h-9 w-full rounded-md border border-slate-200 px-3 text-xs text-slate-950 outline-none focus:border-cyan-700"
+                        name="notes"
+                        placeholder="Completion note"
+                        type="text"
+                      />
+                      <button
+                        className="inline-flex h-9 items-center rounded-md bg-cyan-700 px-3 text-xs font-semibold text-white hover:bg-cyan-800"
+                        type="submit"
+                      >
+                        Mark complete
+                      </button>
+                    </form>
+                  ) : null}
                 </div>
               ))}
               {selectedSummary.maintenanceTasks.length === 0 ? (

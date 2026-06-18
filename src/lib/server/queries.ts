@@ -310,7 +310,7 @@ export async function getMaintenanceTasks(projectId?: string): Promise<Maintenan
   const supabase = await createSupabaseServerClient();
   let query = supabase
     .from("maintenance_tasks")
-    .select("id,project_id,title,due_date,frequency,required_for_warranty,created_at")
+    .select("id,project_id,title,due_date,frequency,required_for_warranty,created_at,maintenance_completions(id,completed_at)")
     .order("due_date", { ascending: true });
 
   if (projectId) {
@@ -323,16 +323,22 @@ export async function getMaintenanceTasks(projectId?: string): Promise<Maintenan
     return projectId ? maintenanceTasks.filter((task) => task.projectId === projectId) : maintenanceTasks;
   }
 
-  return data.map((task) => ({
-    id: task.id,
-    projectId: task.project_id,
-    title: task.title,
-    cadence: task.frequency || "One-off",
-    dueDate: task.due_date,
-    requiredForWarranty: task.required_for_warranty,
-    relatedProduct: "Project maintenance",
-    status: new Date(task.due_date) < new Date() ? "overdue" : "upcoming",
-  }));
+  return data.map((task) => {
+    const completions = Array.isArray(task.maintenance_completions)
+      ? task.maintenance_completions
+      : [];
+
+    return {
+      id: task.id,
+      projectId: task.project_id,
+      title: task.title,
+      cadence: task.frequency || "One-off",
+      dueDate: task.due_date,
+      requiredForWarranty: task.required_for_warranty,
+      relatedProduct: "Project maintenance",
+      status: completions.length > 0 ? "complete" : new Date(task.due_date) < new Date() ? "overdue" : "upcoming",
+    };
+  });
 }
 
 export async function getAuditEvents(): Promise<AuditEvent[]> {

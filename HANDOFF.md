@@ -261,6 +261,8 @@ Supabase is not configured.
   global approval, and surfaces project-extracted items waiting for admin review.
 - Builder Maintenance now shows per-project cards, including projects with no
   maintenance tasks sorted to the bottom.
+- Client portal maintenance cards now let clients mark tasks complete. The app
+  reads `maintenance_completions` to show completed tasks distinctly.
 - Builder Settings scaffold added at `/builder/settings` for organisation,
   users, client messaging, and builder review/liability confirmation settings.
 - Builder project workspace now includes client document upload/registration
@@ -517,6 +519,8 @@ Both passed after the latest changes.
   `docs/supabase-add-builder-workspace-bootstrap.sql`.
 - If the schema was applied before document download history was added, also run
   `docs/supabase-add-document-download-events.sql`.
+- If the schema was applied before client maintenance completion was wired, also
+  run `docs/supabase-add-maintenance-completion-policies.sql`.
 - Add `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and
   `SUPABASE_SERVICE_ROLE_KEY` to
   `.env.local`.

@@ -940,6 +940,46 @@ export async function createMaintenanceTaskAction(formData: FormData) {
   redirect(`/builder/maintenance?draft=saved&storage=${hasSupabaseConfig() ? "supabase" : "stub"}`);
 }
 
+export async function completeMaintenanceTaskAction(formData: FormData) {
+  const taskId = getRequired(formData, "taskId");
+  const notes = getOptional(formData, "notes");
+
+  if (!hasSupabaseConfig()) {
+    redirect("/client/portal?maintenance=completed&storage=stub");
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/login?next=/client/portal");
+  }
+
+  const { data: task, error: taskError } = await supabase
+    .from("maintenance_tasks")
+    .select("id,project_id,title")
+    .eq("id", taskId)
+    .single();
+
+  if (taskError || !task) {
+    redirect("/client/portal?error=maintenance-task-not-found");
+  }
+
+  const { error } = await supabase.from("maintenance_completions").insert({
+    maintenance_task_id: task.id,
+    completed_by: user.id,
+    notes,
+  });
+
+  if (error) {
+    redirect(`/client/portal?projectId=${task.project_id}&error=maintenance-complete-failed`);
+  }
+
+  redirect(`/client/portal?projectId=${task.project_id}&maintenance=completed`);
+}
+
 export async function createSpecificationUploadAction(formData: FormData) {
   const projectId = getRequired(formData, "projectId");
   const upload = await prepareSpecificationPdf(formData);
