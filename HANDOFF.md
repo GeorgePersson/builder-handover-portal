@@ -461,6 +461,9 @@ Supabase is not configured.
   handling.
 - Lint/build check for billing RPC preference with fallback compatibility.
 - Lint/build check for the admin billing page and dynamic route behaviour.
+- Lint/build check for billing operator recovery, document download history,
+  Resend client invite delivery scaffold, client maintenance completion, editable
+  builder organisation settings, and client-visible document download history.
 - HTTP smoke check for unauthenticated `/builder/onboarding`: route returns
   `307` to `/login?next=%2Fbuilder%2Fonboarding` with Supabase auth active.
 - HTTP smoke check for unauthenticated
