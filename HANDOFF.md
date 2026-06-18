@@ -307,6 +307,10 @@ Supabase is not configured.
   `consume_project_credit(...)` and `apply_project_credit_purchase(...)`. Runtime
   code prefers these RPCs when they exist and falls back to the older best-effort
   path for databases that have not applied the migration yet.
+- Admin billing page added at `/admin/billing`. It uses the Supabase service-role
+  client to show credit accounts, balances, Stripe customer links, and recent
+  credit ledger events. The admin sidebar links to it, and the page is forced
+  dynamic so balances are read at request time.
 - Project-approving an extracted item in Supabase mode keeps it project-scoped.
   Platform admin global approval is the path that promotes reusable product
   records.
@@ -439,6 +443,7 @@ Supabase is not configured.
 - Lint/build check for Stripe webhook signature verification and credit top-up
   handling.
 - Lint/build check for billing RPC preference with fallback compatibility.
+- Lint/build check for the admin billing page and dynamic route behaviour.
 - HTTP smoke check for unauthenticated `/builder/onboarding`: route returns
   `307` to `/login?next=%2Fbuilder%2Fonboarding` with Supabase auth active.
 - HTTP smoke check for unauthenticated
@@ -532,7 +537,7 @@ Both passed after the latest changes.
 6. Replace `POST /api/ai/product-draft` deterministic enrichment with the real
    source-backed AI/search workflow.
 7. Replace manual client invite links with real transactional email delivery.
-8. Add Stripe webhook event replay/testing notes and a billing admin view for
+8. Add Stripe webhook event replay/testing notes and operator handling for
    failed or partial credit events.
 9. Add a client-facing document preview/download history once signed URL
     behaviour is stable with real uploads.
