@@ -61,6 +61,30 @@ export function isPackageReadyExtractedItem(item: Pick<ExtractedHandoverItem, "s
   return packageReadyStatuses.has(item.status);
 }
 
+export async function hasBuilderWorkspace() {
+  if (!hasSupabaseConfig()) {
+    return true;
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return false;
+  }
+
+  const { data, error } = await supabase
+    .from("organisation_members")
+    .select("organisation_id")
+    .eq("user_id", user.id)
+    .limit(1)
+    .maybeSingle();
+
+  return Boolean(!error && data?.organisation_id);
+}
+
 function mapExtractedHandoverItemRows(data: ExtractedHandoverItemRow[]) {
   return data.map((item) => ({
     id: item.id,

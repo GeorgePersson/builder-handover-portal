@@ -1,10 +1,16 @@
+import { redirect } from "next/navigation";
 import { Save } from "lucide-react";
 import { TextField, SelectField } from "@/components/forms/form-field";
 import { SubmitButton } from "@/components/forms/submit-button";
 import { PageHeader } from "@/components/layout/page-header";
 import { createProjectAction } from "@/lib/server/actions";
+import { hasBuilderWorkspace } from "@/lib/server/queries";
 
-export default function NewProjectPage() {
+export default async function NewProjectPage() {
+  if (!(await hasBuilderWorkspace())) {
+    redirect("/builder/onboarding?next=/builder/projects/new");
+  }
+
   return (
     <main className="px-5 py-8 sm:px-8">
       <div className="mx-auto max-w-4xl">

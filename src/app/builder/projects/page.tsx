@@ -1,10 +1,11 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Building2, Link2, Plus } from "lucide-react";
 import { StatusPill } from "@/components/status-pill";
 import { StatusBanner } from "@/components/status-banner";
 import { SubmitButton } from "@/components/forms/submit-button";
 import { createClientInviteAction, revokeClientInviteAction } from "@/lib/server/actions";
-import { getProjects } from "@/lib/server/queries";
+import { getProjects, hasBuilderWorkspace } from "@/lib/server/queries";
 import { formatDate } from "@/lib/utils";
 
 export default async function ProjectsPage({
@@ -19,6 +20,10 @@ export default async function ProjectsPage({
   }>;
 }) {
   const params = await searchParams;
+  if (!(await hasBuilderWorkspace())) {
+    redirect("/builder/onboarding?next=/builder/projects");
+  }
+
   const projects = await getProjects();
   const invitePath = params.inviteToken
     ? `/client/accept-invite?token=${encodeURIComponent(params.inviteToken)}`

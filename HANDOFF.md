@@ -239,6 +239,9 @@ Supabase is not configured.
   The onboarding form captures organisation name, trading name, and contact
   phone, then calls the `ensure_builder_workspace` RPC to create the
   organisation and owner membership for the signed-in account.
+- Builder Projects and New Project pages now check for a builder workspace
+  before rendering. First-time builders are redirected to onboarding first, so
+  project form details are not lost on submit.
 - Project-approving an extracted item in Supabase mode keeps it project-scoped.
   Platform admin global approval is the path that promotes reusable product
   records.
@@ -354,6 +357,8 @@ Supabase is not configured.
 - Lint/build check for email/password login/sign-up and invite email matching.
 - Lint/build check for first-builder onboarding and the
   `ensure_builder_workspace` Supabase RPC.
+- Lint/build check for pre-render builder workspace guards on Projects and New
+  Project routes.
 - HTTP smoke check for unauthenticated `/builder/onboarding`: route returns
   `307` to `/login?next=%2Fbuilder%2Fonboarding` with Supabase auth active.
 - HTTP smoke check for unauthenticated
