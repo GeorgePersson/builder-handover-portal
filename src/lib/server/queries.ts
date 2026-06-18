@@ -619,6 +619,7 @@ export async function getClientPortalData() {
       projects: [],
       projectSummaries: [],
       visibleDocuments: [],
+      documentDownloadEvents: [],
       maintenanceTasks: [],
       publishedPackage: {
         project: undefined,
@@ -630,21 +631,24 @@ export async function getClientPortalData() {
     };
   }
 
-  const [documentsForProject, maintenanceTasksForProject, publishedPackage] = await Promise.all([
+  const [documentsForProject, documentDownloadEventsForProject, maintenanceTasksForProject, publishedPackage] = await Promise.all([
     getDocuments(project.id),
+    getDocumentDownloadEvents(project.id),
     getMaintenanceTasks(project.id),
     getPublishedClientPackagePreview(project.id),
   ]);
   const projectSummaries = await Promise.all(
     projectsForViewer.map(async (candidate) => {
-      const [candidateDocuments, candidateTasks, candidatePackage] = await Promise.all([
+      const [candidateDocuments, candidateDownloadEvents, candidateTasks, candidatePackage] = await Promise.all([
         getDocuments(candidate.id),
+        getDocumentDownloadEvents(candidate.id),
         getMaintenanceTasks(candidate.id),
         getPublishedClientPackagePreview(candidate.id),
       ]);
 
       return {
         project: candidate,
+        documentDownloadEvents: candidateDownloadEvents,
         visibleDocuments: candidateDocuments.filter((document) => document.visibleToClient),
         maintenanceTasks: candidateTasks,
         publishedPackage: candidatePackage,
@@ -656,6 +660,7 @@ export async function getClientPortalData() {
     project,
     projects: projectsForViewer,
     projectSummaries,
+    documentDownloadEvents: documentDownloadEventsForProject,
     visibleDocuments: documentsForProject.filter((document) => document.visibleToClient),
     maintenanceTasks: maintenanceTasksForProject,
     publishedPackage,

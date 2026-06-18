@@ -128,24 +128,36 @@ export default async function ClientPortalPage({
           <div className="rounded-lg border border-slate-200 bg-white">
             <h2 className="border-b border-slate-100 px-5 py-4 font-semibold">Documents</h2>
             <div className="grid gap-3 p-5 md:grid-cols-2">
-              {selectedSummary.visibleDocuments.map((document) => (
-                <article className="rounded-md border border-slate-200 p-4" key={document.id}>
-                  <FileText className="size-5 text-cyan-700" />
-                  <p className="mt-3 font-medium">{document.name}</p>
-                  <p className="mt-1 text-xs capitalize text-slate-500">
-                    {document.type.replaceAll("_", " ")} - {document.size}
-                  </p>
-                  <p className="mt-2 text-xs text-slate-500">Uploaded {formatDate(document.uploadedAt)}</p>
-                  {document.storagePath ? (
-                    <Link
-                      className="mt-4 inline-flex h-9 items-center rounded-md border border-slate-200 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                      href={`/api/documents/${document.id}/download`}
-                    >
-                      Download
-                    </Link>
-                  ) : null}
-                </article>
-              ))}
+              {selectedSummary.visibleDocuments.map((document) => {
+                const documentDownloads = selectedSummary.documentDownloadEvents.filter(
+                  (event) => event.documentId === document.id,
+                );
+                const latestDownload = documentDownloads[0];
+
+                return (
+                  <article className="rounded-md border border-slate-200 p-4" key={document.id}>
+                    <FileText className="size-5 text-cyan-700" />
+                    <p className="mt-3 font-medium">{document.name}</p>
+                    <p className="mt-1 text-xs capitalize text-slate-500">
+                      {document.type.replaceAll("_", " ")} - {document.size}
+                    </p>
+                    <p className="mt-2 text-xs text-slate-500">Uploaded {formatDate(document.uploadedAt)}</p>
+                    <p className="mt-2 text-xs text-slate-500">
+                      {documentDownloads.length
+                        ? `Downloaded ${documentDownloads.length} time${documentDownloads.length === 1 ? "" : "s"} - last ${formatDate(latestDownload.downloadedAt)}`
+                        : "Not downloaded yet"}
+                    </p>
+                    {document.storagePath ? (
+                      <Link
+                        className="mt-4 inline-flex h-9 items-center rounded-md border border-slate-200 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                        href={`/api/documents/${document.id}/download`}
+                      >
+                        Download
+                      </Link>
+                    ) : null}
+                  </article>
+                );
+              })}
               {selectedSummary.visibleDocuments.length === 0 ? (
                 <p className="text-sm text-slate-500">No client-visible documents have been added yet.</p>
               ) : null}

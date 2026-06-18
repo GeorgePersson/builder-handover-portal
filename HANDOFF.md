@@ -299,7 +299,8 @@ Supabase is not configured.
   the browser. Local scaffold mode returns a setup response.
 - Document downloads now write `document_download_events` rows when the Supabase
   migration is present. Builders see per-document download counts and last
-  download dates inside the project workspace.
+  download dates inside the project workspace, and clients see their own
+  document download status inside the client handover page.
 - Billing now has a Stripe Checkout starter route at `/api/billing/checkout`.
   It posts to Stripe's Checkout Session API using `STRIPE_SECRET_KEY` and
   `NEXT_PUBLIC_STRIPE_PROJECT_CREDIT_PRICE_ID`, sets organisation metadata and
@@ -570,8 +571,8 @@ Both passed after the latest changes.
 8. Test the Stripe Checkout/webhook flow against a real Stripe test account and
    confirm the `/admin/billing` manual adjustment path works for support
    recovery.
-9. Add a richer client-facing document preview/download history once signed URL
-    behaviour is stable with real uploads.
+9. Add richer client-facing document previews once signed URL behaviour is
+    stable with real uploads.
 
 ## Good Resume Prompt
 
