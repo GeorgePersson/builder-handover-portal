@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Building2, Mail, Settings, ShieldCheck, UserRoundCog } from "lucide-react";
+import { Building2, CreditCard, Mail, Settings, ShieldCheck, UserRoundCog } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 
 const settingsSections = [
@@ -20,6 +20,12 @@ const settingsSections = [
     title: "Client messaging",
     description: "Client invite links are manual for now. Transactional email settings can be connected later.",
     fields: ["Invite sender", "Reply-to email", "Email delivery status"],
+  },
+  {
+    icon: CreditCard,
+    title: "Billing and credits",
+    description: "Stripe-backed project credits will live here. Test accounts can be marked unlimited while billing is in setup.",
+    fields: ["Credit balance", "Stripe customer", "Project credit price", "Webhook status"],
   },
   {
     icon: ShieldCheck,

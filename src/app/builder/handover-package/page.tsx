@@ -36,6 +36,7 @@ export default async function HandoverPackagePage({
                 Review extracted items
               </Link>
               <form action={publishHandoverPackageAction}>
+                {project ? <input name="projectId" type="hidden" value={project.id} /> : null}
                 <button
                   className="inline-flex h-10 items-center gap-2 rounded-md bg-cyan-700 px-3 text-sm font-semibold text-white hover:bg-cyan-800"
                   disabled={total === 0}

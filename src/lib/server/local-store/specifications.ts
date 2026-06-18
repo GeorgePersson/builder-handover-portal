@@ -10,6 +10,13 @@ type LocalSpecificationStore = {
     itemIds: string[];
     publishedAt: string;
   };
+  publishedPackages?: Record<
+    string,
+    {
+      itemIds: string[];
+      publishedAt: string;
+    }
+  >;
 };
 
 const storeRoot = path.join(process.cwd(), ".local-data");
@@ -222,28 +229,50 @@ export async function updateLocalExtractedItem(input: {
   return didUpdate;
 }
 
-export async function publishLocalHandoverPackage() {
+export async function publishLocalHandoverPackage(projectId?: string) {
   const store = await readStore();
+  const projectSpecificationIds = projectId
+    ? new Set(
+        store.specifications
+          .filter((specification) => specification.projectId === projectId)
+          .map((specification) => specification.id),
+      )
+    : null;
   const itemIds = store.extractedItems
     .filter((item) =>
       ["accepted", "auto_approved", "builder_approved", "global_approved"].includes(item.status),
     )
+    .filter((item) => (projectSpecificationIds ? projectSpecificationIds.has(item.specificationId) : true))
     .map((item) => item.id);
+  const publishedAt = new Date().toISOString();
+  const publishedPackages = projectId
+    ? {
+        ...(store.publishedPackages || {}),
+        [projectId]: {
+          itemIds,
+          publishedAt,
+        },
+      }
+    : store.publishedPackages;
 
   await writeStore({
     ...store,
+    publishedPackages,
     publishedPackage: {
       itemIds,
-      publishedAt: new Date().toISOString(),
+      publishedAt,
     },
   });
 
-  return { itemIds, publishedAt: new Date().toISOString() };
+  return { itemIds, publishedAt };
 }
 
 export async function getLocalPublishedItems(projectId?: string) {
   const store = await readStore();
-  const publishedIds = new Set(store.publishedPackage?.itemIds || []);
+  const projectPackage = projectId ? store.publishedPackages?.[projectId] : null;
+  const fallbackPackage = projectId ? null : store.publishedPackage;
+  const publishedPackage = projectPackage || fallbackPackage;
+  const publishedIds = new Set(publishedPackage?.itemIds || []);
   const projectSpecificationIds = projectId
     ? new Set(
         store.specifications
@@ -260,7 +289,7 @@ export async function getLocalPublishedItems(projectId?: string) {
   });
 
   return {
-    publishedAt: items.length ? store.publishedPackage?.publishedAt || null : null,
+    publishedAt: items.length ? publishedPackage?.publishedAt || null : null,
     items,
   };
 }

@@ -81,12 +81,27 @@ export async function getBuilderCreditStatus(): Promise<{
     data: { user },
   } = await supabase.auth.getUser();
   const email = user?.email || "";
-  const unlimited = email.toLowerCase() === "test@gmail.com";
+  const { data: member } = user
+    ? await supabase
+        .from("organisation_members")
+        .select("organisation_id")
+        .eq("user_id", user.id)
+        .limit(1)
+        .maybeSingle()
+    : { data: null };
+  const { data: creditAccount } = member?.organisation_id
+    ? await supabase
+        .from("project_credit_accounts")
+        .select("credit_balance,unlimited")
+        .eq("organisation_id", member.organisation_id)
+        .maybeSingle()
+    : { data: null };
+  const unlimited = Boolean(creditAccount?.unlimited) || email.toLowerCase() === "test@gmail.com";
 
   return {
     email,
     unlimited,
-    availableCredits: unlimited ? "infinite" : 0,
+    availableCredits: unlimited ? "infinite" : creditAccount?.credit_balance || 0,
     projectCost: 1,
   };
 }
@@ -142,7 +157,7 @@ export async function getProjects(): Promise<Project[]> {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
     .from("projects")
-    .select("id,name,address,project_type,status,handover_date,created_at,project_clients(name,email,invited_at,accepted_at)")
+    .select("id,name,address,project_type,status,handover_date,published_at,created_at,project_clients(name,email,invited_at,accepted_at)")
     .order("created_at", { ascending: false });
 
   if (error || !data) {
@@ -162,6 +177,7 @@ export async function getProjects(): Promise<Project[]> {
       clientInvitedAt: client?.invited_at || undefined,
       projectType: project.project_type,
       handoverDate: project.handover_date || project.created_at,
+      publishedAt: project.published_at || undefined,
       status: project.status,
       documentCount: 0,
       productCount: 0,
@@ -476,14 +492,14 @@ export async function getPublishedClientPackagePreview(projectId?: string) {
     projectId ? getProjectExtractedHandoverItems(projectId) : getExtractedHandoverItems(),
     getProjects(),
   ]);
-  const acceptedItems = items.filter(isPackageReadyExtractedItem);
   const project = projectId
     ? projectList.find((candidate) => candidate.id === projectId)
     : projectList[0];
+  const acceptedItems = project?.publishedAt || !projectId ? items.filter(isPackageReadyExtractedItem) : [];
 
   return {
     project,
-    publishedAt: acceptedItems.length ? new Date().toISOString() : null,
+    publishedAt: acceptedItems.length ? project?.publishedAt || new Date().toISOString() : null,
     products: acceptedItems.filter((item) => item.itemType === "product"),
     documents: acceptedItems.filter((item) => item.itemType === "document"),
     maintenance: acceptedItems.filter((item) => item.itemType === "maintenance"),

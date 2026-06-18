@@ -271,6 +271,17 @@ Supabase is not configured.
 - Client portal now opens as a handover index. Clients see each assigned project
   as a separate handover folder, then open a project to view client-visible
   documents, published package items, and maintenance tasks.
+- Send package is now project-scoped. The project modal passes the project id to
+  the publish action, Supabase mode marks that project `published` with
+  `published_at`, and local scaffold mode stores published item ids per project
+  instead of one global package.
+- The in-modal product request tool now persists a project-tied missing-item
+  request into the same admin-review request pipeline used by client requests.
+- Billing scaffolding now includes Stripe environment placeholders, a
+  `docs/supabase-add-project-credits-stripe.sql` migration for credit accounts
+  and credit events, and settings-page placeholders for credit balance/customer
+  status. `getBuilderCreditStatus()` reads the credit account table when it
+  exists and still treats `test@gmail.com` as unlimited.
 - Project-approving an extracted item in Supabase mode keeps it project-scoped.
   Platform admin global approval is the path that promotes reusable product
   records.
@@ -394,6 +405,8 @@ Supabase is not configured.
 - Lint/build check for in-project document upload, client handover index,
   project-credit confirmation, and the `test@gmail.com` unlimited-credit
   scaffold.
+- Lint/build check for project-scoped publishing, persistent builder missing-item
+  requests, and the Stripe/project-credit database scaffold.
 - HTTP smoke check for unauthenticated `/builder/onboarding`: route returns
   `307` to `/login?next=%2Fbuilder%2Fonboarding` with Supabase auth active.
 - HTTP smoke check for unauthenticated
@@ -483,14 +496,12 @@ Both passed after the latest changes.
 6. Replace `POST /api/ai/product-draft` deterministic enrichment with the real
    source-backed AI/search workflow.
 7. Replace manual client invite links with real transactional email delivery.
-8. Make project package publishing project-scoped. The current send-package
-   action still uses the existing global package publishing flow.
-9. Wire the in-modal product request button into persistent project/admin review
-   data instead of leaving it as a visual affordance.
-10. Replace the project-credit scaffold with real Stripe checkout/customer
+8. Add client-visible signed document download links once storage access is
+   finalised.
+9. Replace the project-credit scaffold with real Stripe checkout/customer
     credit purchase flows and webhook-backed credit balance updates.
-11. Add document download links/signed URLs for client-visible files once the
-    storage access pattern is finalised.
+10. Add credit deduction/ledger writes on project creation for non-unlimited
+    organisations.
 
 ## Good Resume Prompt
 

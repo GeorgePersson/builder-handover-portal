@@ -1037,38 +1037,41 @@ export async function updateExtractedItemAction(formData: FormData) {
   redirect(`/builder/specifications/review?draft=saved&storage=${hasSupabaseConfig() ? "supabase" : "stub"}`);
 }
 
-export async function publishHandoverPackageAction() {
+export async function publishHandoverPackageAction(formData: FormData) {
+  const projectId = getRequired(formData, "projectId");
   const context = await getBuilderContext();
 
   if (context) {
     const { data: acceptedItems } = await context.supabase
       .from("extracted_handover_items")
       .select("id,specification_uploads(project_id)")
-      .in("status", ["accepted", "auto_approved", "builder_approved", "global_approved"]);
+      .in("status", ["accepted", "auto_approved", "builder_approved", "global_approved"])
+      .eq("specification_uploads.project_id", projectId);
 
-    const specification = acceptedItems?.[0]?.specification_uploads as
-      | Array<{ project_id?: string }>
-      | { project_id?: string }
-      | null
-      | undefined;
-    const projectId = Array.isArray(specification)
-      ? specification[0]?.project_id
-      : specification?.project_id;
+    const { error: projectError } = await context.supabase
+      .from("projects")
+      .update({
+        status: "published",
+        published_at: new Date().toISOString(),
+      })
+      .eq("id", projectId);
 
-    if (projectId) {
-      await context.supabase.from("audit_events").insert({
-        organisation_id: context.organisationId,
-        project_id: projectId,
-        actor_user_id: context.userId,
-        action: "Handover package published",
-        detail: `Published ${acceptedItems?.length || 0} package-ready extracted items to the client portal.`,
-      });
+    if (projectError) {
+      redirect("/builder/projects?error=publish-package-failed");
     }
+
+    await context.supabase.from("audit_events").insert({
+      organisation_id: context.organisationId,
+      project_id: projectId,
+      actor_user_id: context.userId,
+      action: "Handover package published",
+      detail: `Published ${acceptedItems?.length || 0} package-ready extracted items to the client portal.`,
+    });
   } else {
-    await publishLocalHandoverPackage();
+    await publishLocalHandoverPackage(projectId);
   }
 
-  redirect(`/builder/handover-package?published=true&storage=${hasSupabaseConfig() ? "supabase" : "stub"}`);
+  redirect(`/builder/projects?draft=package-published&storage=${hasSupabaseConfig() ? "supabase" : "stub"}`);
 }
 
 export async function createClientRequestAction(formData: FormData) {
@@ -1123,6 +1126,51 @@ export async function createClientRequestAction(formData: FormData) {
   }
 
   redirect(`/client/request-product?draft=saved&storage=${hasSupabaseConfig() ? "supabase" : "local"}`);
+}
+
+export async function createBuilderProjectRequestAction(formData: FormData) {
+  const projectId = getRequired(formData, "projectId");
+  const requestType = getRequired(formData, "requestType") as "product" | "document" | "maintenance";
+  const title = getRequired(formData, "title");
+  const location = getOptional(formData, "location") || "";
+  const details = getOptional(formData, "details") || "Builder requested this missing handover item.";
+  const confidenceScore = title.length >= 8 && details.length >= 20 ? 55 : 25;
+  const context = await getBuilderContext();
+
+  if (context) {
+    const { error } = await context.supabase.from("client_requests").insert({
+      project_id: projectId,
+      requested_by: context.userId,
+      request_type: requestType,
+      title,
+      location,
+      details,
+      status: "admin_review",
+      confidence_score: confidenceScore,
+    });
+
+    if (error) {
+      redirect("/builder/projects?error=create-request-failed");
+    }
+
+    await context.supabase.from("audit_events").insert({
+      organisation_id: context.organisationId,
+      project_id: projectId,
+      actor_user_id: context.userId,
+      action: "Builder requested missing item",
+      detail: `Requested admin review for ${title}.`,
+    });
+  } else {
+    await saveLocalClientRequest({
+      projectId,
+      requestType,
+      title,
+      location,
+      details,
+    });
+  }
+
+  redirect(`/builder/projects?draft=request-sent&storage=${hasSupabaseConfig() ? "supabase" : "stub"}`);
 }
 
 export async function convertClientRequestToReviewAction(formData: FormData) {

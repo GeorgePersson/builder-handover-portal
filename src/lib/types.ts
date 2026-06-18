@@ -24,6 +24,7 @@ export type Project = {
   clientInvitedAt?: string;
   projectType: string;
   handoverDate: string;
+  publishedAt?: string;
   status: ProjectStatus;
   documentCount: number;
   productCount: number;

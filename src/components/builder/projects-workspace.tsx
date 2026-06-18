@@ -23,6 +23,7 @@ import { StatusPill } from "@/components/status-pill";
 import { SelectField, TextField } from "@/components/forms/form-field";
 import { SubmitButton } from "@/components/forms/submit-button";
 import {
+  createBuilderProjectRequestAction,
   createClientInviteAction,
   createDocumentAction,
   createProjectAction,
@@ -185,7 +186,9 @@ export function ProjectsWorkspace({
             "client-already-accepted": "That client has already accepted their invite.",
             "client-not-found": "No client record was found for that project.",
             "create-client-invite-failed": "The client invite link could not be created.",
+            "create-request-failed": "The missing item request could not be created.",
             "no-organisation": "No builder workspace exists for this account yet. Open Builder setup to finish account setup.",
+            "publish-package-failed": "The handover package could not be published for this project.",
             "revoke-client-invite-failed": "The client invite link could not be revoked.",
             "project-credit-not-confirmed": "Confirm project credit use before creating the project.",
             "update-project-failed": "The project could not be updated.",
@@ -534,6 +537,7 @@ function ProjectEditPanel({
           <ProjectSideTools
             filteredProducts={filteredProducts}
             productQuery={productQuery}
+            projectId={project.id}
             setProductQuery={setProductQuery}
           />
         </div>
@@ -606,6 +610,7 @@ function SendPackagePanel({
           specification, warranties, and supplied documents before sending to the homeowner.
         </div>
         <form action={publishHandoverPackageAction} className="mt-5 flex justify-end">
+          <input name="projectId" type="hidden" value={project.id} />
           <SubmitButton icon={Send} label="Confirm and send package" />
         </form>
       </section>
@@ -624,10 +629,12 @@ function SendPackagePanel({
 function ProjectSideTools({
   filteredProducts,
   productQuery,
+  projectId,
   setProductQuery,
 }: {
   filteredProducts: ProductVersion[];
   productQuery: string;
+  projectId?: string;
   setProductQuery: (value: string) => void;
 }) {
   return (
@@ -655,13 +662,33 @@ function ProjectSideTools({
           </div>
         ))}
       </div>
-      <button
-        className="mt-4 inline-flex h-10 items-center gap-2 rounded-md border border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-        type="button"
-      >
-        <Plus className="size-4" />
-        Request missing item
-      </button>
+      {projectId ? (
+        <form action={createBuilderProjectRequestAction} className="mt-4 space-y-3">
+          <input name="projectId" type="hidden" value={projectId} />
+          <input name="requestType" type="hidden" value="product" />
+          <TextField label="Request product" name="title" defaultValue={productQuery} placeholder="Brand, model, or product name" required />
+          <TextField label="Location" name="location" placeholder="Kitchen, ensuite, exterior..." />
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">Details</span>
+            <textarea
+              className="mt-2 min-h-24 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-950 outline-none ring-cyan-700/20 placeholder:text-slate-400 focus:border-cyan-700 focus:ring-4"
+              name="details"
+              placeholder="What should admin look up or approve?"
+            />
+          </label>
+          <button
+            className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            type="submit"
+          >
+            <Plus className="size-4" />
+            Request missing item
+          </button>
+        </form>
+      ) : (
+        <p className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-600">
+          Save the project first, then request missing products from inside the project workspace.
+        </p>
+      )}
     </section>
   );
 }
