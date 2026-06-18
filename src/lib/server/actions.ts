@@ -70,6 +70,14 @@ function isMissingBillingTable(error: { message?: string; code?: string } | null
   );
 }
 
+function isMissingBillingRpc(error: { message?: string; code?: string } | null, functionName: string) {
+  return Boolean(
+    error?.code === "42883" ||
+      error?.message?.includes(functionName) ||
+      error?.message?.includes("Could not find the function"),
+  );
+}
+
 async function getProjectCreditAccount(input: {
   supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
   organisationId: string;
@@ -118,6 +126,26 @@ async function recordProjectCreditUse(input: {
 }) {
   if (!input.creditAccount.tableAvailable) {
     return;
+  }
+
+  const { error: rpcError } = await input.supabase.rpc("consume_project_credit", {
+    target_organisation_id: input.organisationId,
+    target_project_id: input.projectId,
+    event_notes: input.creditAccount.unlimited
+      ? "Unlimited test credits."
+      : "Project creation credit used.",
+  });
+
+  if (!rpcError) {
+    return;
+  }
+
+  if (rpcError.message?.includes("insufficient_project_credits")) {
+    redirect("/builder/projects?error=insufficient-project-credits");
+  }
+
+  if (!isMissingBillingRpc(rpcError, "consume_project_credit")) {
+    redirect("/builder/projects?error=credit-deduct-failed");
   }
 
   const balanceAfter = input.creditAccount.unlimited

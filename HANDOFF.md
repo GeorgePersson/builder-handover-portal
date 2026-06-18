@@ -302,6 +302,11 @@ Supabase is not configured.
   credit top-ups to `project_credit_accounts` with a ledger row in
   `project_credit_events`. It uses `SUPABASE_SERVICE_ROLE_KEY` because Stripe
   calls the webhook without a logged-in user.
+- The project-credit migration now includes database RPCs for atomic credit
+  consumption and Stripe purchase application:
+  `consume_project_credit(...)` and `apply_project_credit_purchase(...)`. Runtime
+  code prefers these RPCs when they exist and falls back to the older best-effort
+  path for databases that have not applied the migration yet.
 - Project-approving an extracted item in Supabase mode keeps it project-scoped.
   Platform admin global approval is the path that promotes reusable product
   records.
@@ -433,6 +438,7 @@ Supabase is not configured.
   form.
 - Lint/build check for Stripe webhook signature verification and credit top-up
   handling.
+- Lint/build check for billing RPC preference with fallback compatibility.
 - HTTP smoke check for unauthenticated `/builder/onboarding`: route returns
   `307` to `/login?next=%2Fbuilder%2Fonboarding` with Supabase auth active.
 - HTTP smoke check for unauthenticated
@@ -526,11 +532,9 @@ Both passed after the latest changes.
 6. Replace `POST /api/ai/product-draft` deterministic enrichment with the real
    source-backed AI/search workflow.
 7. Replace manual client invite links with real transactional email delivery.
-8. Replace best-effort checkout credit top-ups and project-credit deductions
-   with transactional Supabase RPCs before production billing.
-9. Add Stripe webhook event replay/testing notes and a billing admin view for
+8. Add Stripe webhook event replay/testing notes and a billing admin view for
    failed or partial credit events.
-10. Add a client-facing document preview/download history once signed URL
+9. Add a client-facing document preview/download history once signed URL
     behaviour is stable with real uploads.
 
 ## Good Resume Prompt

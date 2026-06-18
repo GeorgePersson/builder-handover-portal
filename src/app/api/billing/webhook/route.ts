@@ -55,6 +55,14 @@ function verifyStripeSignature(payload: string, signatureHeader: string, endpoin
   });
 }
 
+function isMissingBillingRpc(error: { message?: string; code?: string } | null) {
+  return Boolean(
+    error?.code === "42883" ||
+      error?.message?.includes("apply_project_credit_purchase") ||
+      error?.message?.includes("Could not find the function"),
+  );
+}
+
 export async function POST(request: Request) {
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
@@ -84,6 +92,22 @@ export async function POST(request: Request) {
   }
 
   const supabase = createSupabaseAdminClient();
+  const { error: rpcError } = await supabase.rpc("apply_project_credit_purchase", {
+    target_organisation_id: organisationId,
+    stripe_event: event.id,
+    stripe_customer: session.customer || null,
+    stripe_checkout_session: session.id,
+    credit_quantity: creditQuantity,
+  });
+
+  if (!rpcError) {
+    return Response.json({ received: true });
+  }
+
+  if (!isMissingBillingRpc(rpcError)) {
+    return Response.json({ error: "Could not apply credit purchase." }, { status: 500 });
+  }
+
   const { error: eventInsertError } = await supabase.from("project_credit_events").insert({
     organisation_id: organisationId,
     stripe_event_id: event.id,
