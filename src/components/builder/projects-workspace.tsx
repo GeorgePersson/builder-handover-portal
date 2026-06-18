@@ -30,6 +30,7 @@ import {
   createSpecificationUploadAction,
   publishHandoverPackageAction,
   revokeClientInviteAction,
+  sendClientInviteEmailAction,
   updateProjectAction,
 } from "@/lib/server/actions";
 import { formatDate } from "@/lib/utils";
@@ -185,7 +186,7 @@ export function ProjectsWorkspace({
         </header>
 
         <StatusBanner
-          draft={draft === "invite-created" || draft === "invite-revoked" ? undefined : draft}
+          draft={draft === "invite-created" || draft === "invite-revoked" || draft === "invite-email-sent" ? undefined : draft}
           error={error}
           errorMessages={{
             "client-already-accepted": "That client has already accepted their invite.",
@@ -196,7 +197,10 @@ export function ProjectsWorkspace({
             "create-client-invite-failed": "The client invite link could not be created.",
             "create-request-failed": "The missing item request could not be created.",
             "insufficient-project-credits": "This organisation does not have a project credit available yet.",
+            "invite-email-not-configured": "Invite link created, but email is not configured. Add RESEND_API_KEY and RESEND_FROM_EMAIL.",
+            "invite-email-send-failed": "Invite link created, but the email could not be sent. Use the manual link below.",
             "no-organisation": "No builder workspace exists for this account yet. Open Builder setup to finish account setup.",
+            "project-not-found": "That project could not be found.",
             "publish-package-failed": "The handover package could not be published for this project.",
             "revoke-client-invite-failed": "The client invite link could not be revoked.",
             "project-credit-not-confirmed": "Confirm project credit use before creating the project.",
@@ -205,6 +209,12 @@ export function ProjectsWorkspace({
           }}
           storage={storage}
         />
+
+        {draft === "invite-email-sent" ? (
+          <p className="mt-5 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm leading-6 text-emerald-800">
+            Client invite email sent. The client still needs to sign in with the invited email address.
+          </p>
+        ) : null}
 
         {invitePath ? (
           <div className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
@@ -483,13 +493,22 @@ function ProjectEditPanel({
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
               {project.clientInviteStatus === "accepted" ? null : (
-                <form action={createClientInviteAction}>
-                  <input name="projectId" type="hidden" value={project.id} />
-                  <SubmitButton
-                    icon={Link2}
-                    label={project.clientInviteStatus === "invited" ? "Regenerate invite" : "Create invite"}
-                  />
-                </form>
+                <>
+                  <form action={sendClientInviteEmailAction}>
+                    <input name="projectId" type="hidden" value={project.id} />
+                    <SubmitButton
+                      icon={Send}
+                      label={project.clientInviteStatus === "invited" ? "Resend invite email" : "Email invite"}
+                    />
+                  </form>
+                  <form action={createClientInviteAction}>
+                    <input name="projectId" type="hidden" value={project.id} />
+                    <SubmitButton
+                      icon={Link2}
+                      label={project.clientInviteStatus === "invited" ? "Regenerate link" : "Create link"}
+                    />
+                  </form>
+                </>
               )}
               {project.clientInviteStatus === "invited" ? (
                 <form action={revokeClientInviteAction}>

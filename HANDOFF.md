@@ -220,6 +220,9 @@ Supabase is not configured.
   shown to the builder for manual sending until transactional email is wired.
 - Builder projects can regenerate or revoke outstanding invite links. Invite
   status shows the original invite date plus a 14-day expiry window.
+- Builder projects can now send client invite emails through Resend from the
+  project workspace. The manual invite-link path remains as a fallback when
+  email delivery is not configured or fails.
 - Client invite acceptance is implemented at `/client/accept-invite`. It expects
   the client to be signed in through Supabase magic link, then calls the
   `accept_project_client_invite` RPC to attach `project_clients.user_id`, set
@@ -517,6 +520,9 @@ Both passed after the latest changes.
 - Add `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and
   `SUPABASE_SERVICE_ROLE_KEY` to
   `.env.local`.
+- Add `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, and `NEXT_PUBLIC_APP_URL` to
+  `.env.local` before testing client invite emails. `NEXT_PUBLIC_APP_URL`
+  should match the local or deployed app origin used in invite links.
 - Add `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and
   `NEXT_PUBLIC_STRIPE_PROJECT_CREDIT_PRICE_ID` to `.env.local` before testing
   hosted Checkout.
@@ -552,7 +558,8 @@ Both passed after the latest changes.
    no-column fallback once all environments have the field.
 6. Replace `POST /api/ai/product-draft` deterministic enrichment with the real
    source-backed AI/search workflow.
-7. Replace manual client invite links with real transactional email delivery.
+7. Test Resend client invite delivery against a verified sender domain and
+   decide final invite email copy.
 8. Test the Stripe Checkout/webhook flow against a real Stripe test account and
    confirm the `/admin/billing` manual adjustment path works for support
    recovery.

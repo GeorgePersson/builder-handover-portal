@@ -196,6 +196,90 @@ function hashInviteToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
 }
 
+function getAppBaseUrl() {
+  return (process.env.NEXT_PUBLIC_APP_URL || "http://127.0.0.1:3000").replace(/\/$/, "");
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function createInviteEmail(input: {
+  clientName: string;
+  projectName: string;
+  projectAddress: string;
+  acceptUrl: string;
+}) {
+  const safeClientName = escapeHtml(input.clientName || "there");
+  const safeProjectName = escapeHtml(input.projectName);
+  const safeProjectAddress = escapeHtml(input.projectAddress);
+  const safeAcceptUrl = escapeHtml(input.acceptUrl);
+
+  return {
+    subject: `Your handover package for ${input.projectName}`,
+    text: [
+      `Hi ${input.clientName || "there"},`,
+      "",
+      `Your builder has invited you to view the handover package for ${input.projectName}, ${input.projectAddress}.`,
+      "",
+      `Open your invite: ${input.acceptUrl}`,
+      "",
+      "You will need to sign in with the same email address this invite was sent to.",
+    ].join("\n"),
+    html: [
+      `<p>Hi ${safeClientName},</p>`,
+      `<p>Your builder has invited you to view the handover package for <strong>${safeProjectName}</strong>, ${safeProjectAddress}.</p>`,
+      `<p><a href="${safeAcceptUrl}">Open your handover invite</a></p>`,
+      "<p>You will need to sign in with the same email address this invite was sent to.</p>",
+    ].join(""),
+  };
+}
+
+async function sendResendEmail(input: {
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+  idempotencyKey: string;
+}) {
+  const apiKey = process.env.RESEND_API_KEY;
+  const from = process.env.RESEND_FROM_EMAIL;
+
+  if (!apiKey || !from) {
+    return { ok: false, reason: "invite-email-not-configured" };
+  }
+
+  try {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "Idempotency-Key": input.idempotencyKey,
+      },
+      body: JSON.stringify({
+        from,
+        to: [input.to],
+        subject: input.subject,
+        html: input.html,
+        text: input.text,
+        tags: [
+          { name: "category", value: "client_invite" },
+        ],
+      }),
+    });
+
+    return { ok: response.ok, reason: response.ok ? null : "invite-email-send-failed" };
+  } catch {
+    return { ok: false, reason: "invite-email-send-failed" };
+  }
+}
+
 type ExtractedItemEditInput = {
   itemId: string;
   itemType: ExtractedHandoverItem["itemType"] | null;
@@ -542,6 +626,96 @@ export async function createClientInviteAction(formData: FormData) {
     projectId,
     inviteToken: token,
   });
+
+  redirect(`/builder/projects?${params.toString()}`);
+}
+
+export async function sendClientInviteEmailAction(formData: FormData) {
+  const projectId = getRequired(formData, "projectId");
+  const context = await getBuilderContext();
+
+  if (!context) {
+    redirect("/builder/projects?error=invite-requires-supabase");
+  }
+
+  const { data: project, error: projectError } = await context.supabase
+    .from("projects")
+    .select("id,name,address")
+    .eq("id", projectId)
+    .single();
+
+  if (projectError || !project) {
+    redirect("/builder/projects?error=project-not-found");
+  }
+
+  const { data: client, error: clientError } = await context.supabase
+    .from("project_clients")
+    .select("id,name,email,accepted_at")
+    .eq("project_id", projectId)
+    .limit(1)
+    .single();
+
+  if (clientError || !client) {
+    redirect("/builder/projects?error=client-not-found");
+  }
+
+  if (client.accepted_at) {
+    redirect("/builder/projects?error=client-already-accepted");
+  }
+
+  const token = createInviteToken();
+  const tokenHash = hashInviteToken(token);
+  const { error: inviteError } = await context.supabase
+    .from("project_clients")
+    .update({
+      invite_token_hash: tokenHash,
+      invited_at: new Date().toISOString(),
+    })
+    .eq("id", client.id);
+
+  if (inviteError) {
+    redirect("/builder/projects?error=create-client-invite-failed");
+  }
+
+  const acceptUrl = `${getAppBaseUrl()}/client/accept-invite?token=${encodeURIComponent(token)}`;
+  const email = createInviteEmail({
+    clientName: client.name,
+    projectName: project.name,
+    projectAddress: project.address,
+    acceptUrl,
+  });
+  const sendResult = await sendResendEmail({
+    to: client.email,
+    subject: email.subject,
+    html: email.html,
+    text: email.text,
+    idempotencyKey: `client-invite-${client.id}-${tokenHash.slice(0, 20)}`,
+  });
+
+  await context.supabase.from("audit_events").insert({
+    organisation_id: context.organisationId,
+    project_id: projectId,
+    actor_user_id: context.userId,
+    action: sendResult.ok ? "Client invite email sent" : "Client invite email failed",
+    detail: sendResult.ok
+      ? `Sent a handover invite email to ${client.email}.`
+      : `Created an invite link for ${client.email}, but email delivery failed.`,
+    metadata: {
+      email: client.email,
+      delivery: sendResult.ok ? "sent" : sendResult.reason,
+    },
+  });
+
+  const params = new URLSearchParams({
+    draft: sendResult.ok ? "invite-email-sent" : "invite-created",
+    storage: "supabase",
+    projectId,
+  });
+
+  if (!sendResult.ok) {
+    params.set("error", sendResult.reason || "invite-email-send-failed");
+    params.set("inviteToken", token);
+  }
 
   redirect(`/builder/projects?${params.toString()}`);
 }
