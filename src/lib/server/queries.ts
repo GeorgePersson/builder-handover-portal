@@ -61,6 +61,36 @@ export function isPackageReadyExtractedItem(item: Pick<ExtractedHandoverItem, "s
   return packageReadyStatuses.has(item.status);
 }
 
+export async function getBuilderCreditStatus(): Promise<{
+  email: string;
+  unlimited: boolean;
+  availableCredits: number | "infinite";
+  projectCost: number;
+}> {
+  if (!hasSupabaseConfig()) {
+    return {
+      email: "local scaffold",
+      unlimited: true,
+      availableCredits: "infinite",
+      projectCost: 1,
+    };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const email = user?.email || "";
+  const unlimited = email.toLowerCase() === "test@gmail.com";
+
+  return {
+    email,
+    unlimited,
+    availableCredits: unlimited ? "infinite" : 0,
+    projectCost: 1,
+  };
+}
+
 export async function hasBuilderWorkspace() {
   if (!hasSupabaseConfig()) {
     return true;
@@ -467,6 +497,8 @@ export async function getClientPortalData() {
   if (!project) {
     return {
       project: null,
+      projects: [],
+      projectSummaries: [],
       visibleDocuments: [],
       maintenanceTasks: [],
       publishedPackage: {
@@ -484,9 +516,27 @@ export async function getClientPortalData() {
     getMaintenanceTasks(project.id),
     getPublishedClientPackagePreview(project.id),
   ]);
+  const projectSummaries = await Promise.all(
+    projectsForViewer.map(async (candidate) => {
+      const [candidateDocuments, candidateTasks, candidatePackage] = await Promise.all([
+        getDocuments(candidate.id),
+        getMaintenanceTasks(candidate.id),
+        getPublishedClientPackagePreview(candidate.id),
+      ]);
+
+      return {
+        project: candidate,
+        visibleDocuments: candidateDocuments.filter((document) => document.visibleToClient),
+        maintenanceTasks: candidateTasks,
+        publishedPackage: candidatePackage,
+      };
+    }),
+  );
 
   return {
     project,
+    projects: projectsForViewer,
+    projectSummaries,
     visibleDocuments: documentsForProject.filter((document) => document.visibleToClient),
     maintenanceTasks: maintenanceTasksForProject,
     publishedPackage,

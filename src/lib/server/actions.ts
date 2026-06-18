@@ -3,7 +3,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { prepareSpecificationPdf, saveLocalUpload } from "@/lib/server/upload-utils";
+import { prepareProjectDocument, prepareSpecificationPdf, saveLocalUpload } from "@/lib/server/upload-utils";
 import {
   createLocalExtractionFromClientRequest,
   getLocalExtractedItem,
@@ -50,6 +50,10 @@ function getSafeBuilderNext(value: FormDataEntryValue | string | null) {
 
 function hasSupabaseConfig() {
   return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+}
+
+function hasUnlimitedProjectCredits(email?: string | null) {
+  return email?.toLowerCase() === "test@gmail.com";
 }
 
 function parseExtractedItemType(value: string): ExtractedHandoverItem["itemType"] | null {
@@ -225,6 +229,14 @@ export async function createProjectAction(formData: FormData) {
   const context = await getBuilderContext();
 
   if (context) {
+    const {
+      data: { user },
+    } = await context.supabase.auth.getUser();
+
+    if (!hasUnlimitedProjectCredits(user?.email) && formData.get("creditConfirmed") !== "on") {
+      redirect("/builder/projects?error=project-credit-not-confirmed");
+    }
+
     const { data: project, error: projectError } = await context.supabase
       .from("projects")
       .insert({
@@ -471,24 +483,39 @@ export async function acceptClientInviteAction(formData: FormData) {
 
 export async function createDocumentAction(formData: FormData) {
   const projectId = getRequired(formData, "projectId");
-  const name = getRequired(formData, "name");
+  const upload = await prepareProjectDocument(formData);
+  const name = getOptional(formData, "name") || upload?.fileName || "Project document";
   const documentType = getRequired(formData, "documentType");
-  const storagePath = getOptional(formData, "storagePath") || `pending/${name}`;
+  const storagePath = getOptional(formData, "storagePath") || upload?.storagePath || `pending/${name}`;
   const visibleToClient = formData.get("visibleToClient") === "on";
   const context = await getBuilderContext();
 
   if (context) {
+    if (upload) {
+      const { error: uploadError } = await context.supabase.storage
+        .from("handover-documents")
+        .upload(storagePath, upload.bytes, {
+          contentType: upload.type,
+          upsert: false,
+        });
+
+      if (uploadError) {
+        redirect("/builder/projects?error=upload-document-failed");
+      }
+    }
+
     const { error } = await context.supabase.from("documents").insert({
       project_id: projectId,
       uploaded_by: context.userId,
       name,
       document_type: documentType,
       storage_path: storagePath,
+      size_bytes: upload?.size || null,
       visible_to_client: visibleToClient,
     });
 
     if (error) {
-      redirect("/builder/documents?error=create-document-failed");
+      redirect("/builder/projects?error=create-document-failed");
     }
 
     await context.supabase.from("audit_events").insert({
@@ -498,9 +525,11 @@ export async function createDocumentAction(formData: FormData) {
       action: "Document registered",
       detail: `Registered ${name}.`,
     });
+  } else if (upload) {
+    await saveLocalUpload(storagePath, upload.bytes);
   }
 
-  redirect(`/builder/documents?draft=saved&storage=${hasSupabaseConfig() ? "supabase" : "stub"}`);
+  redirect(`/builder/projects?draft=document-saved&storage=${hasSupabaseConfig() ? "supabase" : "stub"}`);
 }
 
 export async function createProductAction(formData: FormData) {

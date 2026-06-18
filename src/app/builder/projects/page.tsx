@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { ProjectsWorkspace } from "@/components/builder/projects-workspace";
 import {
+  getBuilderCreditStatus,
+  getDocuments,
   getExtractedHandoverItems,
   getMaintenanceTasks,
   getProductVersions,
@@ -25,18 +27,22 @@ export default async function ProjectsPage({
     redirect("/builder/onboarding?next=/builder/projects");
   }
 
-  const [projects, specifications, extractedItems, maintenanceTasks, productVersions] =
+  const [projects, specifications, extractedItems, maintenanceTasks, productVersions, documents, creditStatus] =
     await Promise.all([
       getProjects(),
       getSpecificationUploads(),
       getExtractedHandoverItems(),
       getMaintenanceTasks(),
       getProductVersions(),
+      getDocuments(),
+      getBuilderCreditStatus(),
     ]);
 
   return (
     <ProjectsWorkspace
+      creditStatus={creditStatus}
       draft={params.draft}
+      documents={documents}
       error={params.error}
       extractedItems={extractedItems}
       inviteToken={params.inviteToken}

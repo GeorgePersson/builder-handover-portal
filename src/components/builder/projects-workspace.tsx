@@ -24,6 +24,7 @@ import { SelectField, TextField } from "@/components/forms/form-field";
 import { SubmitButton } from "@/components/forms/submit-button";
 import {
   createClientInviteAction,
+  createDocumentAction,
   createProjectAction,
   createSpecificationUploadAction,
   publishHandoverPackageAction,
@@ -33,6 +34,7 @@ import {
 import { formatDate } from "@/lib/utils";
 import type {
   ExtractedHandoverItem,
+  HandoverDocument,
   MaintenanceTask,
   ProductVersion,
   Project,
@@ -44,6 +46,13 @@ type ProjectsWorkspaceProps = {
   error?: string;
   storage?: string;
   inviteToken?: string;
+  creditStatus: {
+    email: string;
+    unlimited: boolean;
+    availableCredits: number | "infinite";
+    projectCost: number;
+  };
+  documents: HandoverDocument[];
   projects: Project[];
   specifications: SpecificationUpload[];
   extractedItems: ExtractedHandoverItem[];
@@ -70,6 +79,8 @@ export function ProjectsWorkspace({
   error,
   storage,
   inviteToken,
+  creditStatus,
+  documents,
   projects,
   specifications,
   extractedItems,
@@ -94,16 +105,18 @@ export function ProjectsWorkspace({
         const readyItems = projectItems.filter((item) => packageReadyStatuses.has(item.status));
         const awaitingAdmin = projectItems.filter((item) => adminReviewStatuses.has(item.status));
         const tasks = maintenanceTasks.filter((task) => task.projectId === project.id);
+        const projectDocuments = documents.filter((document) => document.projectId === project.id);
 
         return {
           project,
           awaitingAdmin,
+          documents: projectDocuments,
           readyItems,
           specifications: specifications.filter((specification) => specification.projectId === project.id),
           tasks,
         };
       }),
-    [extractedItems, maintenanceTasks, projects, specifications],
+    [documents, extractedItems, maintenanceTasks, projects, specifications],
   );
 
   const selectedSnapshot = projectSnapshots.find((snapshot) => snapshot.project.id === selectedProject?.id) ?? null;
@@ -174,7 +187,9 @@ export function ProjectsWorkspace({
             "create-client-invite-failed": "The client invite link could not be created.",
             "no-organisation": "No builder workspace exists for this account yet. Open Builder setup to finish account setup.",
             "revoke-client-invite-failed": "The client invite link could not be revoked.",
+            "project-credit-not-confirmed": "Confirm project credit use before creating the project.",
             "update-project-failed": "The project could not be updated.",
+            "upload-document-failed": "The document file could not be uploaded.",
           }}
           storage={storage}
         />
@@ -193,8 +208,9 @@ export function ProjectsWorkspace({
           </div>
         ) : null}
 
-        <section className="mt-6 grid gap-4 md:grid-cols-4">
+        <section className="mt-6 grid gap-4 md:grid-cols-5">
           <Metric icon={PackageCheck} label="Projects" value={projects.length} />
+          <Metric icon={FileText} label="Client docs" value={documents.filter((document) => document.visibleToClient).length} />
           <Metric icon={Bot} label="Awaiting admin" value={projectSnapshots.reduce((sum, snapshot) => sum + snapshot.awaitingAdmin.length, 0)} />
           <Metric icon={Send} label="Package-ready items" value={projectSnapshots.reduce((sum, snapshot) => sum + snapshot.readyItems.length, 0)} />
           <Metric icon={CalendarCheck2} label="Maintenance tasks" value={maintenanceTasks.length} />
@@ -230,6 +246,9 @@ export function ProjectsWorkspace({
                   </p>
                   <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-600">
                     <span className="rounded-md bg-slate-100 px-2.5 py-1">{projectSpecs.length} spec uploads</span>
+                    <span className="rounded-md bg-slate-100 px-2.5 py-1">
+                      {documents.filter((document) => document.projectId === project.id).length} documents
+                    </span>
                     <span className="rounded-md bg-slate-100 px-2.5 py-1">{readyItems.length} package-ready</span>
                     <span className="rounded-md bg-slate-100 px-2.5 py-1">{tasks.length ? `${tasks.length} maintenance tasks` : "No maintenance tasks"}</span>
                     <span className="rounded-md bg-slate-100 px-2.5 py-1">Invite: {formatInviteStatus(project.clientInviteStatus, project.clientInvitedAt)}</span>
@@ -288,6 +307,7 @@ export function ProjectsWorkspace({
               {mode === "create" ? (
                 <ProjectCreateForm
                   filteredProducts={filteredProducts}
+                  creditStatus={creditStatus}
                   productQuery={productQuery}
                   setDirty={setIsDirty}
                   setProductQuery={setProductQuery}
@@ -315,11 +335,13 @@ export function ProjectsWorkspace({
 }
 
 function ProjectCreateForm({
+  creditStatus,
   filteredProducts,
   productQuery,
   setDirty,
   setProductQuery,
 }: {
+  creditStatus: ProjectsWorkspaceProps["creditStatus"];
   filteredProducts: ProductVersion[];
   productQuery: string;
   setDirty: (dirty: boolean) => void;
@@ -350,6 +372,26 @@ function ProjectCreateForm({
           If a PDF is attached, it is registered against the project after save. Extraction and review
           details will populate in this project workspace as they are processed.
         </div>
+        <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-slate-950">Project credit confirmation</p>
+              <p className="mt-1 text-sm leading-6 text-slate-600">
+                Creating a project uses {creditStatus.projectCost} project credit.{" "}
+                {creditStatus.unlimited
+                  ? `${creditStatus.email} has unlimited test credits.`
+                  : "Stripe credit purchasing will be connected before paid launch."}
+              </p>
+            </div>
+            <span className="w-fit rounded-md border border-cyan-200 bg-white px-2.5 py-1 text-xs font-semibold text-cyan-800">
+              {creditStatus.unlimited ? "Infinite" : `${creditStatus.availableCredits} credits`}
+            </span>
+          </div>
+          <label className="mt-4 flex gap-3 text-sm text-slate-700">
+            <input className="mt-1 size-4 accent-cyan-700" name="creditConfirmed" required type="checkbox" />
+            <span>I confirm this project can use one project credit.</span>
+          </label>
+        </div>
         <div className="mt-6 flex justify-end">
           <SubmitButton icon={Plus} label="Save project" />
         </div>
@@ -378,6 +420,7 @@ function ProjectEditPanel({
   setProductQuery: (value: string) => void;
   snapshot: {
     awaitingAdmin: ExtractedHandoverItem[];
+    documents: HandoverDocument[];
     readyItems: ExtractedHandoverItem[];
     specifications: SpecificationUpload[];
     tasks: MaintenanceTask[];
@@ -448,6 +491,46 @@ function ProjectEditPanel({
               ) : null}
             </div>
           </section>
+          <section className="rounded-lg border border-slate-200 p-5">
+            <h3 className="font-semibold text-slate-950">Client documents</h3>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Upload warranties, manuals, certificates, photos, or other files that the client should receive with this handover.
+            </p>
+            <form action={createDocumentAction} className="mt-4 space-y-4" onChange={() => setDirty(true)}>
+              <input name="projectId" type="hidden" value={project.id} />
+              <div className="grid gap-4 md:grid-cols-2">
+                <TextField label="Document name" name="name" placeholder="Window warranty schedule.pdf" />
+                <SelectField
+                  label="Document type"
+                  name="documentType"
+                  options={[
+                    { label: "Consent", value: "consent" },
+                    { label: "Manual", value: "manual" },
+                    { label: "Warranty", value: "warranty" },
+                    { label: "Producer statement", value: "producer_statement" },
+                    { label: "Photo", value: "photo" },
+                    { label: "Other", value: "other" },
+                  ]}
+                  required
+                />
+              </div>
+              <label className="block">
+                <span className="text-sm font-medium text-slate-700">Upload file</span>
+                <input
+                  className="mt-2 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-slate-700"
+                  name="documentFile"
+                  type="file"
+                />
+              </label>
+              <label className="flex gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+                <input className="mt-1 size-4 accent-cyan-700" defaultChecked name="visibleToClient" type="checkbox" />
+                <span>Show this document to the client in their handover portal.</span>
+              </label>
+              <div className="flex justify-end">
+                <SubmitButton icon={Upload} label="Save document" />
+              </div>
+            </form>
+          </section>
           <ProjectSideTools
             filteredProducts={filteredProducts}
             productQuery={productQuery}
@@ -460,6 +543,26 @@ function ProjectEditPanel({
         <ItemColumn icon={PackageCheck} items={snapshot.readyItems} title="Package-ready" empty="No pre-approved items yet." />
         <ItemColumn icon={Bot} items={snapshot.awaitingAdmin} title="Awaiting admin" empty="No admin review items." showNudge />
         <ItemColumn icon={FileText} items={manualItems} title="Manual or draft" empty="Manual entries will appear here." />
+      </section>
+
+      <section className="rounded-lg border border-slate-200 p-5">
+        <h3 className="font-semibold text-slate-950">Documents in this project</h3>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          {snapshot.documents.length ? snapshot.documents.map((document) => (
+            <div className="rounded-md border border-slate-200 p-4" key={document.id}>
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="font-medium text-slate-950">{document.name}</p>
+                  <p className="mt-1 text-sm capitalize text-slate-600">{document.type.replaceAll("_", " ")}</p>
+                </div>
+                <StatusPill variant={document.visibleToClient ? "client_visible" : "private"} />
+              </div>
+              <p className="mt-3 text-xs text-slate-500">
+                {document.size} - Uploaded {formatDate(document.uploadedAt)}
+              </p>
+            </div>
+          )) : <p className="text-sm text-slate-500">No client documents have been added yet.</p>}
+        </div>
       </section>
 
       <section className="rounded-lg border border-slate-200 p-5">

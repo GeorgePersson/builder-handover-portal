@@ -260,6 +260,17 @@ Supabase is not configured.
   maintenance tasks sorted to the bottom.
 - Builder Settings scaffold added at `/builder/settings` for organisation,
   users, client messaging, and builder review/liability confirmation settings.
+- Builder project workspace now includes client document upload/registration
+  inside each project edit modal. Uploaded documents can be marked
+  client-visible and are stored in the existing `handover-documents` Supabase
+  bucket when Supabase is configured.
+- Project creation now includes a project-credit confirmation panel. The
+  current implementation is a scaffold for Stripe-backed credits: creating a
+  project requires confirming one credit, while `test@gmail.com` receives
+  unlimited test credits.
+- Client portal now opens as a handover index. Clients see each assigned project
+  as a separate handover folder, then open a project to view client-visible
+  documents, published package items, and maintenance tasks.
 - Project-approving an extracted item in Supabase mode keeps it project-scoped.
   Platform admin global approval is the path that promotes reusable product
   records.
@@ -380,6 +391,9 @@ Supabase is not configured.
 - Lint/build check for the streamlined builder dashboard, project workspace
   modal, product-library filters, per-project maintenance cards, simplified
   sidebar, and settings scaffold.
+- Lint/build check for in-project document upload, client handover index,
+  project-credit confirmation, and the `test@gmail.com` unlimited-credit
+  scaffold.
 - HTTP smoke check for unauthenticated `/builder/onboarding`: route returns
   `307` to `/login?next=%2Fbuilder%2Fonboarding` with Supabase auth active.
 - HTTP smoke check for unauthenticated
@@ -473,6 +487,10 @@ Both passed after the latest changes.
    action still uses the existing global package publishing flow.
 9. Wire the in-modal product request button into persistent project/admin review
    data instead of leaving it as a visual affordance.
+10. Replace the project-credit scaffold with real Stripe checkout/customer
+    credit purchase flows and webhook-backed credit balance updates.
+11. Add document download links/signed URLs for client-visible files once the
+    storage access pattern is finalised.
 
 ## Good Resume Prompt
 
