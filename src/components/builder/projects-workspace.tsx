@@ -240,6 +240,7 @@ export function ProjectsWorkspace({
             "project-credit-not-confirmed": "Confirm project credit use before creating the project.",
             "update-project-failed": "The project could not be updated.",
             "upload-document-failed": "The document file could not be uploaded.",
+            "uploaded-document-download-failed": "The uploaded document could not be loaded for extraction retry.",
             "uploaded-document-not-found": "The uploaded document for that extraction job could not be found.",
           }}
           storage={storage}

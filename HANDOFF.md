@@ -366,6 +366,13 @@ Supabase is not configured.
   `ai_extraction_failed` audit logs in Supabase mode, and exposes failed-job
   retry controls in the project modal. Extraction output is mocked only and
   remains separate from homeowner-facing handover data.
+- Phase 4 AI extraction now uses real OpenAI Responses API structured output
+  when `OPENAI_API_KEY` is configured, with `OPENAI_EXTRACTION_MODEL` defaulting
+  to `gpt-5.1-mini`. Uploaded PDFs reuse the existing PDF/OCR text extractor,
+  CSVs use plain text extraction, and unsupported binaries are handled as
+  metadata-only inputs. If no API key is configured, the Phase 3 mock remains
+  the local fallback. Malformed/failed AI responses mark the job failed and
+  retryable; raw AI output remains in `extracted_items.raw_extracted_data` only.
 - Magic-link login scaffold at `/login`.
 
 ## Tested Demo Flow
@@ -491,6 +498,11 @@ Supabase is not configured.
   processing/completed/failed transitions, placeholder extracted item
   persistence, retry action wiring, and project-modal job/item display. Runtime
   Supabase upload/retry tests are queued in `TESTING_LOG.txt`.
+- Lint/build check for Phase 4 real AI extraction wiring: PDF/CSV text
+  preparation, OpenAI Responses API structured-output call, malformed response
+  handling, no-key mock fallback, retry-compatible failure path, and no
+  homeowner-facing raw AI exposure. Runtime OpenAI/Supabase tests are queued in
+  `TESTING_LOG.txt`.
 - HTTP smoke check for unauthenticated `/builder/onboarding`: route returns
   `307` to `/login?next=%2Fbuilder%2Fonboarding` with Supabase auth active.
 - HTTP smoke check for unauthenticated
@@ -584,9 +596,10 @@ Both passed after the latest changes.
 
 ## Next Best Work
 
-1. Continue Phase 4 of the controlled document workflow: replace or extend the
-   mocked extractor with real AI extraction, while keeping raw AI output
-   separate from approved homeowner-facing handover data.
+1. Continue Phase 5 of the controlled document workflow: match extracted items
+   against the verified product database before any web search, store match
+   confidence/reasons, and classify verified/needs-review/low-confidence/
+   unmatched states.
 2. Apply `docs/supabase-schema.sql` to a Supabase project and add env vars to
    `.env.local`.
 3. Continue improving PDF extraction for long, table-heavy specification files:

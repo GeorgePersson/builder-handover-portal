@@ -3,8 +3,16 @@
 import { createHash, randomBytes } from "node:crypto";
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { runMockDocumentExtraction } from "@/lib/server/document-extraction";
-import { prepareProjectDocument, prepareSpecificationPdf, saveLocalUpload } from "@/lib/server/upload-utils";
+import {
+  extractDocumentText,
+  runDocumentExtraction,
+} from "@/lib/server/document-extraction";
+import {
+  prepareProjectDocument,
+  prepareSpecificationPdf,
+  readLocalUpload,
+  saveLocalUpload,
+} from "@/lib/server/upload-utils";
 import {
   createLocalExtractionFromClientRequest,
   getLocalExtractedItem,
@@ -851,6 +859,7 @@ type WorkflowDocumentForExtraction = {
   originalFilename: string;
   fileType?: string;
   mimeType: string;
+  storagePath?: string;
 };
 
 async function insertWorkflowAuditLog(
@@ -875,6 +884,7 @@ async function processSupabaseDocumentExtractionJob(
   context: BuilderActionContext,
   input: {
     document: WorkflowDocumentForExtraction;
+    bytes?: Buffer;
     jobId?: string;
     retryCount?: number;
   },
@@ -926,39 +936,58 @@ async function processSupabaseDocumentExtractionJob(
     metadata: {
       extraction_job_id: activeJobId,
       uploaded_document_id: input.document.id,
-      extractor: "mock_phase_3",
+      extractor: process.env.OPENAI_API_KEY ? "openai_phase_4" : "mock_phase_3",
     },
   });
 
   try {
-    const extractedItems = runMockDocumentExtraction({
+    let documentText = "";
+    let documentTextMetadata: Record<string, unknown> = {};
+
+    if (input.bytes) {
+      const extractedText = await extractDocumentText({
+        bytes: input.bytes,
+        fileName: input.document.originalFilename,
+        fileType: input.document.fileType,
+        mimeType: input.document.mimeType,
+      });
+      documentText = extractedText.text;
+      documentTextMetadata = extractedText.metadata;
+    }
+
+    const extraction = await runDocumentExtraction({
       jobId: activeJobId,
       document: input.document,
+      documentText,
     });
+    const extractedItems = extraction.items;
 
     await context.supabase.from("extracted_items").delete().eq("extraction_job_id", activeJobId);
-    const { error: itemError } = await context.supabase.from("extracted_items").insert(
-      extractedItems.map((item) => ({
-        project_id: item.projectId,
-        source_document_id: item.sourceDocumentId,
-        extraction_job_id: item.extractionJobId,
-        raw_extracted_data: item.rawExtractedData,
-        product_name: item.productName || null,
-        brand: item.brand || null,
-        model: item.model || null,
-        category: item.category || null,
-        supplier: item.supplier || null,
-        location: item.location || null,
-        warranty_text: item.warrantyText || null,
-        maintenance_text: item.maintenanceText || null,
-        confidence_score: item.confidenceScore,
-        match_status: item.matchStatus,
-        review_status: item.reviewStatus,
-      })),
-    );
 
-    if (itemError) {
-      throw new Error(itemError.message);
+    if (extractedItems.length > 0) {
+      const { error: itemError } = await context.supabase.from("extracted_items").insert(
+        extractedItems.map((item) => ({
+          project_id: item.projectId,
+          source_document_id: item.sourceDocumentId,
+          extraction_job_id: item.extractionJobId,
+          raw_extracted_data: item.rawExtractedData,
+          product_name: item.productName || null,
+          brand: item.brand || null,
+          model: item.model || null,
+          category: item.category || null,
+          supplier: item.supplier || null,
+          location: item.location || null,
+          warranty_text: item.warrantyText || null,
+          maintenance_text: item.maintenanceText || null,
+          confidence_score: item.confidenceScore,
+          match_status: item.matchStatus,
+          review_status: item.reviewStatus,
+        })),
+      );
+
+      if (itemError) {
+        throw new Error(itemError.message);
+      }
     }
 
     const completedAt = new Date().toISOString();
@@ -978,7 +1007,8 @@ async function processSupabaseDocumentExtractionJob(
         extraction_job_id: activeJobId,
         uploaded_document_id: input.document.id,
         extracted_item_count: extractedItems.length,
-        extractor: "mock_phase_3",
+        extractor: extraction.extractor,
+        document_text: documentTextMetadata,
       },
     });
   } catch (error) {
@@ -1001,7 +1031,7 @@ async function processSupabaseDocumentExtractionJob(
         extraction_job_id: activeJobId,
         uploaded_document_id: input.document.id,
         error_message: message,
-        extractor: "mock_phase_3",
+        extractor: process.env.OPENAI_API_KEY ? "openai_phase_4" : "mock_phase_3",
       },
     });
   }
@@ -1009,6 +1039,7 @@ async function processSupabaseDocumentExtractionJob(
 
 async function processLocalDocumentExtractionJob(input: {
   document: WorkflowDocumentForExtraction;
+  bytes?: Buffer;
   jobId?: string;
   retryCount?: number;
 }) {
@@ -1039,10 +1070,24 @@ async function processLocalDocumentExtractionJob(input: {
   await updateLocalUploadedDocumentStatus(input.document.id, "processing");
 
   try {
-    const extractedItems = runMockDocumentExtraction({
+    let documentText = "";
+
+    if (input.bytes) {
+      const extractedText = await extractDocumentText({
+        bytes: input.bytes,
+        fileName: input.document.originalFilename,
+        fileType: input.document.fileType,
+        mimeType: input.document.mimeType,
+      });
+      documentText = extractedText.text;
+    }
+
+    const extraction = await runDocumentExtraction({
       jobId: activeJobId,
       document: input.document,
+      documentText,
     });
+    const extractedItems = extraction.items;
 
     await saveLocalExtractedWorkflowItems(extractedItems);
     await updateLocalDocumentExtractionJob(activeJobId, {
@@ -1169,12 +1214,14 @@ export async function createDocumentAction(formData: FormData) {
 
       if (uploadedDocumentId) {
         await processSupabaseDocumentExtractionJob(context, {
+          bytes: upload.bytes,
           document: {
             id: uploadedDocumentId,
             projectId,
             originalFilename: upload.fileName,
             fileType: upload.fileType,
             mimeType: upload.type,
+            storagePath,
           },
         });
       }
@@ -1191,12 +1238,14 @@ export async function createDocumentAction(formData: FormData) {
       uploadedBy: "local-scaffold",
     });
     await processLocalDocumentExtractionJob({
+      bytes: upload.bytes,
       document: {
         id: uploadedDocument.id,
         projectId: uploadedDocument.projectId,
         originalFilename: uploadedDocument.originalFilename,
         fileType: uploadedDocument.fileType,
         mimeType: uploadedDocument.mimeType,
+        storagePath: uploadedDocument.storagePath,
       },
     });
   }
@@ -1236,7 +1285,7 @@ export async function retryDocumentExtractionJobAction(formData: FormData) {
 
     const { data: document, error: documentError } = await context.supabase
       .from("uploaded_documents")
-      .select("id,project_id,original_filename,file_type,mime_type")
+      .select("id,project_id,original_filename,file_type,mime_type,storage_path")
       .eq("id", job.uploaded_document_id)
       .single();
 
@@ -1244,7 +1293,18 @@ export async function retryDocumentExtractionJobAction(formData: FormData) {
       redirect("/builder/projects?error=uploaded-document-not-found");
     }
 
+    const { data: blob, error: downloadError } = await context.supabase.storage
+      .from("handover-documents")
+      .download(document.storage_path);
+
+    if (downloadError || !blob) {
+      redirect("/builder/projects?error=uploaded-document-download-failed");
+    }
+
+    const bytes = Buffer.from(await blob.arrayBuffer());
+
     await processSupabaseDocumentExtractionJob(context, {
+      bytes,
       jobId: job.id,
       retryCount: Number(job.retry_count || 0) + 1,
       document: {
@@ -1253,6 +1313,7 @@ export async function retryDocumentExtractionJobAction(formData: FormData) {
         originalFilename: document.original_filename,
         fileType: document.file_type || undefined,
         mimeType: document.mime_type,
+        storagePath: document.storage_path,
       },
     });
   } else {
@@ -1276,7 +1337,10 @@ export async function retryDocumentExtractionJobAction(formData: FormData) {
       redirect("/builder/projects?error=uploaded-document-not-found");
     }
 
+    const bytes = await readLocalUpload(document.storagePath);
+
     await processLocalDocumentExtractionJob({
+      bytes,
       jobId: job.id,
       retryCount: job.retryCount + 1,
       document: {
@@ -1285,6 +1349,7 @@ export async function retryDocumentExtractionJobAction(formData: FormData) {
         originalFilename: document.originalFilename,
         fileType: document.fileType,
         mimeType: document.mimeType,
+        storagePath: document.storagePath,
       },
     });
   }

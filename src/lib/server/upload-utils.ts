@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const maxPdfSizeBytes = 30 * 1024 * 1024;
@@ -106,4 +106,17 @@ export async function saveLocalUpload(storagePath: string, bytes: Buffer) {
   await mkdir(path.dirname(resolvedTarget), { recursive: true });
   await writeFile(resolvedTarget, bytes);
   return resolvedTarget;
+}
+
+export async function readLocalUpload(storagePath: string) {
+  const uploadRoot = path.join(process.cwd(), ".local-uploads");
+  const targetPath = path.join(uploadRoot, storagePath);
+  const resolvedRoot = path.resolve(uploadRoot);
+  const resolvedTarget = path.resolve(targetPath);
+
+  if (!resolvedTarget.startsWith(resolvedRoot)) {
+    throw new Error("Invalid upload path.");
+  }
+
+  return readFile(resolvedTarget);
 }

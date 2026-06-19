@@ -126,6 +126,33 @@ Pending Tests
    Notes: With the same fail-extraction filename, the mocked retry will keep
    failing by design.
 
+9. Date added: 2026-06-19
+   Area: Phase 4 real AI extraction
+   What to test: With OPENAI_API_KEY set, uploaded PDFs/CSVs use real AI extraction instead of the mock.
+   Steps:
+   - Add OPENAI_API_KEY to .env.local.
+   - Optional: set OPENAI_EXTRACTION_MODEL if you want a different model.
+   - Restart the dev server.
+   - Upload a PDF or CSV with product/specification text in /builder/projects.
+   - Reopen or refresh the project modal.
+   Expected result: The extraction job completes, extracted items reflect the
+   document text, raw data is stored only in extracted_items, and homeowner pages
+   do not show these raw AI items.
+   Result:
+   Notes: Without OPENAI_API_KEY, the app intentionally falls back to the Phase 3 mock.
+
+10. Date added: 2026-06-19
+   Area: Phase 4 malformed/failed AI handling
+   What to test: AI extraction failure marks the job failed and retryable.
+   Steps:
+   - Temporarily set OPENAI_EXTRACTION_MODEL to an invalid model value, or remove
+     OPENAI_API_KEY after creating a failed job scenario.
+   - Upload or retry a document extraction.
+   Expected result: The job is marked Failed, the document processing status is
+   Failed, an error message appears, and retry remains available.
+   Result:
+   Notes:
+
 Tested
 
 - No manual tests recorded yet.
