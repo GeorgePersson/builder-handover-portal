@@ -29,11 +29,14 @@ import {
 import {
   applyLocalProductMatches,
   getLocalDocumentExtractionJobs,
+  getLocalExtractedWorkflowItem,
   getLocalUploadedDocuments,
   saveLocalDocumentExtractionJob,
   saveLocalExtractedWorkflowItems,
+  saveLocalItemReviewAction,
   saveLocalUploadedDocument,
   updateLocalDocumentExtractionJob,
+  updateLocalExtractedWorkflowItemReview,
   updateLocalUploadedDocumentStatus,
 } from "@/lib/server/local-store/uploaded-documents";
 import {
@@ -44,7 +47,11 @@ import {
 import { getLocalGlobalProducts, upsertLocalGlobalProductFromExtractedItem } from "@/lib/server/local-store/products";
 import { enrichExtractedProduct } from "@/lib/ai/source-enrichment";
 import type { ExtractedHandoverItem } from "@/lib/types";
-import type { ExtractedWorkflowItem } from "@/lib/document-workflow";
+import type {
+  ExtractedItemReviewStatus,
+  ExtractedWorkflowItem,
+  ItemReviewActionType,
+} from "@/lib/document-workflow";
 
 function getRequired(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -888,6 +895,204 @@ async function insertWorkflowAuditLog(
   });
 }
 
+type WorkflowReviewItem = {
+  id: string;
+  projectId: string;
+  reviewStatus: ExtractedItemReviewStatus;
+};
+
+type WorkflowReviewMutation = {
+  actionType: ItemReviewActionType;
+  nextReviewStatus?: ExtractedItemReviewStatus;
+  notes?: string;
+  metadata?: Record<string, unknown>;
+  itemUpdate?: Partial<{
+    productName: string | null;
+    brand: string | null;
+    model: string | null;
+    category: string | null;
+    supplier: string | null;
+    location: string | null;
+    warrantyText: string | null;
+    maintenanceText: string | null;
+    reviewStatus: ExtractedItemReviewStatus;
+    approvedBy: string | null;
+    approvedAt: string | null;
+    excludedAt: string | null;
+    exclusionReason: string | null;
+  }>;
+};
+
+function redirectWorkflowReviewSuccess() {
+  redirect(`/builder/projects?draft=workflow-review-saved&storage=${hasSupabaseConfig() ? "supabase" : "stub"}`);
+}
+
+function redirectWorkflowReviewError(error: string): never {
+  redirect(`/builder/projects?error=${error}`);
+}
+
+async function getSupabaseWorkflowReviewItem(
+  context: BuilderActionContext,
+  itemId: string,
+): Promise<WorkflowReviewItem> {
+  const { data: item, error: itemError } = await context.supabase
+    .from("extracted_items")
+    .select("id,project_id,review_status")
+    .eq("id", itemId)
+    .single();
+
+  if (itemError || !item) {
+    redirectWorkflowReviewError("workflow-item-not-found");
+  }
+
+  const { data: project, error: projectError } = await context.supabase
+    .from("projects")
+    .select("id")
+    .eq("id", item.project_id)
+    .eq("organisation_id", context.organisationId)
+    .single();
+
+  if (projectError || !project) {
+    redirectWorkflowReviewError("project-not-found");
+  }
+
+  return {
+    id: item.id,
+    projectId: item.project_id,
+    reviewStatus: item.review_status,
+  };
+}
+
+async function recordSupabaseWorkflowReview(
+  context: BuilderActionContext,
+  item: WorkflowReviewItem,
+  mutation: WorkflowReviewMutation,
+) {
+  const nextReviewStatus = mutation.nextReviewStatus || item.reviewStatus;
+  const update = mutation.itemUpdate;
+
+  if (update) {
+    const updatePayload: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
+    };
+
+    if ("productName" in update) updatePayload.product_name = update.productName;
+    if ("brand" in update) updatePayload.brand = update.brand;
+    if ("model" in update) updatePayload.model = update.model;
+    if ("category" in update) updatePayload.category = update.category;
+    if ("supplier" in update) updatePayload.supplier = update.supplier;
+    if ("location" in update) updatePayload.location = update.location;
+    if ("warrantyText" in update) updatePayload.warranty_text = update.warrantyText;
+    if ("maintenanceText" in update) updatePayload.maintenance_text = update.maintenanceText;
+    if ("reviewStatus" in update) updatePayload.review_status = update.reviewStatus;
+    if ("approvedBy" in update) {
+      updatePayload.approved_by = update.approvedBy === "__current_user__" ? context.userId : update.approvedBy;
+    }
+    if ("approvedAt" in update) updatePayload.approved_at = update.approvedAt;
+    if ("excludedAt" in update) updatePayload.excluded_at = update.excludedAt;
+    if ("exclusionReason" in update) updatePayload.exclusion_reason = update.exclusionReason;
+
+    const { error: updateError } = await context.supabase
+      .from("extracted_items")
+      .update(updatePayload)
+      .eq("id", item.id);
+
+    if (updateError) {
+      redirectWorkflowReviewError("workflow-review-update-failed");
+    }
+  }
+
+  const { error: actionError } = await context.supabase.from("item_review_actions").insert({
+    project_id: item.projectId,
+    extracted_item_id: item.id,
+    action_type: mutation.actionType,
+    action_by: context.userId,
+    previous_review_status: item.reviewStatus,
+    next_review_status: nextReviewStatus,
+    notes: mutation.notes || null,
+    metadata: mutation.metadata || {},
+  });
+
+  if (actionError) {
+    redirectWorkflowReviewError("workflow-review-action-failed");
+  }
+
+  await insertWorkflowAuditLog(context, {
+    projectId: item.projectId,
+    eventType: `workflow_item_${mutation.actionType}`,
+    detail: `Workflow item review action: ${mutation.actionType.replaceAll("_", " ")}.`,
+    metadata: {
+      extracted_item_id: item.id,
+      previous_review_status: item.reviewStatus,
+      next_review_status: nextReviewStatus,
+      ...mutation.metadata,
+    },
+  });
+}
+
+async function recordLocalWorkflowReview(itemId: string, mutation: WorkflowReviewMutation) {
+  const item = await getLocalExtractedWorkflowItem(itemId);
+
+  if (!item) {
+    redirectWorkflowReviewError("workflow-item-not-found");
+  }
+
+  const nextReviewStatus = mutation.nextReviewStatus || item.reviewStatus;
+  const update = mutation.itemUpdate;
+
+  if (update) {
+    const localUpdate: Parameters<typeof updateLocalExtractedWorkflowItemReview>[1] = {};
+
+    if ("productName" in update) localUpdate.productName = update.productName === null ? undefined : update.productName;
+    if ("brand" in update) localUpdate.brand = update.brand === null ? undefined : update.brand;
+    if ("model" in update) localUpdate.model = update.model === null ? undefined : update.model;
+    if ("category" in update) localUpdate.category = update.category === null ? undefined : update.category;
+    if ("supplier" in update) localUpdate.supplier = update.supplier === null ? undefined : update.supplier;
+    if ("location" in update) localUpdate.location = update.location === null ? undefined : update.location;
+    if ("warrantyText" in update) localUpdate.warrantyText = update.warrantyText === null ? undefined : update.warrantyText;
+    if ("maintenanceText" in update) localUpdate.maintenanceText = update.maintenanceText === null ? undefined : update.maintenanceText;
+    if ("reviewStatus" in update) localUpdate.reviewStatus = update.reviewStatus;
+    if ("approvedBy" in update) {
+      localUpdate.approvedBy = update.approvedBy === null
+        ? undefined
+        : update.approvedBy === "__current_user__"
+          ? "local-scaffold"
+          : update.approvedBy;
+    }
+    if ("approvedAt" in update) localUpdate.approvedAt = update.approvedAt === null ? undefined : update.approvedAt;
+    if ("excludedAt" in update) localUpdate.excludedAt = update.excludedAt === null ? undefined : update.excludedAt;
+    if ("exclusionReason" in update) {
+      localUpdate.exclusionReason = update.exclusionReason === null ? undefined : update.exclusionReason;
+    }
+
+    await updateLocalExtractedWorkflowItemReview(item.id, localUpdate);
+  }
+
+  await saveLocalItemReviewAction({
+    projectId: item.projectId,
+    extractedItemId: item.id,
+    actionType: mutation.actionType,
+    actionBy: "local-scaffold",
+    previousReviewStatus: item.reviewStatus,
+    nextReviewStatus,
+    notes: mutation.notes,
+    metadata: mutation.metadata,
+  });
+}
+
+async function reviewWorkflowItem(itemId: string, mutation: WorkflowReviewMutation) {
+  const context = await getBuilderContext();
+
+  if (context) {
+    const item = await getSupabaseWorkflowReviewItem(context, itemId);
+    await recordSupabaseWorkflowReview(context, item, mutation);
+  } else {
+    await recordLocalWorkflowReview(itemId, mutation);
+  }
+
+  redirectWorkflowReviewSuccess();
+}
+
 async function getSupabaseVerifiedProductCandidates(context: BuilderActionContext): Promise<VerifiedProductCandidate[]> {
   const { data, error } = await context.supabase
     .from("product_versions")
@@ -1497,6 +1702,164 @@ export async function retryDocumentExtractionJobAction(formData: FormData) {
   }
 
   redirect(`/builder/projects?draft=extraction-retried&storage=${hasSupabaseConfig() ? "supabase" : "stub"}`);
+}
+
+export async function approveWorkflowItemAction(formData: FormData) {
+  const itemId = getRequired(formData, "itemId");
+  const now = new Date().toISOString();
+
+  await reviewWorkflowItem(itemId, {
+    actionType: "approved_as_correct",
+    nextReviewStatus: "approved",
+    notes: getOptional(formData, "notes") || "Builder approved extracted item as correct.",
+    itemUpdate: {
+      reviewStatus: "approved",
+      approvedAt: now,
+      approvedBy: "__current_user__",
+      excludedAt: null,
+      exclusionReason: null,
+    },
+  });
+}
+
+export async function editWorkflowItemAction(formData: FormData) {
+  const itemId = getRequired(formData, "itemId");
+  const productName = getRequired(formData, "productName");
+  const category = getOptional(formData, "category");
+
+  await reviewWorkflowItem(itemId, {
+    actionType: "edited",
+    nextReviewStatus: "edited_by_builder",
+    notes: getOptional(formData, "notes") || "Builder edited extracted item details.",
+    metadata: {
+      edited_fields: [
+        "product_name",
+        "brand",
+        "model",
+        "category",
+        "supplier",
+        "location",
+        "warranty_text",
+        "maintenance_text",
+      ],
+    },
+    itemUpdate: {
+      productName,
+      brand: getOptional(formData, "brand"),
+      model: getOptional(formData, "model"),
+      category,
+      supplier: getOptional(formData, "supplier"),
+      location: getOptional(formData, "location"),
+      warrantyText: getOptional(formData, "warrantyText"),
+      maintenanceText: getOptional(formData, "maintenanceText"),
+      reviewStatus: "edited_by_builder",
+      approvedAt: new Date().toISOString(),
+      approvedBy: "__current_user__",
+      excludedAt: null,
+      exclusionReason: null,
+    },
+  });
+}
+
+export async function excludeWorkflowItemAction(formData: FormData) {
+  const itemId = getRequired(formData, "itemId");
+  const reason = getRequired(formData, "exclusionReason");
+
+  await reviewWorkflowItem(itemId, {
+    actionType: "excluded",
+    nextReviewStatus: "excluded",
+    notes: reason,
+    itemUpdate: {
+      reviewStatus: "excluded",
+      approvedAt: null,
+      approvedBy: null,
+      excludedAt: new Date().toISOString(),
+      exclusionReason: reason,
+    },
+  });
+}
+
+export async function markWorkflowItemBuilderSuppliedAction(formData: FormData) {
+  const itemId = getRequired(formData, "itemId");
+
+  await reviewWorkflowItem(itemId, {
+    actionType: "marked_builder_supplied",
+    nextReviewStatus: "builder_supplied",
+    notes: getOptional(formData, "notes") || "Builder confirmed this item from their own supplied information.",
+    itemUpdate: {
+      reviewStatus: "builder_supplied",
+      approvedAt: new Date().toISOString(),
+      approvedBy: "__current_user__",
+      excludedAt: null,
+      exclusionReason: null,
+    },
+  });
+}
+
+export async function uploadWorkflowItemSupportingDocumentAction(formData: FormData) {
+  const itemId = getRequired(formData, "itemId");
+  const notes = getOptional(formData, "notes") || "Builder uploaded supporting evidence for review.";
+  const context = await getBuilderContext();
+  let upload: Awaited<ReturnType<typeof prepareProjectDocument>>;
+
+  try {
+    upload = await prepareProjectDocument(formData);
+  } catch {
+    redirectWorkflowReviewError("invalid-document-upload");
+  }
+
+  if (!upload) {
+    redirectWorkflowReviewError("invalid-document-upload");
+  }
+
+  if (context) {
+    const item = await getSupabaseWorkflowReviewItem(context, itemId);
+    const { error: uploadError } = await context.supabase.storage
+      .from("handover-documents")
+      .upload(upload.storagePath, upload.bytes, {
+        contentType: upload.type,
+        upsert: false,
+      });
+
+    if (uploadError) {
+      redirectWorkflowReviewError("upload-document-failed");
+    }
+
+    await recordSupabaseWorkflowReview(context, item, {
+      actionType: "supporting_document_uploaded",
+      nextReviewStatus: item.reviewStatus,
+      notes,
+      metadata: {
+        file_name: upload.fileName,
+        file_type: upload.fileType,
+        mime_type: upload.type,
+        size_bytes: upload.size,
+        storage_path: upload.storagePath,
+      },
+    });
+  } else {
+    await saveLocalUpload(upload.storagePath, upload.bytes);
+    const item = await getLocalExtractedWorkflowItem(itemId);
+
+    if (!item) {
+      redirectWorkflowReviewError("workflow-item-not-found");
+    }
+
+    await recordLocalWorkflowReview(itemId, {
+      actionType: "supporting_document_uploaded",
+      nextReviewStatus: item.reviewStatus,
+      notes,
+      metadata: {
+        file_name: upload.fileName,
+        file_type: upload.fileType,
+        mime_type: upload.type,
+        size_bytes: upload.size,
+        storage_path: upload.storagePath,
+      },
+    });
+  }
+
+  redirectWorkflowReviewSuccess();
 }
 
 export async function createProductAction(formData: FormData) {

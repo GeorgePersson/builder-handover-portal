@@ -515,6 +515,12 @@ Supabase is not configured.
   `product_matches` persistence, extracted item status updates, local scaffold
   parity, and project-modal match reason display. Runtime matching tests are
   queued in `TESTING_LOG.txt`.
+- Lint/build check for Phase 6 builder review queue: unresolved workflow item
+  filtering, approve/edit/exclude/builder-supplied/supporting-document actions,
+  `item_review_actions` persistence, workflow `audit_logs` writes, Supabase
+  project ownership checks, local scaffold parity, and queue removal for
+  resolved statuses. Runtime review-action tests are queued in
+  `TESTING_LOG.txt`.
 - HTTP smoke check for unauthenticated `/builder/onboarding`: route returns
   `307` to `/login?next=%2Fbuilder%2Fonboarding` with Supabase auth active.
 - HTTP smoke check for unauthenticated
@@ -608,9 +614,9 @@ Both passed after the latest changes.
 
 ## Next Best Work
 
-1. Continue Phase 6 of the controlled document workflow: build the builder
-   review queue/actions for needs-review, low-confidence, and unmatched workflow
-   items.
+1. Continue Phase 7 of the controlled document workflow: generate approved
+   workflow `handover_items` and ensure homeowner views only read approved,
+   published handover data.
 2. Apply `docs/supabase-schema.sql` to a Supabase project and add env vars to
    `.env.local`.
 3. Continue improving PDF extraction for long, table-heavy specification files:
@@ -635,10 +641,10 @@ Both passed after the latest changes.
 
 ## Good Resume Prompt
 
-Continue from `HANDOFF.md`. The current priority is to persist client missing
-item requests, route them through AI lookup into admin/global approval or
-project-only builder approval, then replace the deterministic source-enrichment
-scaffold with real Supabase/OpenAI services.
+Continue from `HANDOFF.md`. The current priority is Phase 7 of the controlled
+document workflow: convert approved workflow extracted items into
+homeowner-safe handover items while keeping raw AI output, unresolved items, and
+excluded items out of homeowner routes.
 
 ## Notes
 

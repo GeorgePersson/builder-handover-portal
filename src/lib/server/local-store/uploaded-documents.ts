@@ -2,7 +2,10 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type {
   DocumentExtractionJob,
+  ExtractedItemReviewStatus,
   ExtractedWorkflowItem,
+  ItemReviewAction,
+  ItemReviewActionType,
   ProductMatch,
   UploadedDocumentProcessingStatus,
   UploadedProjectDocument,
@@ -12,6 +15,7 @@ type LocalUploadedDocumentStore = {
   documents: UploadedProjectDocument[];
   extractionJobs: DocumentExtractionJob[];
   extractedItems: ExtractedWorkflowItem[];
+  itemReviewActions: ItemReviewAction[];
   productMatches: ProductMatch[];
 };
 
@@ -37,10 +41,11 @@ async function readStore(): Promise<LocalUploadedDocumentStore> {
       documents: parsed.documents || [],
       extractionJobs: parsed.extractionJobs || [],
       extractedItems: parsed.extractedItems || [],
+      itemReviewActions: parsed.itemReviewActions || [],
       productMatches: parsed.productMatches || [],
     };
   } catch {
-    return { documents: [], extractionJobs: [], extractedItems: [], productMatches: [] };
+    return { documents: [], extractionJobs: [], extractedItems: [], itemReviewActions: [], productMatches: [] };
   }
 }
 
@@ -104,6 +109,87 @@ export async function getLocalExtractedWorkflowItems(projectId?: string) {
   return projectId
     ? store.extractedItems.filter((item) => item.projectId === projectId)
     : store.extractedItems;
+}
+
+export async function getLocalExtractedWorkflowItem(itemId: string) {
+  const store = await readStore();
+  return store.extractedItems.find((item) => item.id === itemId) || null;
+}
+
+export async function updateLocalExtractedWorkflowItemReview(
+  itemId: string,
+  update: Partial<Pick<
+    ExtractedWorkflowItem,
+    | "productName"
+    | "brand"
+    | "model"
+    | "category"
+    | "supplier"
+    | "location"
+    | "warrantyText"
+    | "maintenanceText"
+    | "reviewStatus"
+    | "approvedBy"
+    | "approvedAt"
+    | "excludedAt"
+    | "exclusionReason"
+  >>,
+) {
+  const store = await readStore();
+  const timestamp = new Date().toISOString();
+  let updatedItem: ExtractedWorkflowItem | null = null;
+
+  const extractedItems = store.extractedItems.map((item) => {
+    if (item.id !== itemId) {
+      return item;
+    }
+
+    updatedItem = {
+      ...item,
+      ...update,
+      updatedAt: timestamp,
+    };
+    return updatedItem;
+  });
+
+  await writeStore({
+    ...store,
+    extractedItems,
+  });
+
+  return updatedItem;
+}
+
+export async function saveLocalItemReviewAction(input: {
+  projectId: string;
+  extractedItemId: string;
+  actionType: ItemReviewActionType;
+  actionBy?: string;
+  previousReviewStatus?: ExtractedItemReviewStatus;
+  nextReviewStatus?: ExtractedItemReviewStatus;
+  notes?: string;
+  metadata?: Record<string, unknown>;
+}) {
+  const store = await readStore();
+  const action: ItemReviewAction = {
+    id: `local-item-review-action-${Date.now()}`,
+    projectId: input.projectId,
+    extractedItemId: input.extractedItemId,
+    actionType: input.actionType,
+    actionBy: input.actionBy,
+    previousReviewStatus: input.previousReviewStatus,
+    nextReviewStatus: input.nextReviewStatus,
+    notes: input.notes,
+    metadata: input.metadata || {},
+    createdAt: new Date().toISOString(),
+  };
+
+  await writeStore({
+    ...store,
+    itemReviewActions: [action, ...store.itemReviewActions],
+  });
+
+  return action;
 }
 
 export async function getLocalProductMatches(projectId?: string) {

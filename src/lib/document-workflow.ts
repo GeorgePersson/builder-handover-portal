@@ -113,3 +113,16 @@ export type ProductMatch = {
   matchReason?: string;
   createdAt: string;
 };
+
+export type ItemReviewAction = {
+  id: string;
+  projectId: string;
+  extractedItemId: string;
+  actionType: ItemReviewActionType;
+  actionBy?: string;
+  previousReviewStatus?: ExtractedItemReviewStatus;
+  nextReviewStatus?: ExtractedItemReviewStatus;
+  notes?: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+};

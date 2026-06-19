@@ -34,11 +34,16 @@ import {
   createDocumentAction,
   createProjectAction,
   createSpecificationUploadAction,
+  approveWorkflowItemAction,
+  editWorkflowItemAction,
+  excludeWorkflowItemAction,
+  markWorkflowItemBuilderSuppliedAction,
   publishHandoverPackageAction,
   retryDocumentExtractionJobAction,
   revokeClientInviteAction,
   sendClientInviteEmailAction,
   updateProjectAction,
+  uploadWorkflowItemSupportingDocumentAction,
 } from "@/lib/server/actions";
 import { formatDate } from "@/lib/utils";
 import type {
@@ -79,6 +84,7 @@ type ModalMode = "create" | "edit" | "send" | "help" | null;
 
 const packageReadyStatuses = new Set(["accepted", "auto_approved", "builder_approved", "global_approved"]);
 const adminReviewStatuses = new Set(["admin_review", "edited", "proposed"]);
+const unresolvedWorkflowReviewStatuses = new Set(["needs_review", "low_confidence", "unmatched"]);
 
 const projectTypeOptions = [
   { label: "New residential build", value: "New residential build" },
@@ -249,6 +255,9 @@ export function ProjectsWorkspace({
             "upload-document-failed": "The document file could not be uploaded.",
             "uploaded-document-download-failed": "The uploaded document could not be loaded for extraction retry.",
             "uploaded-document-not-found": "The uploaded document for that extraction job could not be found.",
+            "workflow-item-not-found": "That extracted item could not be found.",
+            "workflow-review-action-failed": "The review action could not be saved.",
+            "workflow-review-update-failed": "The extracted item could not be updated.",
           }}
           storage={storage}
         />
@@ -497,6 +506,9 @@ function ProjectEditPanel({
   };
 }) {
   const manualItems = snapshot.awaitingAdmin.filter((item) => item.status !== "admin_review");
+  const unresolvedWorkflowItems = snapshot.workflowItems.filter((item) =>
+    unresolvedWorkflowReviewStatuses.has(item.reviewStatus),
+  );
 
   return (
     <div className="space-y-5">
@@ -625,6 +637,11 @@ function ProjectEditPanel({
         <ItemColumn icon={Bot} items={snapshot.awaitingAdmin} title="Awaiting admin" empty="No admin review items." showNudge />
         <ItemColumn icon={FileText} items={manualItems} title="Manual or draft" empty="Manual entries will appear here." />
       </section>
+
+      <WorkflowReviewQueue
+        items={unresolvedWorkflowItems}
+        matches={snapshot.workflowMatches}
+      />
 
       <section className="rounded-lg border border-slate-200 p-5">
         <h3 className="font-semibold text-slate-950">Documents in this project</h3>
@@ -761,6 +778,181 @@ function ProjectEditPanel({
         </div>
       </section>
     </div>
+  );
+}
+
+function WorkflowReviewQueue({
+  items,
+  matches,
+}: {
+  items: ExtractedWorkflowItem[];
+  matches: ProductMatch[];
+}) {
+  return (
+    <section className="rounded-lg border border-slate-200 p-5">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="font-semibold text-slate-950">Builder review queue</h3>
+          <p className="mt-1 text-sm leading-6 text-slate-600">
+            Resolve uncertain AI extracted items before they can move toward homeowner handover.
+          </p>
+        </div>
+        <span className="w-fit rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-900">
+          {items.length} unresolved
+        </span>
+      </div>
+
+      {items.length ? (
+        <div className="mt-5 space-y-4">
+          {items.map((item) => {
+            const match = matches.find((candidate) => candidate.extractedItemId === item.id);
+
+            return (
+              <article className="rounded-lg border border-amber-200 bg-amber-50 p-4" key={item.id}>
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {match ? <WorkflowMatchStatusPill status={match.matchStatus} /> : null}
+                      <span className="rounded-md bg-white px-2.5 py-1 text-xs font-semibold text-amber-900">
+                        {item.reviewStatus.replaceAll("_", " ")}
+                      </span>
+                      <span className="text-xs text-amber-800">{item.confidenceScore}% extraction confidence</span>
+                    </div>
+                    <h4 className="mt-3 font-semibold text-amber-950">{item.productName || "Unnamed extracted item"}</h4>
+                    <p className="mt-1 text-sm text-amber-900">
+                      {[item.brand, item.model, item.category, item.location].filter(Boolean).join(" - ") || "Details need review"}
+                    </p>
+                    {match?.matchReason ? (
+                      <p className="mt-2 max-w-3xl text-xs leading-5 text-amber-900">{match.matchReason}</p>
+                    ) : null}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <form action={approveWorkflowItemAction}>
+                      <input name="itemId" type="hidden" value={item.id} />
+                      <button
+                        className="inline-flex h-9 items-center rounded-md bg-emerald-700 px-3 text-xs font-semibold text-white hover:bg-emerald-800"
+                        type="submit"
+                      >
+                        Approve
+                      </button>
+                    </form>
+                    <form action={markWorkflowItemBuilderSuppliedAction}>
+                      <input name="itemId" type="hidden" value={item.id} />
+                      <button
+                        className="inline-flex h-9 items-center rounded-md border border-emerald-200 bg-white px-3 text-xs font-semibold text-emerald-800 hover:bg-emerald-50"
+                        type="submit"
+                      >
+                        Builder supplied
+                      </button>
+                    </form>
+                  </div>
+                </div>
+
+                <details className="mt-4 rounded-md border border-amber-200 bg-white">
+                  <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-slate-800">
+                    Edit extracted details
+                  </summary>
+                  <form action={editWorkflowItemAction} className="grid gap-4 border-t border-amber-100 p-3 md:grid-cols-2">
+                    <input name="itemId" type="hidden" value={item.id} />
+                    <TextField label="Product or item name" name="productName" defaultValue={item.productName} required />
+                    <TextField label="Brand" name="brand" defaultValue={item.brand} />
+                    <TextField label="Model" name="model" defaultValue={item.model} />
+                    <TextField label="Category" name="category" defaultValue={item.category} />
+                    <TextField label="Supplier" name="supplier" defaultValue={item.supplier} />
+                    <TextField label="Location" name="location" defaultValue={item.location} />
+                    <label className="block md:col-span-2">
+                      <span className="text-sm font-medium text-slate-700">Warranty information</span>
+                      <textarea
+                        className="mt-2 min-h-24 w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
+                        defaultValue={item.warrantyText}
+                        name="warrantyText"
+                      />
+                    </label>
+                    <label className="block md:col-span-2">
+                      <span className="text-sm font-medium text-slate-700">Maintenance information</span>
+                      <textarea
+                        className="mt-2 min-h-24 w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
+                        defaultValue={item.maintenanceText}
+                        name="maintenanceText"
+                      />
+                    </label>
+                    <label className="block md:col-span-2">
+                      <span className="text-sm font-medium text-slate-700">Review note</span>
+                      <input
+                        className="mt-2 h-10 w-full rounded-md border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
+                        name="notes"
+                        placeholder="What changed or why this is now ready?"
+                      />
+                    </label>
+                    <div className="flex justify-end md:col-span-2">
+                      <button
+                        className="inline-flex h-9 items-center rounded-md bg-slate-950 px-3 text-xs font-semibold text-white hover:bg-slate-800"
+                        type="submit"
+                      >
+                        Save edited item
+                      </button>
+                    </div>
+                  </form>
+                </details>
+
+                <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                  <form action={uploadWorkflowItemSupportingDocumentAction} className="rounded-md border border-amber-200 bg-white p-3">
+                    <input name="itemId" type="hidden" value={item.id} />
+                    <label className="block">
+                      <span className="text-sm font-medium text-slate-700">Supporting document</span>
+                      <input
+                        className="mt-2 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-slate-700"
+                        name="documentFile"
+                        type="file"
+                        accept=".csv,.doc,.docx,.gif,.jpeg,.jpg,.pdf,.png,.webp,.xls,.xlsx,application/pdf,image/gif,image/jpeg,image/png,image/webp,text/csv,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                      />
+                    </label>
+                    <input
+                      className="mt-3 h-10 w-full rounded-md border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
+                      name="notes"
+                      placeholder="Evidence note"
+                    />
+                    <div className="mt-3 flex justify-end">
+                      <button
+                        className="inline-flex h-9 items-center rounded-md border border-slate-200 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                        type="submit"
+                      >
+                        Attach evidence
+                      </button>
+                    </div>
+                  </form>
+
+                  <form action={excludeWorkflowItemAction} className="rounded-md border border-rose-200 bg-white p-3">
+                    <input name="itemId" type="hidden" value={item.id} />
+                    <label className="block">
+                      <span className="text-sm font-medium text-slate-700">Exclude from handover</span>
+                      <input
+                        className="mt-2 h-10 w-full rounded-md border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
+                        name="exclusionReason"
+                        placeholder="Reason this should not go to the homeowner"
+                        required
+                      />
+                    </label>
+                    <div className="mt-3 flex justify-end">
+                      <button
+                        className="inline-flex h-9 items-center rounded-md border border-rose-200 px-3 text-xs font-semibold text-rose-700 hover:bg-rose-50"
+                        type="submit"
+                      >
+                        Exclude item
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+          No unresolved workflow items for this project.
+        </p>
+      )}
+    </section>
   );
 }
 

@@ -175,6 +175,71 @@ Pending Tests
    Result:
    Notes:
 
+13. Date added: 2026-06-19
+   Area: Phase 6 builder review queue
+   What to test: Unresolved workflow items appear in the project review queue and disappear after resolution.
+   Steps:
+   - Upload a document that creates an unmatched, low-confidence, or needs-review item.
+   - Open /builder/projects, edit the project, and find Builder review queue.
+   - Click Approve on one unresolved item.
+   Expected result: The item is saved as approved, a review action is recorded,
+   and it no longer appears in the unresolved queue after the page refreshes.
+   Result:
+   Notes:
+
+14. Date added: 2026-06-19
+   Area: Phase 6 edit review action
+   What to test: Builder edits preserve source history while resolving the item.
+   Steps:
+   - Open an unresolved workflow item in the Builder review queue.
+   - Expand Edit extracted details.
+   - Change the product name, category, warranty, or maintenance text.
+   - Save edited item.
+   Expected result: The item updates to edited_by_builder, the edited details
+   remain on refresh, and the item_review_actions table/local store records an
+   edited action.
+   Result:
+   Notes:
+
+15. Date added: 2026-06-19
+   Area: Phase 6 exclude and builder-supplied actions
+   What to test: Excluded items and builder-supplied items move to resolved states.
+   Steps:
+   - Use Builder supplied on one unresolved item.
+   - Use Exclude item with a reason on another unresolved item.
+   Expected result: Builder-supplied items become builder_supplied with approval
+   metadata; excluded items become excluded with exclusion_reason/excluded_at.
+   Neither item remains in the unresolved queue.
+   Result:
+   Notes:
+
+16. Date added: 2026-06-19
+   Area: Phase 6 supporting evidence upload
+   What to test: A builder can attach supporting evidence without resolving the item.
+   Steps:
+   - Open an unresolved workflow item.
+   - Attach a supported PDF/image/Word/Excel/CSV file in Supporting document.
+   - Refresh the project.
+   Expected result: The file is saved to storage/local uploads and an
+   item_review_actions row records supporting_document_uploaded with file
+   metadata. The item remains unresolved until separately approved, edited,
+   excluded, or marked builder-supplied.
+   Result:
+   Notes:
+
+17. Date added: 2026-06-19
+   Area: Phase 6 review permissions
+   What to test: A builder cannot review another organisation's extracted item.
+   Steps:
+   - With Supabase enabled, tamper a review form itemId to an extracted_items id
+     from another organisation.
+   - Submit approve, edit, exclude, or supporting document upload.
+   Expected result: The action is rejected with project-not-found or
+   workflow-item-not-found, no extracted_items update is made, and no
+   item_review_actions row is created for the other organisation.
+   Result:
+   Notes: This is a desktop/devtools test.
+
 Tested
 
 - No manual tests recorded yet.
