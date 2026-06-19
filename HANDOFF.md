@@ -380,6 +380,15 @@ Supabase is not configured.
   reasons, and show those match reasons in the builder project modal. Unmatched,
   low-confidence, and probable matches remain builder-review states. No web
   search/source discovery is implemented in this phase.
+- Phase 10 hardening now prevents old or accidental publish paths from
+  bypassing the final project Send package modal. The legacy
+  `/builder/handover-package` route links back to `/builder/projects` for final
+  send checks, and builder review actions no longer regenerate homeowner-safe
+  workflow `handover_items` after a project is already published. Published
+  homeowner data only changes after the final publish/approval flow runs again.
+- Hunter's desktop QA checklist now lives at
+  `docs/hunter-testing-checklist.md`, with matching reminders in
+  `TESTING_LOG.txt`.
 - Magic-link login scaffold at `/login`.
 
 ## Tested Demo Flow
@@ -538,6 +547,10 @@ Supabase is not configured.
   requires the AI confirmation checkbox, and `publishHandoverPackageAction`
   stores `handover_approvals` metadata before publishing. Runtime approval
   tests are queued in `TESTING_LOG.txt`.
+- Lint/build check for Phase 10 hardening: legacy publish UI is routed through
+  the final project send modal, post-publish workflow review changes no longer
+  silently regenerate homeowner-facing handover items, and Hunter's manual
+  desktop checklist is documented in `docs/hunter-testing-checklist.md`.
 - HTTP smoke check for unauthenticated `/builder/onboarding`: route returns
   `307` to `/login?next=%2Fbuilder%2Fonboarding` with Supabase auth active.
 - HTTP smoke check for unauthenticated
@@ -633,9 +646,9 @@ Both passed after the latest changes.
 
 ## Next Best Work
 
-1. Continue Phase 10 of the controlled document workflow: harden tests, edge
-   cases, and cleanup around upload permissions, extraction retries, review
-   actions, publish blocking, homeowner filtering, and approval records.
+1. Run Hunter's desktop QA checklist in `docs/hunter-testing-checklist.md` and
+   move passing/failing notes from `TESTING_LOG.txt` as real Supabase/OpenAI
+   testing is completed.
 2. Apply `docs/supabase-schema.sql` to a Supabase project and add env vars to
    `.env.local`.
 3. Continue improving PDF extraction for long, table-heavy specification files:
@@ -660,9 +673,11 @@ Both passed after the latest changes.
 
 ## Good Resume Prompt
 
-Continue from `HANDOFF.md`. The current priority is Phase 10 of the controlled
-document workflow: harden tests, edge cases, and cleanup for the
-upload/extraction/review/publish/approval pipeline.
+Continue from `HANDOFF.md`. The controlled document workflow has completed
+Phase 10 hardening. The current priority is running Hunter's desktop QA
+checklist in `docs/hunter-testing-checklist.md`, recording results in
+`TESTING_LOG.txt`, then moving on to real Supabase/OpenAI/manual workflow
+testing.
 
 ## Notes
 

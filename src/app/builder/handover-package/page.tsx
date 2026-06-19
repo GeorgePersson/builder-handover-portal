@@ -3,12 +3,11 @@ import {
   CalendarCheck2,
   FileText,
   PackageCheck,
-  Send,
   Sparkles,
+  Send,
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { StatusBanner } from "@/components/status-banner";
-import { publishHandoverPackageAction } from "@/lib/server/actions";
 import { getAcceptedHandoverPackagePreview } from "@/lib/server/queries";
 
 export default async function HandoverPackagePage({
@@ -35,16 +34,16 @@ export default async function HandoverPackagePage({
                 <Sparkles className="size-4" />
                 Review extracted items
               </Link>
-              <form action={publishHandoverPackageAction}>
-                {project ? <input name="projectId" type="hidden" value={project.id} /> : null}
-                <button
-                  className="inline-flex h-10 items-center gap-2 rounded-md bg-cyan-700 px-3 text-sm font-semibold text-white hover:bg-cyan-800"
-                  disabled={total === 0}
-                >
-                  <Send className="size-4" />
-                  Publish to client portal
-                </button>
-              </form>
+              <Link
+                className={`inline-flex h-10 items-center gap-2 rounded-md px-3 text-sm font-semibold text-white ${
+                  total === 0 ? "pointer-events-none bg-slate-300" : "bg-cyan-700 hover:bg-cyan-800"
+                }`}
+                href="/builder/projects"
+                aria-disabled={total === 0}
+              >
+                <Send className="size-4" />
+                Open final send checks
+              </Link>
             </>
           }
           description="This preview shows package-ready items: known database matches, project-only builder approvals, and globally approved admin records."

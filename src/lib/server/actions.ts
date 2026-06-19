@@ -27,6 +27,7 @@ import {
   createLocalExtractionFromClientRequest,
   getLocalExtractedItems,
   getLocalExtractedItem,
+  getLocalPublishedItems,
   getLocalSpecificationUploads,
   publishLocalHandoverPackage,
   updateLocalExtractedItem,
@@ -1109,13 +1110,42 @@ async function reviewWorkflowItem(itemId: string, mutation: WorkflowReviewMutati
   if (context) {
     const item = await getSupabaseWorkflowReviewItem(context, itemId);
     await recordSupabaseWorkflowReview(context, item, mutation);
-    await generateSupabaseWorkflowHandoverItems(context, item.projectId);
+
+    if (!(await isSupabaseProjectPublished(context, item.projectId))) {
+      await generateSupabaseWorkflowHandoverItems(context, item.projectId);
+    }
   } else {
     const item = await recordLocalWorkflowReview(itemId, mutation);
-    await generateLocalWorkflowHandoverItems(item.projectId);
+
+    if (!(await isLocalProjectPublished(item.projectId))) {
+      await generateLocalWorkflowHandoverItems(item.projectId);
+    }
   }
 
   redirectWorkflowReviewSuccess();
+}
+
+async function isSupabaseProjectPublished(
+  context: BuilderActionContext,
+  projectId: string,
+) {
+  const { data: project, error } = await context.supabase
+    .from("projects")
+    .select("status,published_at")
+    .eq("id", projectId)
+    .eq("organisation_id", context.organisationId)
+    .single();
+
+  if (error || !project) {
+    redirect("/builder/projects?error=project-not-found");
+  }
+
+  return project.status === "published" && Boolean(project.published_at);
+}
+
+async function isLocalProjectPublished(projectId: string) {
+  const { publishedAt } = await getLocalPublishedItems(projectId);
+  return Boolean(publishedAt);
 }
 
 function inferWorkflowHandoverItemType(input: {

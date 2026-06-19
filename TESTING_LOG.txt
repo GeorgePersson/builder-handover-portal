@@ -370,6 +370,47 @@ Pending Tests
    Result:
    Notes:
 
+28. Date added: 2026-06-19
+   Area: Phase 10 full checklist
+   What to test: Run the consolidated desktop checklist for upload, AI, review,
+   publish blocking, final approval, homeowner visibility, and permissions.
+   Steps:
+   - Open docs/hunter-testing-checklist.md.
+   - Work through the sections that match your current setup.
+   - Fill in Result/Notes here for any failing or confusing checks.
+   Expected result: The workflow behaves as documented and any failed manual
+   checks are easy to replay from the checklist.
+   Result:
+   Notes:
+
+29. Date added: 2026-06-19
+   Area: Phase 10 published handover immutability
+   What to test: Builder review changes after publish do not silently alter the
+   homeowner-facing handover.
+   Steps:
+   - Publish a project with at least one approved workflow handover item.
+   - Open the homeowner portal and note the visible published item.
+   - Return to /builder/projects and approve, edit, exclude, or mark another
+     workflow item builder-supplied on the same project.
+   - Open the homeowner portal again before republishing.
+   Expected result: The already-published homeowner data stays unchanged until
+   the builder opens Send package and completes final approval/publish again.
+   Result:
+   Notes:
+
+30. Date added: 2026-06-19
+   Area: Phase 10 legacy handover route
+   What to test: The old handover preview route no longer bypasses the final
+   approval checkboxes.
+   Steps:
+   - Open /builder/handover-package.
+   - Use the send action in the page header.
+   Expected result: The action sends you back to /builder/projects so publishing
+   happens through the project Send package modal with readiness checks and
+   required final approval confirmations.
+   Result:
+   Notes:
+
 Tested
 
 - No manual tests recorded yet.
