@@ -10,6 +10,7 @@ import {
   getMaintenanceTasks,
   getProductVersions,
   getProjects,
+  getProductMatches,
   getSpecificationUploads,
   getUploadedProjectDocuments,
   hasBuilderWorkspace,
@@ -42,6 +43,7 @@ export default async function ProjectsPage({
     uploadedDocuments,
     extractionJobs,
     extractedWorkflowItems,
+    productMatches,
     creditStatus,
   ] =
     await Promise.all([
@@ -55,6 +57,7 @@ export default async function ProjectsPage({
       getUploadedProjectDocuments(),
       getDocumentExtractionJobs(),
       getExtractedWorkflowItems(),
+      getProductMatches(),
       getBuilderCreditStatus(),
     ]);
 
@@ -71,6 +74,7 @@ export default async function ProjectsPage({
       inviteToken={params.inviteToken}
       maintenanceTasks={maintenanceTasks}
       productVersions={productVersions}
+      productMatches={productMatches}
       projects={projects}
       specifications={specifications}
       storage={params.storage}

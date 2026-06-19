@@ -3,6 +3,7 @@ import path from "node:path";
 import type {
   DocumentExtractionJob,
   ExtractedWorkflowItem,
+  ProductMatch,
   UploadedDocumentProcessingStatus,
   UploadedProjectDocument,
 } from "@/lib/document-workflow";
@@ -11,6 +12,7 @@ type LocalUploadedDocumentStore = {
   documents: UploadedProjectDocument[];
   extractionJobs: DocumentExtractionJob[];
   extractedItems: ExtractedWorkflowItem[];
+  productMatches: ProductMatch[];
 };
 
 const storeRoot = path.join(process.cwd(), ".local-data");
@@ -35,9 +37,10 @@ async function readStore(): Promise<LocalUploadedDocumentStore> {
       documents: parsed.documents || [],
       extractionJobs: parsed.extractionJobs || [],
       extractedItems: parsed.extractedItems || [],
+      productMatches: parsed.productMatches || [],
     };
   } catch {
-    return { documents: [], extractionJobs: [], extractedItems: [] };
+    return { documents: [], extractionJobs: [], extractedItems: [], productMatches: [] };
   }
 }
 
@@ -101,6 +104,19 @@ export async function getLocalExtractedWorkflowItems(projectId?: string) {
   return projectId
     ? store.extractedItems.filter((item) => item.projectId === projectId)
     : store.extractedItems;
+}
+
+export async function getLocalProductMatches(projectId?: string) {
+  const store = await readStore();
+
+  if (!projectId) {
+    return store.productMatches;
+  }
+
+  const itemIds = new Set(
+    store.extractedItems.filter((item) => item.projectId === projectId).map((item) => item.id),
+  );
+  return store.productMatches.filter((match) => itemIds.has(match.extractedItemId));
 }
 
 export async function saveLocalDocumentExtractionJob(
@@ -173,4 +189,43 @@ export async function saveLocalExtractedWorkflowItems(
   });
 
   return extractedItems;
+}
+
+export async function applyLocalProductMatches(
+  matches: Array<Omit<ProductMatch, "id" | "createdAt">>,
+) {
+  const store = await readStore();
+  const timestamp = new Date().toISOString();
+  const productMatches = matches.map((match, index) => ({
+    ...match,
+    id: `local-product-match-${Date.now()}-${index}`,
+    createdAt: timestamp,
+  }));
+  const matchByItemId = new Map(matches.map((match) => [match.extractedItemId, match]));
+  const matchedItemIds = new Set(matches.map((match) => match.extractedItemId));
+
+  await writeStore({
+    ...store,
+    extractedItems: store.extractedItems.map((item) => {
+      const match = matchByItemId.get(item.id);
+
+      if (!match) {
+        return item;
+      }
+
+      return {
+        ...item,
+        matchStatus: match.matchStatus,
+        reviewStatus: match.matchStatus,
+        matchedProductId: match.matchedProductId,
+        updatedAt: timestamp,
+      };
+    }),
+    productMatches: [
+      ...productMatches,
+      ...store.productMatches.filter((match) => !matchedItemIds.has(match.extractedItemId)),
+    ],
+  });
+
+  return productMatches;
 }

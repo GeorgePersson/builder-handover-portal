@@ -2,11 +2,17 @@
 
 import { createHash, randomBytes } from "node:crypto";
 import { redirect } from "next/navigation";
+import { productVersions } from "@/lib/data";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
   extractDocumentText,
   runDocumentExtraction,
 } from "@/lib/server/document-extraction";
+import {
+  matchExtractedItemsToVerifiedProducts,
+  type ProductMatchResult,
+  type VerifiedProductCandidate,
+} from "@/lib/server/product-matching";
 import {
   prepareProjectDocument,
   prepareSpecificationPdf,
@@ -21,6 +27,7 @@ import {
   updateLocalExtractedItemStatus,
 } from "@/lib/server/local-store/specifications";
 import {
+  applyLocalProductMatches,
   getLocalDocumentExtractionJobs,
   getLocalUploadedDocuments,
   saveLocalDocumentExtractionJob,
@@ -34,9 +41,10 @@ import {
   saveLocalClientRequest,
   updateLocalClientRequestStatus,
 } from "@/lib/server/local-store/client-requests";
-import { upsertLocalGlobalProductFromExtractedItem } from "@/lib/server/local-store/products";
+import { getLocalGlobalProducts, upsertLocalGlobalProductFromExtractedItem } from "@/lib/server/local-store/products";
 import { enrichExtractedProduct } from "@/lib/ai/source-enrichment";
 import type { ExtractedHandoverItem } from "@/lib/types";
+import type { ExtractedWorkflowItem } from "@/lib/document-workflow";
 
 function getRequired(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -880,6 +888,91 @@ async function insertWorkflowAuditLog(
   });
 }
 
+async function getSupabaseVerifiedProductCandidates(context: BuilderActionContext): Promise<VerifiedProductCandidate[]> {
+  const { data, error } = await context.supabase
+    .from("product_versions")
+    .select("product_id,status,confidence_score,products(canonical_name,brand,category)")
+    .eq("status", "approved");
+
+  if (error || !data) {
+    return [];
+  }
+
+  return data.map((version) => {
+    const product = Array.isArray(version.products) ? version.products[0] : version.products;
+
+    return {
+      productId: version.product_id,
+      productName: product?.canonical_name || "",
+      brand: product?.brand || undefined,
+      category: product?.category || undefined,
+      confidenceScore: version.confidence_score,
+      status: version.status,
+    };
+  });
+}
+
+async function getLocalVerifiedProductCandidates(): Promise<VerifiedProductCandidate[]> {
+  const localProducts = await getLocalGlobalProducts();
+  const candidates = [...localProducts, ...productVersions];
+
+  return candidates.map((product) => ({
+    productId: product.id,
+    productName: product.productName,
+    brand: product.brand,
+    category: product.category,
+    confidenceScore: product.confidenceScore,
+    status: product.status,
+  }));
+}
+
+async function applySupabaseProductMatches(
+  context: BuilderActionContext,
+  matches: ProductMatchResult[],
+) {
+  for (const match of matches) {
+    const { error } = await context.supabase
+      .from("extracted_items")
+      .update({
+        match_status: match.matchStatus,
+        review_status: match.reviewStatus,
+        matched_product_id: match.matchedProductId || null,
+      })
+      .eq("id", match.extractedItemId);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+  }
+
+  if (matches.length === 0) {
+    return;
+  }
+
+  const { error: deleteError } = await context.supabase.from("product_matches").delete().in(
+    "extracted_item_id",
+    matches.map((match) => match.extractedItemId),
+  );
+
+  if (deleteError) {
+    throw new Error(deleteError.message);
+  }
+
+  const { error: insertError } = await context.supabase.from("product_matches").insert(
+    matches.map((match) => ({
+      extracted_item_id: match.extractedItemId,
+      matched_product_id: match.matchedProductId || null,
+      match_status: match.matchStatus,
+      match_confidence_score: match.matchConfidenceScore,
+      match_reason: match.matchReason,
+    })),
+  );
+
+  if (insertError) {
+    throw new Error(insertError.message);
+  }
+}
+
 async function processSupabaseDocumentExtractionJob(
   context: BuilderActionContext,
   input: {
@@ -964,8 +1057,10 @@ async function processSupabaseDocumentExtractionJob(
 
     await context.supabase.from("extracted_items").delete().eq("extraction_job_id", activeJobId);
 
+    let insertedItems: ExtractedWorkflowItem[] = [];
+
     if (extractedItems.length > 0) {
-      const { error: itemError } = await context.supabase.from("extracted_items").insert(
+      const { data: insertedRows, error: itemError } = await context.supabase.from("extracted_items").insert(
         extractedItems.map((item) => ({
           project_id: item.projectId,
           source_document_id: item.sourceDocumentId,
@@ -983,11 +1078,48 @@ async function processSupabaseDocumentExtractionJob(
           match_status: item.matchStatus,
           review_status: item.reviewStatus,
         })),
+      ).select(
+        "id,project_id,source_document_id,extraction_job_id,raw_extracted_data,product_name,brand,model,category,supplier,location,warranty_text,maintenance_text,confidence_score,match_status,review_status,matched_product_id,approved_by,approved_at,excluded_at,exclusion_reason,created_at,updated_at",
       );
 
       if (itemError) {
         throw new Error(itemError.message);
       }
+
+      insertedItems = (insertedRows || []).map((item) => ({
+        id: item.id,
+        projectId: item.project_id,
+        sourceDocumentId: item.source_document_id,
+        extractionJobId: item.extraction_job_id || undefined,
+        rawExtractedData: item.raw_extracted_data || {},
+        productName: item.product_name || undefined,
+        brand: item.brand || undefined,
+        model: item.model || undefined,
+        category: item.category || undefined,
+        supplier: item.supplier || undefined,
+        location: item.location || undefined,
+        warrantyText: item.warranty_text || undefined,
+        maintenanceText: item.maintenance_text || undefined,
+        confidenceScore: item.confidence_score,
+        matchStatus: item.match_status,
+        reviewStatus: item.review_status,
+        matchedProductId: item.matched_product_id || undefined,
+        approvedBy: item.approved_by || undefined,
+        approvedAt: item.approved_at || undefined,
+        excludedAt: item.excluded_at || undefined,
+        exclusionReason: item.exclusion_reason || undefined,
+        createdAt: item.created_at,
+        updatedAt: item.updated_at,
+      }));
+    }
+
+    let matchedItemCount = 0;
+
+    if (insertedItems.length > 0) {
+      const candidates = await getSupabaseVerifiedProductCandidates(context);
+      const matches = matchExtractedItemsToVerifiedProducts(insertedItems, candidates);
+      matchedItemCount = matches.filter((match) => match.matchedProductId).length;
+      await applySupabaseProductMatches(context, matches);
     }
 
     const completedAt = new Date().toISOString();
@@ -1007,6 +1139,7 @@ async function processSupabaseDocumentExtractionJob(
         extraction_job_id: activeJobId,
         uploaded_document_id: input.document.id,
         extracted_item_count: extractedItems.length,
+        matched_item_count: matchedItemCount,
         extractor: extraction.extractor,
         document_text: documentTextMetadata,
       },
@@ -1089,7 +1222,16 @@ async function processLocalDocumentExtractionJob(input: {
     });
     const extractedItems = extraction.items;
 
-    await saveLocalExtractedWorkflowItems(extractedItems);
+    const insertedItems = await saveLocalExtractedWorkflowItems(extractedItems);
+    const candidates = await getLocalVerifiedProductCandidates();
+    const matches = matchExtractedItemsToVerifiedProducts(insertedItems, candidates);
+    await applyLocalProductMatches(matches.map((match) => ({
+      extractedItemId: match.extractedItemId,
+      matchedProductId: match.matchedProductId,
+      matchStatus: match.matchStatus,
+      matchConfidenceScore: match.matchConfidenceScore,
+      matchReason: match.matchReason,
+    })));
     await updateLocalDocumentExtractionJob(activeJobId, {
       status: "completed",
       completedAt: new Date().toISOString(),

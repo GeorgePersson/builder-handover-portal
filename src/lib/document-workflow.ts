@@ -103,3 +103,13 @@ export type ExtractedWorkflowItem = {
   createdAt: string;
   updatedAt: string;
 };
+
+export type ProductMatch = {
+  id: string;
+  extractedItemId: string;
+  matchedProductId?: string;
+  matchStatus: ExtractedItemMatchStatus;
+  matchConfidenceScore: number;
+  matchReason?: string;
+  createdAt: string;
+};

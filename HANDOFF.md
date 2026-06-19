@@ -373,6 +373,13 @@ Supabase is not configured.
   metadata-only inputs. If no API key is configured, the Phase 3 mock remains
   the local fallback. Malformed/failed AI responses mark the job failed and
   retryable; raw AI output remains in `extracted_items.raw_extracted_data` only.
+- Phase 5 product matching now checks extracted workflow items against approved
+  local verified product records before any web search. Exact and fuzzy matches
+  update `extracted_items.match_status`, `review_status`, and
+  `matched_product_id`, create `product_matches` rows with confidence and match
+  reasons, and show those match reasons in the builder project modal. Unmatched,
+  low-confidence, and probable matches remain builder-review states. No web
+  search/source discovery is implemented in this phase.
 - Magic-link login scaffold at `/login`.
 
 ## Tested Demo Flow
@@ -503,6 +510,11 @@ Supabase is not configured.
   handling, no-key mock fallback, retry-compatible failure path, and no
   homeowner-facing raw AI exposure. Runtime OpenAI/Supabase tests are queued in
   `TESTING_LOG.txt`.
+- Lint/build check for Phase 5 product matching: approved-product candidate
+  loading, exact/fuzzy matching, low-confidence/unmatched classification,
+  `product_matches` persistence, extracted item status updates, local scaffold
+  parity, and project-modal match reason display. Runtime matching tests are
+  queued in `TESTING_LOG.txt`.
 - HTTP smoke check for unauthenticated `/builder/onboarding`: route returns
   `307` to `/login?next=%2Fbuilder%2Fonboarding` with Supabase auth active.
 - HTTP smoke check for unauthenticated
@@ -596,10 +608,9 @@ Both passed after the latest changes.
 
 ## Next Best Work
 
-1. Continue Phase 5 of the controlled document workflow: match extracted items
-   against the verified product database before any web search, store match
-   confidence/reasons, and classify verified/needs-review/low-confidence/
-   unmatched states.
+1. Continue Phase 6 of the controlled document workflow: build the builder
+   review queue/actions for needs-review, low-confidence, and unmatched workflow
+   items.
 2. Apply `docs/supabase-schema.sql` to a Supabase project and add env vars to
    `.env.local`.
 3. Continue improving PDF extraction for long, table-heavy specification files:

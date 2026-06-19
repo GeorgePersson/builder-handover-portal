@@ -21,6 +21,7 @@ import type {
 import type {
   DocumentExtractionJob,
   ExtractedWorkflowItem,
+  ProductMatch,
   UploadedProjectDocument,
 } from "@/lib/document-workflow";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -34,6 +35,7 @@ import { getLocalGlobalProducts } from "@/lib/server/local-store/products";
 import {
   getLocalDocumentExtractionJobs,
   getLocalExtractedWorkflowItems,
+  getLocalProductMatches,
   getLocalUploadedDocuments,
 } from "@/lib/server/local-store/uploaded-documents";
 
@@ -443,6 +445,38 @@ export async function getExtractedWorkflowItems(projectId?: string): Promise<Ext
     exclusionReason: item.exclusion_reason || undefined,
     createdAt: item.created_at,
     updatedAt: item.updated_at,
+  }));
+}
+
+export async function getProductMatches(projectId?: string): Promise<ProductMatch[]> {
+  if (!hasSupabaseConfig()) {
+    return getLocalProductMatches(projectId);
+  }
+
+  const supabase = await createSupabaseServerClient();
+  let query = supabase
+    .from("product_matches")
+    .select("id,extracted_item_id,matched_product_id,match_status,match_confidence_score,match_reason,created_at,extracted_items!inner(project_id)")
+    .order("created_at", { ascending: false });
+
+  if (projectId) {
+    query = query.eq("extracted_items.project_id", projectId);
+  }
+
+  const { data, error } = await query;
+
+  if (error || !data) {
+    return [];
+  }
+
+  return data.map((match) => ({
+    id: match.id,
+    extractedItemId: match.extracted_item_id,
+    matchedProductId: match.matched_product_id || undefined,
+    matchStatus: match.match_status,
+    matchConfidenceScore: match.match_confidence_score,
+    matchReason: match.match_reason || undefined,
+    createdAt: match.created_at,
   }));
 }
 

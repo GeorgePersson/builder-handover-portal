@@ -153,6 +153,28 @@ Pending Tests
    Result:
    Notes:
 
+11. Date added: 2026-06-19
+   Area: Phase 5 local product matching
+   What to test: Extracted items are checked against approved local product records before any web search.
+   Steps:
+   - Upload a PDF or CSV that mentions Linea Weatherboard and James Hardie.
+   - Reopen or refresh the project modal after extraction completes.
+   Expected result: The extracted item shows a verified or reviewable local
+   product match with match confidence and a match reason. No web search runs.
+   Result:
+   Notes:
+
+12. Date added: 2026-06-19
+   Area: Phase 5 unmatched and low-confidence matching
+   What to test: Unknown or weak extracted items stay in builder review states.
+   Steps:
+   - Upload a document with a vague product such as unknown bathroom fitting.
+   - Reopen or refresh the project modal after extraction completes.
+   Expected result: The item shows unmatched or low confidence, has a match
+   reason, and does not appear in the homeowner portal.
+   Result:
+   Notes:
+
 Tested
 
 - No manual tests recorded yet.

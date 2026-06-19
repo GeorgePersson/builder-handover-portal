@@ -25,6 +25,7 @@ import { SubmitButton } from "@/components/forms/submit-button";
 import type {
   DocumentExtractionJob,
   ExtractedWorkflowItem,
+  ProductMatch,
   UploadedProjectDocument,
 } from "@/lib/document-workflow";
 import {
@@ -70,6 +71,7 @@ type ProjectsWorkspaceProps = {
   extractionJobs: DocumentExtractionJob[];
   maintenanceTasks: MaintenanceTask[];
   productVersions: ProductVersion[];
+  productMatches: ProductMatch[];
   uploadedDocuments: UploadedProjectDocument[];
 };
 
@@ -102,6 +104,7 @@ export function ProjectsWorkspace({
   extractionJobs,
   maintenanceTasks,
   productVersions,
+  productMatches,
   uploadedDocuments,
 }: ProjectsWorkspaceProps) {
   const [mode, setMode] = useState<ModalMode>(null);
@@ -127,6 +130,8 @@ export function ProjectsWorkspace({
         const workflowDocuments = uploadedDocuments.filter((document) => document.projectId === project.id);
         const workflowJobs = extractionJobs.filter((job) => job.projectId === project.id);
         const workflowItems = extractedWorkflowItems.filter((item) => item.projectId === project.id);
+        const workflowItemIds = new Set(workflowItems.map((item) => item.id));
+        const workflowMatches = productMatches.filter((match) => workflowItemIds.has(match.extractedItemId));
 
         return {
           project,
@@ -139,6 +144,7 @@ export function ProjectsWorkspace({
           workflowDocuments,
           workflowItems,
           workflowJobs,
+          workflowMatches,
         };
       }),
     [
@@ -148,6 +154,7 @@ export function ProjectsWorkspace({
       extractedWorkflowItems,
       extractionJobs,
       maintenanceTasks,
+      productMatches,
       projects,
       specifications,
       uploadedDocuments,
@@ -486,6 +493,7 @@ function ProjectEditPanel({
     workflowDocuments: UploadedProjectDocument[];
     workflowItems: ExtractedWorkflowItem[];
     workflowJobs: DocumentExtractionJob[];
+    workflowMatches: ProductMatch[];
   };
 }) {
   const manualItems = snapshot.awaitingAdmin.filter((item) => item.status !== "admin_review");
@@ -674,10 +682,27 @@ function ProjectEditPanel({
                     <div className="mt-3 space-y-2">
                       {items.map((item) => (
                         <div className="rounded-md border border-amber-100 bg-amber-50 p-3" key={item.id}>
+                          {(() => {
+                            const match = snapshot.workflowMatches.find((candidate) => candidate.extractedItemId === item.id);
+
+                            return match ? (
+                              <div className="mb-2 flex flex-wrap items-center gap-2">
+                                <WorkflowMatchStatusPill status={match.matchStatus} />
+                                <span className="text-xs text-amber-800">{match.matchConfidenceScore}% match</span>
+                              </div>
+                            ) : null;
+                          })()}
                           <p className="text-sm font-semibold text-amber-950">{item.productName || "Extracted item"}</p>
                           <p className="mt-1 text-xs text-amber-800">
                             {item.category || "Uncategorised"} - {item.reviewStatus.replaceAll("_", " ")}
                           </p>
+                          {(() => {
+                            const match = snapshot.workflowMatches.find((candidate) => candidate.extractedItemId === item.id);
+
+                            return match?.matchReason ? (
+                              <p className="mt-2 text-xs leading-5 text-amber-900">{match.matchReason}</p>
+                            ) : null;
+                          })()}
                         </div>
                       ))}
                     </div>
@@ -1007,6 +1032,27 @@ function WorkflowJobStatusPill({ status }: { status: DocumentExtractionJob["stat
   return (
     <span className={`inline-flex h-7 items-center rounded-md border px-2.5 text-xs font-medium ${styles[status]}`}>
       {formatWorkflowJobStatus(status)}
+    </span>
+  );
+}
+
+function WorkflowMatchStatusPill({ status }: { status: ProductMatch["matchStatus"] }) {
+  const styles = {
+    verified_match: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    needs_review: "border-amber-200 bg-amber-50 text-amber-800",
+    low_confidence: "border-orange-200 bg-orange-50 text-orange-800",
+    unmatched: "border-rose-200 bg-rose-50 text-rose-800",
+  };
+  const labels = {
+    verified_match: "Verified match",
+    needs_review: "Needs review",
+    low_confidence: "Low confidence",
+    unmatched: "Unmatched",
+  };
+
+  return (
+    <span className={`inline-flex h-7 items-center rounded-md border px-2.5 text-xs font-medium ${styles[status]}`}>
+      {labels[status]}
     </span>
   );
 }
