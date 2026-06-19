@@ -1,0 +1,50 @@
+Builder Handover Portal - Manual Testing Log
+
+Purpose
+- Use this file for things Hunter should test later, especially when Codex work
+  is done from phone and desktop testing has to wait.
+- Keep entries short and actionable.
+- When a test passes, move it from Pending Tests to Tested.
+- When a test fails, leave it in Pending Tests and add the observed result.
+
+Format
+- Date added:
+- Area:
+- What to test:
+- Steps:
+- Expected result:
+- Result:
+- Notes:
+
+Pending Tests
+
+1. Date added: 2026-06-19
+   Area: Phase 1 document workflow schema
+   What to test: Apply the Phase 1 Supabase migration in the real Supabase SQL editor.
+   Steps:
+   - Open Supabase SQL editor.
+   - Run docs/supabase-add-document-workflow-phase1.sql.
+   - Confirm the script completes without errors.
+   - Confirm these tables exist: uploaded_documents, document_extraction_jobs,
+     extracted_items, product_matches, item_review_actions, handover_items,
+     audit_logs.
+   Expected result: Migration succeeds and all Phase 1 tables/enums are created.
+   Result:
+   Notes: This does not change the app UI yet. It only prepares the data model.
+
+2. Date added: 2026-06-19
+   Area: Existing app smoke check after Phase 1
+   What to test: Existing builder/client/admin routes still behave normally.
+   Steps:
+   - Start the app locally.
+   - Open /builder/projects.
+   - Open /client/portal.
+   - Open /admin.
+   Expected result: Existing screens load as before; no new document workflow UI
+   appears yet.
+   Result:
+   Notes: Codex already ran lint and build after Phase 1.
+
+Tested
+
+- No manual tests recorded yet.

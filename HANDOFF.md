@@ -598,3 +598,7 @@ scaffold with real Supabase/OpenAI services.
 
 The product should keep using safe wording: AI-assisted, source-backed, and
 builder-reviewed. Do not present it as guaranteed legal warranty compliance.
+
+Keep `TESTING_LOG.txt` updated with short manual test requests for Hunter,
+especially when work is done while he is on phone and desktop verification will
+happen later.
