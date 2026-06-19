@@ -289,7 +289,7 @@ export async function getLocalPublishedItems(projectId?: string) {
   });
 
   return {
-    publishedAt: items.length ? publishedPackage?.publishedAt || null : null,
+    publishedAt: publishedPackage?.publishedAt || null,
     items,
   };
 }

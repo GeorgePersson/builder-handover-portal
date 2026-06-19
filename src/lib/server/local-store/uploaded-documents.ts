@@ -9,6 +9,7 @@ import type {
   ProductMatch,
   UploadedDocumentProcessingStatus,
   UploadedProjectDocument,
+  WorkflowHandoverItem,
 } from "@/lib/document-workflow";
 
 type LocalUploadedDocumentStore = {
@@ -16,8 +17,16 @@ type LocalUploadedDocumentStore = {
   extractionJobs: DocumentExtractionJob[];
   extractedItems: ExtractedWorkflowItem[];
   itemReviewActions: ItemReviewAction[];
+  handoverItems: WorkflowHandoverItem[];
   productMatches: ProductMatch[];
 };
+
+const approvedWorkflowReviewStatuses = new Set([
+  "verified_match",
+  "approved",
+  "edited_by_builder",
+  "builder_supplied",
+]);
 
 const storeRoot = path.join(process.cwd(), ".local-data");
 const storePath = path.join(storeRoot, "uploaded-documents.json");
@@ -42,10 +51,18 @@ async function readStore(): Promise<LocalUploadedDocumentStore> {
       extractionJobs: parsed.extractionJobs || [],
       extractedItems: parsed.extractedItems || [],
       itemReviewActions: parsed.itemReviewActions || [],
+      handoverItems: parsed.handoverItems || [],
       productMatches: parsed.productMatches || [],
     };
   } catch {
-    return { documents: [], extractionJobs: [], extractedItems: [], itemReviewActions: [], productMatches: [] };
+    return {
+      documents: [],
+      extractionJobs: [],
+      extractedItems: [],
+      itemReviewActions: [],
+      handoverItems: [],
+      productMatches: [],
+    };
   }
 }
 
@@ -203,6 +220,79 @@ export async function getLocalProductMatches(projectId?: string) {
     store.extractedItems.filter((item) => item.projectId === projectId).map((item) => item.id),
   );
   return store.productMatches.filter((match) => itemIds.has(match.extractedItemId));
+}
+
+function inferWorkflowItemType(item: ExtractedWorkflowItem): WorkflowHandoverItem["itemType"] {
+  const category = item.category?.toLowerCase() || "";
+  const name = item.productName?.toLowerCase() || "";
+
+  if (category.includes("maintenance") || name.includes("maintenance")) {
+    return "maintenance";
+  }
+
+  if (
+    category.includes("document") ||
+    category.includes("manual") ||
+    category.includes("warranty") ||
+    name.includes("manual") ||
+    name.includes("warranty")
+  ) {
+    return "document";
+  }
+
+  return "product";
+}
+
+function toLocalHandoverItem(
+  item: ExtractedWorkflowItem,
+  index: number,
+  timestamp: string,
+): WorkflowHandoverItem {
+  return {
+    id: `local-handover-item-${Date.now()}-${index}`,
+    projectId: item.projectId,
+    sourceExtractedItemId: item.id,
+    sourceDocumentId: item.sourceDocumentId,
+    matchedProductId: item.matchedProductId,
+    itemType: inferWorkflowItemType(item),
+    title: item.productName || item.category || "Approved handover item",
+    brand: item.brand,
+    model: item.model,
+    category: item.category,
+    supplier: item.supplier,
+    location: item.location,
+    warrantyText: item.warrantyText,
+    maintenanceText: item.maintenanceText,
+    approvedBy: item.approvedBy,
+    approvedAt: item.approvedAt,
+    createdAt: timestamp,
+  };
+}
+
+export async function generateLocalWorkflowHandoverItems(projectId: string) {
+  const store = await readStore();
+  const timestamp = new Date().toISOString();
+  const approvedItems = store.extractedItems.filter(
+    (item) => item.projectId === projectId && approvedWorkflowReviewStatuses.has(item.reviewStatus),
+  );
+  const handoverItems = approvedItems.map((item, index) => toLocalHandoverItem(item, index, timestamp));
+
+  await writeStore({
+    ...store,
+    handoverItems: [
+      ...handoverItems,
+      ...store.handoverItems.filter((item) => item.projectId !== projectId),
+    ],
+  });
+
+  return handoverItems;
+}
+
+export async function getLocalWorkflowHandoverItems(projectId?: string) {
+  const store = await readStore();
+  return projectId
+    ? store.handoverItems.filter((item) => item.projectId === projectId)
+    : store.handoverItems;
 }
 
 export async function saveLocalDocumentExtractionJob(

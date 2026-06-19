@@ -31,6 +31,7 @@ import {
   getLocalDocumentExtractionJobs,
   getLocalExtractedWorkflowItem,
   getLocalUploadedDocuments,
+  generateLocalWorkflowHandoverItems,
   saveLocalDocumentExtractionJob,
   saveLocalExtractedWorkflowItems,
   saveLocalItemReviewAction,
@@ -877,6 +878,13 @@ type WorkflowDocumentForExtraction = {
   storagePath?: string;
 };
 
+const approvedWorkflowReviewStatuses = [
+  "verified_match",
+  "approved",
+  "edited_by_builder",
+  "builder_supplied",
+] as const;
+
 async function insertWorkflowAuditLog(
   context: BuilderActionContext,
   input: {
@@ -1078,6 +1086,8 @@ async function recordLocalWorkflowReview(itemId: string, mutation: WorkflowRevie
     notes: mutation.notes,
     metadata: mutation.metadata,
   });
+
+  return item;
 }
 
 async function reviewWorkflowItem(itemId: string, mutation: WorkflowReviewMutation) {
@@ -1086,11 +1096,121 @@ async function reviewWorkflowItem(itemId: string, mutation: WorkflowReviewMutati
   if (context) {
     const item = await getSupabaseWorkflowReviewItem(context, itemId);
     await recordSupabaseWorkflowReview(context, item, mutation);
+    await generateSupabaseWorkflowHandoverItems(context, item.projectId);
   } else {
-    await recordLocalWorkflowReview(itemId, mutation);
+    const item = await recordLocalWorkflowReview(itemId, mutation);
+    await generateLocalWorkflowHandoverItems(item.projectId);
   }
 
   redirectWorkflowReviewSuccess();
+}
+
+function inferWorkflowHandoverItemType(input: {
+  productName?: string | null;
+  category?: string | null;
+}): "product" | "document" | "maintenance" {
+  const category = input.category?.toLowerCase() || "";
+  const productName = input.productName?.toLowerCase() || "";
+
+  if (category.includes("maintenance") || productName.includes("maintenance")) {
+    return "maintenance";
+  }
+
+  if (
+    category.includes("document") ||
+    category.includes("manual") ||
+    category.includes("warranty") ||
+    productName.includes("manual") ||
+    productName.includes("warranty")
+  ) {
+    return "document";
+  }
+
+  return "product";
+}
+
+async function generateSupabaseWorkflowHandoverItems(
+  context: BuilderActionContext,
+  projectId: string,
+) {
+  const { data: project, error: projectError } = await context.supabase
+    .from("projects")
+    .select("id")
+    .eq("id", projectId)
+    .eq("organisation_id", context.organisationId)
+    .single();
+
+  if (projectError || !project) {
+    redirect("/builder/projects?error=project-not-found");
+  }
+
+  const { data: extractedItems, error: itemError } = await context.supabase
+    .from("extracted_items")
+    .select(
+      "id,project_id,source_document_id,product_name,brand,model,category,supplier,location,warranty_text,maintenance_text,review_status,matched_product_id,approved_by,approved_at",
+    )
+    .eq("project_id", projectId)
+    .in("review_status", [...approvedWorkflowReviewStatuses]);
+
+  if (itemError || !extractedItems) {
+    redirect("/builder/projects?error=publish-package-failed");
+  }
+
+  const { error: deleteError } = await context.supabase
+    .from("handover_items")
+    .delete()
+    .eq("project_id", projectId);
+
+  if (deleteError) {
+    redirect("/builder/projects?error=publish-package-failed");
+  }
+
+  if (extractedItems.length === 0) {
+    return [];
+  }
+
+  const now = new Date().toISOString();
+  const { data: insertedItems, error: insertError } = await context.supabase
+    .from("handover_items")
+    .insert(
+      extractedItems.map((item) => ({
+        project_id: projectId,
+        source_extracted_item_id: item.id,
+        source_document_id: item.source_document_id,
+        matched_product_id: item.matched_product_id || null,
+        item_type: inferWorkflowHandoverItemType({
+          productName: item.product_name,
+          category: item.category,
+        }),
+        title: item.product_name || item.category || "Approved handover item",
+        brand: item.brand || null,
+        model: item.model || null,
+        category: item.category || null,
+        supplier: item.supplier || null,
+        location: item.location || null,
+        warranty_text: item.warranty_text || null,
+        maintenance_text: item.maintenance_text || null,
+        approved_by: item.approved_by || context.userId,
+        approved_at: item.approved_at || now,
+      })),
+    )
+    .select("id");
+
+  if (insertError) {
+    redirect("/builder/projects?error=publish-package-failed");
+  }
+
+  await insertWorkflowAuditLog(context, {
+    projectId,
+    eventType: "handover_items_generated",
+    detail: `Generated ${insertedItems?.length || 0} approved workflow handover items.`,
+    metadata: {
+      included_extracted_item_ids: extractedItems.map((item) => item.id),
+      excluded_statuses: ["needs_review", "low_confidence", "unmatched", "excluded"],
+    },
+  });
+
+  return insertedItems || [];
 }
 
 async function getSupabaseVerifiedProductCandidates(context: BuilderActionContext): Promise<VerifiedProductCandidate[]> {
@@ -2412,6 +2532,7 @@ export async function publishHandoverPackageAction(formData: FormData) {
   const context = await getBuilderContext();
 
   if (context) {
+    const generatedWorkflowItems = await generateSupabaseWorkflowHandoverItems(context, projectId);
     const { data: acceptedItems } = await context.supabase
       .from("extracted_handover_items")
       .select("id,specification_uploads(project_id)")
@@ -2424,20 +2545,24 @@ export async function publishHandoverPackageAction(formData: FormData) {
         status: "published",
         published_at: new Date().toISOString(),
       })
-      .eq("id", projectId);
+      .eq("id", projectId)
+      .eq("organisation_id", context.organisationId);
 
     if (projectError) {
       redirect("/builder/projects?error=publish-package-failed");
     }
+
+    const packageItemCount = generatedWorkflowItems.length || acceptedItems?.length || 0;
 
     await context.supabase.from("audit_events").insert({
       organisation_id: context.organisationId,
       project_id: projectId,
       actor_user_id: context.userId,
       action: "Handover package published",
-      detail: `Published ${acceptedItems?.length || 0} package-ready extracted items to the client portal.`,
+      detail: `Published ${packageItemCount} approved handover items to the client portal.`,
     });
   } else {
+    await generateLocalWorkflowHandoverItems(projectId);
     await publishLocalHandoverPackage(projectId);
   }
 

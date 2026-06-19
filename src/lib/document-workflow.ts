@@ -126,3 +126,23 @@ export type ItemReviewAction = {
   metadata: Record<string, unknown>;
   createdAt: string;
 };
+
+export type WorkflowHandoverItem = {
+  id: string;
+  projectId: string;
+  sourceExtractedItemId?: string;
+  sourceDocumentId?: string;
+  matchedProductId?: string;
+  itemType: "product" | "document" | "maintenance";
+  title: string;
+  brand?: string;
+  model?: string;
+  category?: string;
+  supplier?: string;
+  location?: string;
+  warrantyText?: string;
+  maintenanceText?: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  createdAt: string;
+};

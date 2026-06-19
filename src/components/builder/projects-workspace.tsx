@@ -85,6 +85,7 @@ type ModalMode = "create" | "edit" | "send" | "help" | null;
 const packageReadyStatuses = new Set(["accepted", "auto_approved", "builder_approved", "global_approved"]);
 const adminReviewStatuses = new Set(["admin_review", "edited", "proposed"]);
 const unresolvedWorkflowReviewStatuses = new Set(["needs_review", "low_confidence", "unmatched"]);
+const approvedWorkflowReviewStatuses = new Set(["verified_match", "approved", "edited_by_builder", "builder_supplied"]);
 
 const projectTypeOptions = [
   { label: "New residential build", value: "New residential build" },
@@ -965,14 +966,21 @@ function SendPackagePanel({
     awaitingAdmin: ExtractedHandoverItem[];
     readyItems: ExtractedHandoverItem[];
     tasks: MaintenanceTask[];
+    workflowItems: ExtractedWorkflowItem[];
   };
 }) {
+  const approvedWorkflowItems = snapshot.workflowItems.filter((item) =>
+    approvedWorkflowReviewStatuses.has(item.reviewStatus),
+  );
+  const packageReadyCount = snapshot.readyItems.length + approvedWorkflowItems.length;
+
   return (
     <div className="grid gap-5 xl:grid-cols-[1fr_0.85fr]">
       <section className="rounded-lg border border-slate-200 p-5">
         <h3 className="font-semibold text-slate-950">Package checks</h3>
         <div className="mt-4 space-y-3">
-          <CheckRow label={`${snapshot.readyItems.length} package-ready items`} ok={snapshot.readyItems.length > 0} />
+          <CheckRow label={`${packageReadyCount} approved package items`} ok={packageReadyCount > 0} />
+          <CheckRow label={`${approvedWorkflowItems.length} approved workflow items`} ok={approvedWorkflowItems.length > 0} />
           <CheckRow label={`${snapshot.awaitingAdmin.length} items still awaiting admin`} ok={snapshot.awaitingAdmin.length === 0} />
           <CheckRow label={`${snapshot.tasks.length} maintenance tasks attached`} ok={snapshot.tasks.length > 0} />
         </div>
@@ -991,7 +999,24 @@ function SendPackagePanel({
         <p className="mt-2 text-sm leading-6 text-slate-600">
           The homeowner portal will show only published, builder-reviewed package information for {project.clientName}.
         </p>
+        {approvedWorkflowItems.length ? (
+          <div className="mt-4 rounded-md border border-cyan-100 bg-cyan-50 p-3 text-sm leading-6 text-cyan-900">
+            This draft includes approved workflow items. Raw AI extraction and unresolved review items stay builder-only.
+          </div>
+        ) : null}
         <ItemColumn icon={PackageCheck} items={snapshot.readyItems.slice(0, 5)} title="Preview items" empty="No items ready to send." />
+        {approvedWorkflowItems.length ? (
+          <div className="mt-4 space-y-2">
+            {approvedWorkflowItems.slice(0, 5).map((item) => (
+              <div className="rounded-md border border-slate-200 p-3" key={item.id}>
+                <p className="text-sm font-semibold text-slate-950">{item.productName || "Approved workflow item"}</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {item.category || "Uncategorised"} - {item.reviewStatus.replaceAll("_", " ")}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : null}
       </section>
     </div>
   );

@@ -521,6 +521,13 @@ Supabase is not configured.
   project ownership checks, local scaffold parity, and queue removal for
   resolved statuses. Runtime review-action tests are queued in
   `TESTING_LOG.txt`.
+- Lint/build check for Phase 7 homeowner-safe handover item generation:
+  approved workflow items sync into `handover_items`, unresolved/excluded/raw AI
+  data is filtered out, client package queries prefer published workflow
+  `handover_items` over raw extraction rows, Supabase publish remains
+  organisation-scoped, and local scaffold mode stores generated workflow
+  handover items separately. Runtime homeowner visibility tests are queued in
+  `TESTING_LOG.txt`.
 - HTTP smoke check for unauthenticated `/builder/onboarding`: route returns
   `307` to `/login?next=%2Fbuilder%2Fonboarding` with Supabase auth active.
 - HTTP smoke check for unauthenticated
@@ -614,9 +621,9 @@ Both passed after the latest changes.
 
 ## Next Best Work
 
-1. Continue Phase 7 of the controlled document workflow: generate approved
-   workflow `handover_items` and ensure homeowner views only read approved,
-   published handover data.
+1. Continue Phase 8 of the controlled document workflow: add backend-enforced
+   publish-blocking/readiness logic for in-progress extraction jobs, failed
+   jobs, and unresolved review items.
 2. Apply `docs/supabase-schema.sql` to a Supabase project and add env vars to
    `.env.local`.
 3. Continue improving PDF extraction for long, table-heavy specification files:
@@ -641,10 +648,9 @@ Both passed after the latest changes.
 
 ## Good Resume Prompt
 
-Continue from `HANDOFF.md`. The current priority is Phase 7 of the controlled
-document workflow: convert approved workflow extracted items into
-homeowner-safe handover items while keeping raw AI output, unresolved items, and
-excluded items out of homeowner routes.
+Continue from `HANDOFF.md`. The current priority is Phase 8 of the controlled
+document workflow: block publishing while extraction is incomplete or workflow
+review items remain unresolved, with backend enforcement as well as UI checks.
 
 ## Notes
 

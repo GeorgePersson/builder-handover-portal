@@ -23,6 +23,7 @@ import type {
   ExtractedWorkflowItem,
   ProductMatch,
   UploadedProjectDocument,
+  WorkflowHandoverItem,
 } from "@/lib/document-workflow";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
@@ -37,6 +38,7 @@ import {
   getLocalExtractedWorkflowItems,
   getLocalProductMatches,
   getLocalUploadedDocuments,
+  getLocalWorkflowHandoverItems,
 } from "@/lib/server/local-store/uploaded-documents";
 
 function hasSupabaseConfig() {
@@ -68,6 +70,26 @@ type ExtractedHandoverItemRow = {
   client_request_id: string | null;
   confidence_score: number;
   status: ExtractedHandoverItem["status"];
+};
+
+type WorkflowHandoverItemRow = {
+  id: string;
+  project_id: string;
+  source_extracted_item_id: string | null;
+  source_document_id: string | null;
+  matched_product_id: string | null;
+  item_type: WorkflowHandoverItem["itemType"];
+  title: string;
+  brand: string | null;
+  model: string | null;
+  category: string | null;
+  supplier: string | null;
+  location: string | null;
+  warranty_text: string | null;
+  maintenance_text: string | null;
+  approved_by: string | null;
+  approved_at: string | null;
+  created_at: string;
 };
 
 export function isPackageReadyExtractedItem(item: Pick<ExtractedHandoverItem, "status">) {
@@ -224,6 +246,50 @@ function mapExtractedHandoverItemRows(data: ExtractedHandoverItemRow[]) {
     confidenceScore: item.confidence_score,
     status: item.status,
   }));
+}
+
+function mapWorkflowHandoverItemRows(data: WorkflowHandoverItemRow[]): WorkflowHandoverItem[] {
+  return data.map((item) => ({
+    id: item.id,
+    projectId: item.project_id,
+    sourceExtractedItemId: item.source_extracted_item_id || undefined,
+    sourceDocumentId: item.source_document_id || undefined,
+    matchedProductId: item.matched_product_id || undefined,
+    itemType: item.item_type,
+    title: item.title,
+    brand: item.brand || undefined,
+    model: item.model || undefined,
+    category: item.category || undefined,
+    supplier: item.supplier || undefined,
+    location: item.location || undefined,
+    warrantyText: item.warranty_text || undefined,
+    maintenanceText: item.maintenance_text || undefined,
+    approvedBy: item.approved_by || undefined,
+    approvedAt: item.approved_at || undefined,
+    createdAt: item.created_at,
+  }));
+}
+
+function workflowHandoverItemToPackageItem(item: WorkflowHandoverItem): ExtractedHandoverItem {
+  const detailText = [
+    item.warrantyText ? `Warranty: ${item.warrantyText}` : null,
+    item.maintenanceText ? `Maintenance: ${item.maintenanceText}` : null,
+    !item.warrantyText && !item.maintenanceText ? item.supplier || item.category || "Builder approved handover item." : null,
+  ].filter(Boolean).join("\n");
+
+  return {
+    id: item.id,
+    specificationId: item.sourceDocumentId || item.projectId,
+    itemType: item.itemType,
+    title: item.title,
+    category: item.category || "Approved handover item",
+    location: item.location || "",
+    extractedText: detailText,
+    reviewReason: "Generated from builder-approved workflow handover item.",
+    matchedExistingRecord: item.matchedProductId || null,
+    confidenceScore: 100,
+    status: "accepted",
+  };
 }
 
 export async function getProjects(): Promise<Project[]> {
@@ -480,6 +546,32 @@ export async function getProductMatches(projectId?: string): Promise<ProductMatc
   }));
 }
 
+export async function getWorkflowHandoverItems(projectId?: string): Promise<WorkflowHandoverItem[]> {
+  if (!hasSupabaseConfig()) {
+    return getLocalWorkflowHandoverItems(projectId);
+  }
+
+  const supabase = await createSupabaseServerClient();
+  let query = supabase
+    .from("handover_items")
+    .select(
+      "id,project_id,source_extracted_item_id,source_document_id,matched_product_id,item_type,title,brand,model,category,supplier,location,warranty_text,maintenance_text,approved_by,approved_at,created_at",
+    )
+    .order("created_at", { ascending: false });
+
+  if (projectId) {
+    query = query.eq("project_id", projectId);
+  }
+
+  const { data, error } = await query;
+
+  if (error || !data) {
+    return [];
+  }
+
+  return mapWorkflowHandoverItemRows(data as WorkflowHandoverItemRow[]);
+}
+
 export async function getProductVersions(): Promise<ProductVersion[]> {
   if (!hasSupabaseConfig()) {
     const localGlobalProducts = await getLocalGlobalProducts();
@@ -683,18 +775,27 @@ export async function getExtractedHandoverItems(
 }
 
 export async function getAcceptedHandoverPackagePreview() {
-  const [items, projectList] = await Promise.all([
+  const [items, projectList, workflowHandoverItems] = await Promise.all([
     getExtractedHandoverItems(),
     getProjects(),
+    getWorkflowHandoverItems(),
   ]);
+  const project = projectList[0];
+  const workflowPreviewItems = project
+    ? workflowHandoverItems
+        .filter((item) => item.projectId === project.id)
+        .map(workflowHandoverItemToPackageItem)
+    : workflowHandoverItems.map(workflowHandoverItemToPackageItem);
   const acceptedItems = items.filter(isPackageReadyExtractedItem);
+  const previewItems = workflowPreviewItems.length ? workflowPreviewItems : acceptedItems;
 
   return {
-    project: projectList[0],
-    products: acceptedItems.filter((item) => item.itemType === "product"),
-    documents: acceptedItems.filter((item) => item.itemType === "document"),
-    maintenance: acceptedItems.filter((item) => item.itemType === "maintenance"),
-    acceptedItems,
+    project,
+    products: previewItems.filter((item) => item.itemType === "product"),
+    documents: previewItems.filter((item) => item.itemType === "document"),
+    maintenance: previewItems.filter((item) => item.itemType === "maintenance"),
+    acceptedItems: previewItems,
+    builderOnlyPreview: workflowPreviewItems.length > 0,
   };
 }
 
@@ -738,31 +839,44 @@ async function getProjectExtractedHandoverItems(projectId: string) {
 
 export async function getPublishedClientPackagePreview(projectId?: string) {
   if (!hasSupabaseConfig()) {
-    const [{ items, publishedAt }, projectList] = await Promise.all([
+    const [{ items, publishedAt }, projectList, workflowHandoverItems] = await Promise.all([
       getLocalPublishedItems(projectId),
       getProjects(),
+      getWorkflowHandoverItems(projectId),
     ]);
     const project = projectId
       ? projectList.find((candidate) => candidate.id === projectId)
       : projectList[0];
+    const workflowItems = publishedAt
+      ? workflowHandoverItems.map(workflowHandoverItemToPackageItem)
+      : [];
+    const publishedItems = workflowItems.length ? workflowItems : items;
 
     return {
       project,
       publishedAt,
-      products: items.filter((item) => item.itemType === "product"),
-      documents: items.filter((item) => item.itemType === "document"),
-      maintenance: items.filter((item) => item.itemType === "maintenance"),
+      products: publishedItems.filter((item) => item.itemType === "product"),
+      documents: publishedItems.filter((item) => item.itemType === "document"),
+      maintenance: publishedItems.filter((item) => item.itemType === "maintenance"),
     };
   }
 
-  const [items, projectList] = await Promise.all([
+  const [items, projectList, workflowHandoverItems] = await Promise.all([
     projectId ? getProjectExtractedHandoverItems(projectId) : getExtractedHandoverItems(),
     getProjects(),
+    getWorkflowHandoverItems(projectId),
   ]);
   const project = projectId
     ? projectList.find((candidate) => candidate.id === projectId)
     : projectList[0];
-  const acceptedItems = project?.publishedAt || !projectId ? items.filter(isPackageReadyExtractedItem) : [];
+  const workflowItems = project?.publishedAt || !projectId
+    ? workflowHandoverItems.map(workflowHandoverItemToPackageItem)
+    : [];
+  const acceptedItems = workflowItems.length
+    ? workflowItems
+    : project?.publishedAt || !projectId
+      ? items.filter(isPackageReadyExtractedItem)
+      : [];
 
   return {
     project,

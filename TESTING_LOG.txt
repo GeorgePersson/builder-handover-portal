@@ -240,6 +240,46 @@ Pending Tests
    Result:
    Notes: This is a desktop/devtools test.
 
+18. Date added: 2026-06-19
+   Area: Phase 7 handover item generation
+   What to test: Approved workflow items create homeowner-safe handover_items.
+   Steps:
+   - Upload a document that creates workflow extracted items.
+   - Approve one item, edit one item, and mark one item builder-supplied.
+   - Inspect Supabase handover_items or .local-data/uploaded-documents.json.
+   Expected result: Only verified_match, approved, edited_by_builder, and
+   builder_supplied workflow items appear as handover_items. Raw extracted data
+   is not copied into the homeowner-safe rows.
+   Result:
+   Notes:
+
+19. Date added: 2026-06-19
+   Area: Phase 7 unresolved and excluded filtering
+   What to test: Unresolved and excluded workflow items never appear in homeowner package data.
+   Steps:
+   - Keep one item as needs_review, low_confidence, or unmatched.
+   - Exclude another item with a reason.
+   - Publish the package.
+   - Open /client/portal for the project.
+   Expected result: The homeowner portal shows only generated handover_items
+   from approved workflow items. Unresolved items, excluded items, exclusion
+   reasons, and raw AI JSON are not visible.
+   Result:
+   Notes:
+
+20. Date added: 2026-06-19
+   Area: Phase 7 published visibility gate
+   What to test: Generated workflow handover_items are not visible to homeowners before publish.
+   Steps:
+   - Approve a workflow item but do not publish the project.
+   - Open the client portal for that project.
+   - Then publish the package and reopen the client portal.
+   Expected result: Before publish, the homeowner does not see the generated
+   workflow handover item. After publish, the item appears in the relevant
+   homeowner package column.
+   Result:
+   Notes:
+
 Tested
 
 - No manual tests recorded yet.
