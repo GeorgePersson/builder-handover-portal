@@ -3,6 +3,32 @@ import path from "node:path";
 
 const maxPdfSizeBytes = 30 * 1024 * 1024;
 const maxDocumentSizeBytes = 50 * 1024 * 1024;
+const allowedProjectDocumentExtensions = new Set([
+  ".csv",
+  ".doc",
+  ".docx",
+  ".gif",
+  ".jpeg",
+  ".jpg",
+  ".pdf",
+  ".png",
+  ".webp",
+  ".xls",
+  ".xlsx",
+]);
+const allowedProjectDocumentMimeTypes = new Set([
+  "application/csv",
+  "application/msword",
+  "application/pdf",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "image/gif",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "text/csv",
+]);
 
 export async function prepareSpecificationPdf(formData: FormData) {
   const file = formData.get("specificationPdf");
@@ -44,12 +70,21 @@ export async function prepareProjectDocument(formData: FormData) {
     throw new Error("Project document must be 50 MB or smaller.");
   }
 
+  const extension = path.extname(file.name).toLowerCase();
+  const hasAllowedExtension = allowedProjectDocumentExtensions.has(extension);
+  const hasAllowedMimeType = file.type ? allowedProjectDocumentMimeTypes.has(file.type) : false;
+
+  if (!hasAllowedExtension && !hasAllowedMimeType) {
+    throw new Error("Project document type is not supported.");
+  }
+
   const bytes = Buffer.from(await file.arrayBuffer());
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
   const storagePath = `documents/${Date.now()}-${safeName}`;
 
   return {
     bytes,
+    fileType: extension.replace(".", "") || "file",
     fileName: file.name,
     safeName,
     size: file.size,

@@ -18,6 +18,7 @@ import type {
   ExtractedHandoverItem,
   SpecificationUpload,
 } from "@/lib/types";
+import type { UploadedProjectDocument } from "@/lib/document-workflow";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
   getLocalExtractedItems,
@@ -26,6 +27,7 @@ import {
 } from "@/lib/server/local-store/specifications";
 import { getLocalClientRequests } from "@/lib/server/local-store/client-requests";
 import { getLocalGlobalProducts } from "@/lib/server/local-store/products";
+import { getLocalUploadedDocuments } from "@/lib/server/local-store/uploaded-documents";
 
 function hasSupabaseConfig() {
   return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
@@ -313,6 +315,41 @@ export async function getDocumentDownloadEvents(projectId?: string): Promise<Doc
     downloadedBy: event.downloaded_by || undefined,
     downloadedAt: event.downloaded_at,
     userAgent: event.user_agent || undefined,
+  }));
+}
+
+export async function getUploadedProjectDocuments(projectId?: string): Promise<UploadedProjectDocument[]> {
+  if (!hasSupabaseConfig()) {
+    return getLocalUploadedDocuments(projectId);
+  }
+
+  const supabase = await createSupabaseServerClient();
+  let query = supabase
+    .from("uploaded_documents")
+    .select("id,project_id,original_filename,file_type,mime_type,storage_path,processing_status,uploaded_by,created_at,updated_at")
+    .order("created_at", { ascending: false });
+
+  if (projectId) {
+    query = query.eq("project_id", projectId);
+  }
+
+  const { data, error } = await query;
+
+  if (error || !data) {
+    return [];
+  }
+
+  return data.map((document) => ({
+    id: document.id,
+    projectId: document.project_id,
+    originalFilename: document.original_filename,
+    fileType: document.file_type || undefined,
+    mimeType: document.mime_type,
+    storagePath: document.storage_path,
+    processingStatus: document.processing_status,
+    uploadedBy: document.uploaded_by || undefined,
+    createdAt: document.created_at,
+    updatedAt: document.updated_at,
   }));
 }
 

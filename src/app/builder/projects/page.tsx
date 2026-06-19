@@ -9,6 +9,7 @@ import {
   getProductVersions,
   getProjects,
   getSpecificationUploads,
+  getUploadedProjectDocuments,
   hasBuilderWorkspace,
 } from "@/lib/server/queries";
 
@@ -28,7 +29,7 @@ export default async function ProjectsPage({
     redirect("/builder/onboarding?next=/builder/projects");
   }
 
-  const [projects, specifications, extractedItems, maintenanceTasks, productVersions, documents, downloadEvents, creditStatus] =
+  const [projects, specifications, extractedItems, maintenanceTasks, productVersions, documents, downloadEvents, uploadedDocuments, creditStatus] =
     await Promise.all([
       getProjects(),
       getSpecificationUploads(),
@@ -37,6 +38,7 @@ export default async function ProjectsPage({
       getProductVersions(),
       getDocuments(),
       getDocumentDownloadEvents(),
+      getUploadedProjectDocuments(),
       getBuilderCreditStatus(),
     ]);
 
@@ -54,6 +56,7 @@ export default async function ProjectsPage({
       projects={projects}
       specifications={specifications}
       storage={params.storage}
+      uploadedDocuments={uploadedDocuments}
     />
   );
 }

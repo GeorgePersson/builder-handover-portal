@@ -45,6 +45,57 @@ Pending Tests
    Result:
    Notes: Codex already ran lint and build after Phase 1.
 
+3. Date added: 2026-06-19
+   Area: Phase 2 document upload
+   What to test: Upload a supported project document from the builder project modal.
+   Steps:
+   - Make sure docs/supabase-add-document-workflow-phase1.sql has been run.
+   - Start the app and sign in as the builder.
+   - Open /builder/projects.
+   - Open a project with Edit.
+   - In Client documents, upload a PDF, image, Word, Excel, or CSV file.
+   - Save the document.
+   Expected result: The document saves, appears in Documents in this project,
+   and appears in Upload processing with status Uploaded.
+   Result:
+   Notes: This phase should not create extraction jobs or AI items yet.
+
+4. Date added: 2026-06-19
+   Area: Phase 2 invalid upload
+   What to test: Unsupported project document files are rejected.
+   Steps:
+   - Open /builder/projects and edit a project.
+   - Try to upload an unsupported file type such as .exe or .zip.
+   - Save the document.
+   Expected result: The app redirects back to Projects with an unsupported file
+   type error and no workflow upload is created.
+   Result:
+   Notes:
+
+5. Date added: 2026-06-19
+   Area: Phase 2 upload permissions
+   What to test: A builder cannot upload a document to another organisation's project.
+   Steps:
+   - With Supabase enabled, tamper the hidden projectId in the upload form or use
+     a project id from another organisation.
+   - Submit the upload.
+   Expected result: The upload is rejected with project-not-found and no
+   uploaded_documents or audit_logs row is created for that project.
+   Result:
+   Notes: This is a desktop/devtools test.
+
+6. Date added: 2026-06-19
+   Area: Phase 2 storage privacy
+   What to test: Uploaded files are not publicly accessible without an app route or signed URL.
+   Steps:
+   - Upload a project document.
+   - In Supabase Storage, confirm handover-documents is private.
+   - Try to open the raw storage object URL while signed out.
+   Expected result: The raw object is not publicly accessible; client access
+   should use the app download route/signed URL path only.
+   Result:
+   Notes:
+
 Tested
 
 - No manual tests recorded yet.

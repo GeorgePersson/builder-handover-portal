@@ -11,6 +11,7 @@ import {
   updateLocalExtractedItem,
   updateLocalExtractedItemStatus,
 } from "@/lib/server/local-store/specifications";
+import { saveLocalUploadedDocument } from "@/lib/server/local-store/uploaded-documents";
 import {
   getLocalClientRequest,
   saveLocalClientRequest,
@@ -831,7 +832,14 @@ export async function acceptClientInviteAction(formData: FormData) {
 
 export async function createDocumentAction(formData: FormData) {
   const projectId = getRequired(formData, "projectId");
-  const upload = await prepareProjectDocument(formData);
+  let upload: Awaited<ReturnType<typeof prepareProjectDocument>>;
+
+  try {
+    upload = await prepareProjectDocument(formData);
+  } catch {
+    redirect("/builder/projects?error=invalid-document-upload");
+  }
+
   const name = getOptional(formData, "name") || upload?.fileName || "Project document";
   const documentType = getRequired(formData, "documentType");
   const storagePath = getOptional(formData, "storagePath") || upload?.storagePath || `pending/${name}`;
@@ -839,6 +847,17 @@ export async function createDocumentAction(formData: FormData) {
   const context = await getBuilderContext();
 
   if (context) {
+    const { data: project, error: projectError } = await context.supabase
+      .from("projects")
+      .select("id")
+      .eq("id", projectId)
+      .eq("organisation_id", context.organisationId)
+      .single();
+
+    if (projectError || !project) {
+      redirect("/builder/projects?error=project-not-found");
+    }
+
     if (upload) {
       const { error: uploadError } = await context.supabase.storage
         .from("handover-documents")
@@ -850,6 +869,30 @@ export async function createDocumentAction(formData: FormData) {
       if (uploadError) {
         redirect("/builder/projects?error=upload-document-failed");
       }
+    }
+
+    let uploadedDocumentId: string | null = null;
+
+    if (upload) {
+      const { data: uploadedDocument, error: uploadedDocumentError } = await context.supabase
+        .from("uploaded_documents")
+        .insert({
+          project_id: projectId,
+          original_filename: upload.fileName,
+          file_type: upload.fileType,
+          mime_type: upload.type,
+          storage_path: storagePath,
+          processing_status: "uploaded",
+          uploaded_by: context.userId,
+        })
+        .select("id")
+        .single();
+
+      if (uploadedDocumentError || !uploadedDocument) {
+        redirect("/builder/projects?error=create-uploaded-document-failed");
+      }
+
+      uploadedDocumentId = uploadedDocument.id;
     }
 
     const { error } = await context.supabase.from("documents").insert({
@@ -874,8 +917,37 @@ export async function createDocumentAction(formData: FormData) {
       action: "Document registered",
       detail: `Registered ${name}.`,
     });
+
+    if (upload) {
+      const { error: auditLogError } = await context.supabase.from("audit_logs").insert({
+        project_id: projectId,
+        actor_user_id: context.userId,
+        event_type: "document_uploaded",
+        detail: `Uploaded ${upload.fileName}.`,
+        metadata: {
+          document_name: name,
+          document_type: documentType,
+          storage_path: storagePath,
+          uploaded_document_id: uploadedDocumentId,
+          visible_to_client: visibleToClient,
+        },
+      });
+
+      if (auditLogError) {
+        redirect("/builder/projects?error=create-uploaded-document-audit-failed");
+      }
+    }
   } else if (upload) {
     await saveLocalUpload(storagePath, upload.bytes);
+    await saveLocalUploadedDocument({
+      projectId,
+      originalFilename: upload.fileName,
+      fileType: upload.fileType,
+      mimeType: upload.type,
+      storagePath,
+      processingStatus: "uploaded",
+      uploadedBy: "local-scaffold",
+    });
   }
 
   redirect(`/builder/projects?draft=document-saved&storage=${hasSupabaseConfig() ? "supabase" : "stub"}`);

@@ -22,6 +22,7 @@ import { StatusBanner } from "@/components/status-banner";
 import { StatusPill } from "@/components/status-pill";
 import { SelectField, TextField } from "@/components/forms/form-field";
 import { SubmitButton } from "@/components/forms/submit-button";
+import type { UploadedProjectDocument } from "@/lib/document-workflow";
 import {
   createBuilderProjectRequestAction,
   createClientInviteAction,
@@ -62,6 +63,7 @@ type ProjectsWorkspaceProps = {
   extractedItems: ExtractedHandoverItem[];
   maintenanceTasks: MaintenanceTask[];
   productVersions: ProductVersion[];
+  uploadedDocuments: UploadedProjectDocument[];
 };
 
 type ModalMode = "create" | "edit" | "send" | "help" | null;
@@ -91,6 +93,7 @@ export function ProjectsWorkspace({
   extractedItems,
   maintenanceTasks,
   productVersions,
+  uploadedDocuments,
 }: ProjectsWorkspaceProps) {
   const [mode, setMode] = useState<ModalMode>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(projects[0]?.id ?? null);
@@ -112,6 +115,7 @@ export function ProjectsWorkspace({
         const tasks = maintenanceTasks.filter((task) => task.projectId === project.id);
         const projectDocuments = documents.filter((document) => document.projectId === project.id);
         const projectDownloadEvents = downloadEvents.filter((event) => event.projectId === project.id);
+        const workflowDocuments = uploadedDocuments.filter((document) => document.projectId === project.id);
 
         return {
           project,
@@ -121,9 +125,10 @@ export function ProjectsWorkspace({
           readyItems,
           specifications: specifications.filter((specification) => specification.projectId === project.id),
           tasks,
+          workflowDocuments,
         };
       }),
-    [documents, downloadEvents, extractedItems, maintenanceTasks, projects, specifications],
+    [documents, downloadEvents, extractedItems, maintenanceTasks, projects, specifications, uploadedDocuments],
   );
 
   const selectedSnapshot = projectSnapshots.find((snapshot) => snapshot.project.id === selectedProject?.id) ?? null;
@@ -195,7 +200,10 @@ export function ProjectsWorkspace({
             "credit-deduct-failed": "The project credit could not be deducted.",
             "credit-event-failed": "The project credit event could not be recorded.",
             "create-client-invite-failed": "The client invite link could not be created.",
+            "create-uploaded-document-audit-failed": "The document was uploaded, but the workflow audit log could not be recorded.",
+            "create-uploaded-document-failed": "The document was uploaded, but the workflow status record could not be created. Check the Phase 1 migration.",
             "create-request-failed": "The missing item request could not be created.",
+            "invalid-document-upload": "That file type is not supported. Upload a PDF, image, Word, Excel, or CSV file.",
             "insufficient-project-credits": "This organisation does not have a project credit available yet.",
             "invite-email-not-configured": "Invite link created, but email is not configured. Add RESEND_API_KEY and RESEND_FROM_EMAIL.",
             "invite-email-send-failed": "Invite link created, but the email could not be sent. Use the manual link below.",
@@ -447,6 +455,7 @@ function ProjectEditPanel({
     readyItems: ExtractedHandoverItem[];
     specifications: SpecificationUpload[];
     tasks: MaintenanceTask[];
+    workflowDocuments: UploadedProjectDocument[];
   };
 }) {
   const manualItems = snapshot.awaitingAdmin.filter((item) => item.status !== "admin_review");
@@ -552,6 +561,7 @@ function ProjectEditPanel({
                   className="mt-2 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-slate-700"
                   name="documentFile"
                   type="file"
+                  accept=".csv,.doc,.docx,.gif,.jpeg,.jpg,.pdf,.png,.webp,.xls,.xlsx,application/pdf,image/gif,image/jpeg,image/png,image/webp,text/csv,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 />
               </label>
               <label className="flex gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
@@ -580,6 +590,27 @@ function ProjectEditPanel({
 
       <section className="rounded-lg border border-slate-200 p-5">
         <h3 className="font-semibold text-slate-950">Documents in this project</h3>
+        <div className="mt-4">
+          <p className="text-sm font-semibold text-slate-700">Upload processing</p>
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
+            {snapshot.workflowDocuments.length ? snapshot.workflowDocuments.map((document) => (
+              <div className="rounded-md border border-slate-200 p-4" key={document.id}>
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="font-medium text-slate-950">{document.originalFilename}</p>
+                    <p className="mt-1 text-sm text-slate-600">
+                      {document.fileType?.toUpperCase() || document.mimeType}
+                    </p>
+                  </div>
+                  <WorkflowStatusPill status={document.processingStatus} />
+                </div>
+                <p className="mt-3 text-xs text-slate-500">
+                  Uploaded {formatDate(document.createdAt)}
+                </p>
+              </div>
+            )) : <p className="text-sm text-slate-500">No workflow uploads have been registered yet.</p>}
+          </div>
+        </div>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           {snapshot.documents.length ? snapshot.documents.map((document) => {
             const documentDownloads = snapshot.downloadEvents.filter((event) => event.documentId === document.id);
@@ -865,6 +896,27 @@ function CheckRow({ label, ok }: { label: string; ok: boolean }) {
       {ok ? <PackageCheck className="size-4 text-emerald-600" /> : <AlertTriangle className="size-4 text-amber-600" />}
       <span className="text-slate-700">{label}</span>
     </div>
+  );
+}
+
+function WorkflowStatusPill({ status }: { status: UploadedProjectDocument["processingStatus"] }) {
+  const styles = {
+    uploaded: "border-cyan-200 bg-cyan-50 text-cyan-800",
+    processing: "border-amber-200 bg-amber-50 text-amber-800",
+    completed: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    failed: "border-rose-200 bg-rose-50 text-rose-800",
+  };
+  const labels = {
+    uploaded: "Uploaded",
+    processing: "Processing",
+    completed: "Completed",
+    failed: "Failed",
+  };
+
+  return (
+    <span className={`inline-flex h-7 items-center rounded-md border px-2.5 text-xs font-medium ${styles[status]}`}>
+      {labels[status]}
+    </span>
   );
 }
 
