@@ -389,6 +389,9 @@ Supabase is not configured.
 - Hunter's desktop QA checklist now lives at
   `docs/hunter-testing-checklist.md`, with matching reminders in
   `TESTING_LOG.txt`.
+- A predictable one-go local demo upload file lives at
+  `docs/demo-assets/bayview-demo-spec.csv`. Use it when testing the project
+  document upload/extraction/review flow with a potential user.
 - Magic-link login scaffold at `/login`.
 
 ## Tested Demo Flow
@@ -551,6 +554,9 @@ Supabase is not configured.
   the final project send modal, post-publish workflow review changes no longer
   silently regenerate homeowner-facing handover items, and Hunter's manual
   desktop checklist is documented in `docs/hunter-testing-checklist.md`.
+- Lint/build check after adding the local demo CSV asset and linking it from
+  `docs/full-test-flow-requirements.md` and
+  `docs/hunter-testing-checklist.md`.
 - HTTP smoke check for unauthenticated `/builder/onboarding`: route returns
   `307` to `/login?next=%2Fbuilder%2Fonboarding` with Supabase auth active.
 - HTTP smoke check for unauthenticated

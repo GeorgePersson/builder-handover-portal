@@ -19,12 +19,19 @@ publish, and homeowner flows.
 3. Sign in as the builder test account.
    - Expected: `/builder/projects` loads and shows your projects.
 
+4. Use the demo upload file for the first clean run.
+   - File: `docs/demo-assets/bayview-demo-spec.csv`
+   - Expected: This gives a predictable upload containing cladding, bathroom
+     ventilation, kitchen oven, roofing document, and garage door maintenance
+     examples.
+
 ## Document Upload And Extraction
 
 1. Upload a valid project document.
    - Open `/builder/projects`.
    - Edit a project.
-   - Upload a PDF, image, Word, Excel, or CSV file in Client documents.
+   - Upload `docs/demo-assets/bayview-demo-spec.csv`, or another PDF, image,
+     Word, Excel, or CSV file in Client documents.
    - Expected: The project modal shows the uploaded document, processing status,
      an extraction job, and extracted workflow items.
 

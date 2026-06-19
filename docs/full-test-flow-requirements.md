@@ -79,10 +79,32 @@ Use these choices to reduce moving parts:
 - Use the manual invite link instead of Resend email delivery.
 - Use `test@gmail.com` so project credits are unlimited.
 - Keep Stripe off for the first demo.
-- Use a small PDF or CSV with clear product lines.
+- Use `docs/demo-assets/bayview-demo-spec.csv` as the first upload file.
 - If OpenAI is not configured, tell the user this is the mocked extraction demo.
 - If OpenAI is configured, use a short real spec file so extraction finishes
   quickly.
+
+### Demo Upload File
+
+Use this file for the first run:
+
+```txt
+docs/demo-assets/bayview-demo-spec.csv
+```
+
+It contains a small project schedule with:
+
+- A known James Hardie Linea Weatherboard item for product matching.
+- A bathroom extraction fan that may need review.
+- A kitchen oven with brand/model details.
+- A roofing producer statement document request.
+- A garage door maintenance reminder.
+
+Expected result:
+
+- With `OPENAI_API_KEY`, extracted items should reflect the CSV contents.
+- Without `OPENAI_API_KEY`, the app still exercises the upload/job/review UI
+  through the mock extractor.
 
 ### Pre-Demo Checklist
 
