@@ -96,6 +96,36 @@ Pending Tests
    Result:
    Notes:
 
+7. Date added: 2026-06-19
+   Area: Phase 3 mocked extraction job
+   What to test: Uploading a supported document creates and completes a placeholder extraction job.
+   Steps:
+   - Make sure docs/supabase-add-document-workflow-phase1.sql has been run.
+   - Open /builder/projects and edit a project.
+   - Upload a supported document with a normal filename.
+   - Reopen or refresh the project modal.
+   Expected result: The upload processing card shows Completed, an extraction
+   job shows Completed, and a placeholder extracted item is visible for builder
+   review. Nothing appears in the homeowner portal from this raw item.
+   Result:
+   Notes: This is mocked extraction only, not real AI.
+
+8. Date added: 2026-06-19
+   Area: Phase 3 failed extraction and retry
+   What to test: Failed placeholder extraction jobs can be retried.
+   Steps:
+   - Upload a supported document whose filename includes fail-extraction.
+   - Reopen or refresh the project modal.
+   - Confirm the extraction job shows Failed and displays a retry button.
+   - Rename/re-upload a normal file if needed, or use the retry button to confirm
+     the failed job stays controlled by the backend.
+   Expected result: The failed job is visible, retry action is available only for
+   failed jobs, retry_count increases after retry, and no homeowner-facing data
+   is published.
+   Result:
+   Notes: With the same fail-extraction filename, the mocked retry will keep
+   failing by design.
+
 Tested
 
 - No manual tests recorded yet.

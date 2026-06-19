@@ -2,9 +2,11 @@ import { redirect } from "next/navigation";
 import { ProjectsWorkspace } from "@/components/builder/projects-workspace";
 import {
   getBuilderCreditStatus,
+  getDocumentExtractionJobs,
   getDocumentDownloadEvents,
   getDocuments,
   getExtractedHandoverItems,
+  getExtractedWorkflowItems,
   getMaintenanceTasks,
   getProductVersions,
   getProjects,
@@ -29,7 +31,19 @@ export default async function ProjectsPage({
     redirect("/builder/onboarding?next=/builder/projects");
   }
 
-  const [projects, specifications, extractedItems, maintenanceTasks, productVersions, documents, downloadEvents, uploadedDocuments, creditStatus] =
+  const [
+    projects,
+    specifications,
+    extractedItems,
+    maintenanceTasks,
+    productVersions,
+    documents,
+    downloadEvents,
+    uploadedDocuments,
+    extractionJobs,
+    extractedWorkflowItems,
+    creditStatus,
+  ] =
     await Promise.all([
       getProjects(),
       getSpecificationUploads(),
@@ -39,6 +53,8 @@ export default async function ProjectsPage({
       getDocuments(),
       getDocumentDownloadEvents(),
       getUploadedProjectDocuments(),
+      getDocumentExtractionJobs(),
+      getExtractedWorkflowItems(),
       getBuilderCreditStatus(),
     ]);
 
@@ -50,6 +66,8 @@ export default async function ProjectsPage({
       documents={documents}
       error={params.error}
       extractedItems={extractedItems}
+      extractedWorkflowItems={extractedWorkflowItems}
+      extractionJobs={extractionJobs}
       inviteToken={params.inviteToken}
       maintenanceTasks={maintenanceTasks}
       productVersions={productVersions}

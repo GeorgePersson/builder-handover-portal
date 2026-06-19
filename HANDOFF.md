@@ -359,6 +359,13 @@ Supabase is not configured.
   `uploaded` processing status, record `document_uploaded` audit logs, and show
   upload processing status inside the project modal. AI extraction is still not
   started in this phase.
+- Phase 3 extraction job scaffold now creates `document_extraction_jobs` after
+  document upload, moves jobs/documents through processing/completed/failed
+  statuses, writes placeholder `extracted_items`, records
+  `ai_extraction_started`, `ai_extraction_completed`, and
+  `ai_extraction_failed` audit logs in Supabase mode, and exposes failed-job
+  retry controls in the project modal. Extraction output is mocked only and
+  remains separate from homeowner-facing handover data.
 - Magic-link login scaffold at `/login`.
 
 ## Tested Demo Flow
@@ -480,6 +487,10 @@ Supabase is not configured.
   persistence, `document_uploaded` audit log writes, local scaffold persistence,
   and project-modal processing status display. Runtime Supabase upload tests are
   queued in `TESTING_LOG.txt`.
+- Lint/build check for Phase 3 mocked extraction job scaffold: job creation,
+  processing/completed/failed transitions, placeholder extracted item
+  persistence, retry action wiring, and project-modal job/item display. Runtime
+  Supabase upload/retry tests are queued in `TESTING_LOG.txt`.
 - HTTP smoke check for unauthenticated `/builder/onboarding`: route returns
   `307` to `/login?next=%2Fbuilder%2Fonboarding` with Supabase auth active.
 - HTTP smoke check for unauthenticated
@@ -573,9 +584,9 @@ Both passed after the latest changes.
 
 ## Next Best Work
 
-1. Continue Phase 3 of the controlled document workflow: create async
-   extraction jobs after upload, add retryable job status handling, and use a
-   mocked extractor only. Do not add real AI extraction until Phase 4.
+1. Continue Phase 4 of the controlled document workflow: replace or extend the
+   mocked extractor with real AI extraction, while keeping raw AI output
+   separate from approved homeowner-facing handover data.
 2. Apply `docs/supabase-schema.sql` to a Supabase project and add env vars to
    `.env.local`.
 3. Continue improving PDF extraction for long, table-heavy specification files:

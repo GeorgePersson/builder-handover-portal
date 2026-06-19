@@ -22,7 +22,11 @@ import { StatusBanner } from "@/components/status-banner";
 import { StatusPill } from "@/components/status-pill";
 import { SelectField, TextField } from "@/components/forms/form-field";
 import { SubmitButton } from "@/components/forms/submit-button";
-import type { UploadedProjectDocument } from "@/lib/document-workflow";
+import type {
+  DocumentExtractionJob,
+  ExtractedWorkflowItem,
+  UploadedProjectDocument,
+} from "@/lib/document-workflow";
 import {
   createBuilderProjectRequestAction,
   createClientInviteAction,
@@ -30,6 +34,7 @@ import {
   createProjectAction,
   createSpecificationUploadAction,
   publishHandoverPackageAction,
+  retryDocumentExtractionJobAction,
   revokeClientInviteAction,
   sendClientInviteEmailAction,
   updateProjectAction,
@@ -61,6 +66,8 @@ type ProjectsWorkspaceProps = {
   projects: Project[];
   specifications: SpecificationUpload[];
   extractedItems: ExtractedHandoverItem[];
+  extractedWorkflowItems: ExtractedWorkflowItem[];
+  extractionJobs: DocumentExtractionJob[];
   maintenanceTasks: MaintenanceTask[];
   productVersions: ProductVersion[];
   uploadedDocuments: UploadedProjectDocument[];
@@ -91,6 +98,8 @@ export function ProjectsWorkspace({
   projects,
   specifications,
   extractedItems,
+  extractedWorkflowItems,
+  extractionJobs,
   maintenanceTasks,
   productVersions,
   uploadedDocuments,
@@ -116,6 +125,8 @@ export function ProjectsWorkspace({
         const projectDocuments = documents.filter((document) => document.projectId === project.id);
         const projectDownloadEvents = downloadEvents.filter((event) => event.projectId === project.id);
         const workflowDocuments = uploadedDocuments.filter((document) => document.projectId === project.id);
+        const workflowJobs = extractionJobs.filter((job) => job.projectId === project.id);
+        const workflowItems = extractedWorkflowItems.filter((item) => item.projectId === project.id);
 
         return {
           project,
@@ -126,9 +137,21 @@ export function ProjectsWorkspace({
           specifications: specifications.filter((specification) => specification.projectId === project.id),
           tasks,
           workflowDocuments,
+          workflowItems,
+          workflowJobs,
         };
       }),
-    [documents, downloadEvents, extractedItems, maintenanceTasks, projects, specifications, uploadedDocuments],
+    [
+      documents,
+      downloadEvents,
+      extractedItems,
+      extractedWorkflowItems,
+      extractionJobs,
+      maintenanceTasks,
+      projects,
+      specifications,
+      uploadedDocuments,
+    ],
   );
 
   const selectedSnapshot = projectSnapshots.find((snapshot) => snapshot.project.id === selectedProject?.id) ?? null;
@@ -200,9 +223,12 @@ export function ProjectsWorkspace({
             "credit-deduct-failed": "The project credit could not be deducted.",
             "credit-event-failed": "The project credit event could not be recorded.",
             "create-client-invite-failed": "The client invite link could not be created.",
+            "create-extraction-job-failed": "The document uploaded, but the extraction job could not be created.",
             "create-uploaded-document-audit-failed": "The document was uploaded, but the workflow audit log could not be recorded.",
             "create-uploaded-document-failed": "The document was uploaded, but the workflow status record could not be created. Check the Phase 1 migration.",
             "create-request-failed": "The missing item request could not be created.",
+            "extraction-job-not-found": "That extraction job could not be found.",
+            "extraction-job-not-retryable": "Only failed extraction jobs can be retried.",
             "invalid-document-upload": "That file type is not supported. Upload a PDF, image, Word, Excel, or CSV file.",
             "insufficient-project-credits": "This organisation does not have a project credit available yet.",
             "invite-email-not-configured": "Invite link created, but email is not configured. Add RESEND_API_KEY and RESEND_FROM_EMAIL.",
@@ -214,6 +240,7 @@ export function ProjectsWorkspace({
             "project-credit-not-confirmed": "Confirm project credit use before creating the project.",
             "update-project-failed": "The project could not be updated.",
             "upload-document-failed": "The document file could not be uploaded.",
+            "uploaded-document-not-found": "The uploaded document for that extraction job could not be found.",
           }}
           storage={storage}
         />
@@ -456,6 +483,8 @@ function ProjectEditPanel({
     specifications: SpecificationUpload[];
     tasks: MaintenanceTask[];
     workflowDocuments: UploadedProjectDocument[];
+    workflowItems: ExtractedWorkflowItem[];
+    workflowJobs: DocumentExtractionJob[];
   };
 }) {
   const manualItems = snapshot.awaitingAdmin.filter((item) => item.status !== "admin_review");
@@ -593,22 +622,68 @@ function ProjectEditPanel({
         <div className="mt-4">
           <p className="text-sm font-semibold text-slate-700">Upload processing</p>
           <div className="mt-3 grid gap-3 md:grid-cols-2">
-            {snapshot.workflowDocuments.length ? snapshot.workflowDocuments.map((document) => (
-              <div className="rounded-md border border-slate-200 p-4" key={document.id}>
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="font-medium text-slate-950">{document.originalFilename}</p>
-                    <p className="mt-1 text-sm text-slate-600">
-                      {document.fileType?.toUpperCase() || document.mimeType}
-                    </p>
+            {snapshot.workflowDocuments.length ? snapshot.workflowDocuments.map((document) => {
+              const jobs = snapshot.workflowJobs.filter((job) => job.uploadedDocumentId === document.id);
+              const latestJob = jobs[0];
+              const items = snapshot.workflowItems.filter((item) => item.sourceDocumentId === document.id);
+
+              return (
+                <div className="rounded-md border border-slate-200 p-4" key={document.id}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="font-medium text-slate-950">{document.originalFilename}</p>
+                      <p className="mt-1 text-sm text-slate-600">
+                        {document.fileType?.toUpperCase() || document.mimeType}
+                      </p>
+                    </div>
+                    <WorkflowStatusPill status={document.processingStatus} />
                   </div>
-                  <WorkflowStatusPill status={document.processingStatus} />
+                  <p className="mt-3 text-xs text-slate-500">
+                    Uploaded {formatDate(document.createdAt)}
+                  </p>
+                  {latestJob ? (
+                    <div className="mt-3 rounded-md border border-slate-100 bg-slate-50 p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-normal text-slate-500">Extraction job</p>
+                          <p className="mt-1 text-sm text-slate-700">
+                            {formatWorkflowJobStatus(latestJob.status)}
+                            {latestJob.retryCount ? ` - retry ${latestJob.retryCount}` : ""}
+                          </p>
+                        </div>
+                        <WorkflowJobStatusPill status={latestJob.status} />
+                      </div>
+                      {latestJob.errorMessage ? (
+                        <p className="mt-2 text-xs leading-5 text-rose-700">{latestJob.errorMessage}</p>
+                      ) : null}
+                      {latestJob.status === "failed" ? (
+                        <form action={retryDocumentExtractionJobAction} className="mt-3">
+                          <input name="jobId" type="hidden" value={latestJob.id} />
+                          <button
+                            className="inline-flex h-8 items-center rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                            type="submit"
+                          >
+                            Retry extraction
+                          </button>
+                        </form>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {items.length ? (
+                    <div className="mt-3 space-y-2">
+                      {items.map((item) => (
+                        <div className="rounded-md border border-amber-100 bg-amber-50 p-3" key={item.id}>
+                          <p className="text-sm font-semibold text-amber-950">{item.productName || "Extracted item"}</p>
+                          <p className="mt-1 text-xs text-amber-800">
+                            {item.category || "Uncategorised"} - {item.reviewStatus.replaceAll("_", " ")}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
-                <p className="mt-3 text-xs text-slate-500">
-                  Uploaded {formatDate(document.createdAt)}
-                </p>
-              </div>
-            )) : <p className="text-sm text-slate-500">No workflow uploads have been registered yet.</p>}
+              );
+            }) : <p className="text-sm text-slate-500">No workflow uploads have been registered yet.</p>}
           </div>
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
@@ -918,6 +993,25 @@ function WorkflowStatusPill({ status }: { status: UploadedProjectDocument["proce
       {labels[status]}
     </span>
   );
+}
+
+function WorkflowJobStatusPill({ status }: { status: DocumentExtractionJob["status"] }) {
+  const styles = {
+    queued: "border-slate-200 bg-white text-slate-700",
+    processing: "border-amber-200 bg-amber-50 text-amber-800",
+    completed: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    failed: "border-rose-200 bg-rose-50 text-rose-800",
+  };
+
+  return (
+    <span className={`inline-flex h-7 items-center rounded-md border px-2.5 text-xs font-medium ${styles[status]}`}>
+      {formatWorkflowJobStatus(status)}
+    </span>
+  );
+}
+
+function formatWorkflowJobStatus(status: DocumentExtractionJob["status"]) {
+  return status.replaceAll("_", " ").replace(/^\w/, (character) => character.toUpperCase());
 }
 
 function getModalEyebrow(mode: ModalMode) {

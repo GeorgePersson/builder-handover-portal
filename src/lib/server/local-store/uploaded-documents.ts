@@ -1,9 +1,16 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { UploadedProjectDocument } from "@/lib/document-workflow";
+import type {
+  DocumentExtractionJob,
+  ExtractedWorkflowItem,
+  UploadedDocumentProcessingStatus,
+  UploadedProjectDocument,
+} from "@/lib/document-workflow";
 
 type LocalUploadedDocumentStore = {
   documents: UploadedProjectDocument[];
+  extractionJobs: DocumentExtractionJob[];
+  extractedItems: ExtractedWorkflowItem[];
 };
 
 const storeRoot = path.join(process.cwd(), ".local-data");
@@ -23,9 +30,14 @@ async function readStore(): Promise<LocalUploadedDocumentStore> {
 
   try {
     const raw = await readFile(storePath, "utf8");
-    return JSON.parse(raw) as LocalUploadedDocumentStore;
+    const parsed = JSON.parse(raw) as Partial<LocalUploadedDocumentStore>;
+    return {
+      documents: parsed.documents || [],
+      extractionJobs: parsed.extractionJobs || [],
+      extractedItems: parsed.extractedItems || [],
+    };
   } catch {
-    return { documents: [] };
+    return { documents: [], extractionJobs: [], extractedItems: [] };
   }
 }
 
@@ -55,8 +67,110 @@ export async function saveLocalUploadedDocument(
   };
 
   await writeStore({
+    ...store,
     documents: [document, ...store.documents],
   });
 
   return document;
+}
+
+export async function updateLocalUploadedDocumentStatus(
+  documentId: string,
+  processingStatus: UploadedDocumentProcessingStatus,
+) {
+  const store = await readStore();
+  const timestamp = new Date().toISOString();
+
+  await writeStore({
+    ...store,
+    documents: store.documents.map((document) =>
+      document.id === documentId ? { ...document, processingStatus, updatedAt: timestamp } : document,
+    ),
+  });
+}
+
+export async function getLocalDocumentExtractionJobs(projectId?: string) {
+  const store = await readStore();
+  return projectId
+    ? store.extractionJobs.filter((job) => job.projectId === projectId)
+    : store.extractionJobs;
+}
+
+export async function getLocalExtractedWorkflowItems(projectId?: string) {
+  const store = await readStore();
+  return projectId
+    ? store.extractedItems.filter((item) => item.projectId === projectId)
+    : store.extractedItems;
+}
+
+export async function saveLocalDocumentExtractionJob(
+  input: Omit<DocumentExtractionJob, "id" | "createdAt" | "updatedAt" | "retryCount"> & {
+    retryCount?: number;
+  },
+) {
+  const store = await readStore();
+  const timestamp = new Date().toISOString();
+  const job: DocumentExtractionJob = {
+    ...input,
+    id: `local-extraction-job-${Date.now()}`,
+    retryCount: input.retryCount || 0,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+
+  await writeStore({
+    ...store,
+    extractionJobs: [job, ...store.extractionJobs],
+  });
+
+  return job;
+}
+
+export async function updateLocalDocumentExtractionJob(
+  jobId: string,
+  update: Partial<Omit<DocumentExtractionJob, "id" | "createdAt">>,
+) {
+  const store = await readStore();
+  const timestamp = new Date().toISOString();
+  let updatedJob: DocumentExtractionJob | null = null;
+
+  const extractionJobs = store.extractionJobs.map((job) => {
+    if (job.id !== jobId) {
+      return job;
+    }
+
+    updatedJob = {
+      ...job,
+      ...update,
+      updatedAt: timestamp,
+    };
+    return updatedJob;
+  });
+
+  await writeStore({
+    ...store,
+    extractionJobs,
+  });
+
+  return updatedJob;
+}
+
+export async function saveLocalExtractedWorkflowItems(
+  items: Array<Omit<ExtractedWorkflowItem, "id" | "createdAt" | "updatedAt">>,
+) {
+  const store = await readStore();
+  const timestamp = new Date().toISOString();
+  const extractedItems = items.map((item, index) => ({
+    ...item,
+    id: `local-extracted-item-${Date.now()}-${index}`,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  }));
+
+  await writeStore({
+    ...store,
+    extractedItems: [...extractedItems, ...store.extractedItems],
+  });
+
+  return extractedItems;
 }

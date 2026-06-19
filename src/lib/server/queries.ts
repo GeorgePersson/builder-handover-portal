@@ -18,7 +18,11 @@ import type {
   ExtractedHandoverItem,
   SpecificationUpload,
 } from "@/lib/types";
-import type { UploadedProjectDocument } from "@/lib/document-workflow";
+import type {
+  DocumentExtractionJob,
+  ExtractedWorkflowItem,
+  UploadedProjectDocument,
+} from "@/lib/document-workflow";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
   getLocalExtractedItems,
@@ -27,7 +31,11 @@ import {
 } from "@/lib/server/local-store/specifications";
 import { getLocalClientRequests } from "@/lib/server/local-store/client-requests";
 import { getLocalGlobalProducts } from "@/lib/server/local-store/products";
-import { getLocalUploadedDocuments } from "@/lib/server/local-store/uploaded-documents";
+import {
+  getLocalDocumentExtractionJobs,
+  getLocalExtractedWorkflowItems,
+  getLocalUploadedDocuments,
+} from "@/lib/server/local-store/uploaded-documents";
 
 function hasSupabaseConfig() {
   return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
@@ -350,6 +358,91 @@ export async function getUploadedProjectDocuments(projectId?: string): Promise<U
     uploadedBy: document.uploaded_by || undefined,
     createdAt: document.created_at,
     updatedAt: document.updated_at,
+  }));
+}
+
+export async function getDocumentExtractionJobs(projectId?: string): Promise<DocumentExtractionJob[]> {
+  if (!hasSupabaseConfig()) {
+    return getLocalDocumentExtractionJobs(projectId);
+  }
+
+  const supabase = await createSupabaseServerClient();
+  let query = supabase
+    .from("document_extraction_jobs")
+    .select("id,project_id,uploaded_document_id,status,error_message,started_at,completed_at,retry_count,created_at,updated_at")
+    .order("created_at", { ascending: false });
+
+  if (projectId) {
+    query = query.eq("project_id", projectId);
+  }
+
+  const { data, error } = await query;
+
+  if (error || !data) {
+    return [];
+  }
+
+  return data.map((job) => ({
+    id: job.id,
+    projectId: job.project_id,
+    uploadedDocumentId: job.uploaded_document_id,
+    status: job.status,
+    errorMessage: job.error_message || undefined,
+    startedAt: job.started_at || undefined,
+    completedAt: job.completed_at || undefined,
+    retryCount: job.retry_count,
+    createdAt: job.created_at,
+    updatedAt: job.updated_at,
+  }));
+}
+
+export async function getExtractedWorkflowItems(projectId?: string): Promise<ExtractedWorkflowItem[]> {
+  if (!hasSupabaseConfig()) {
+    return getLocalExtractedWorkflowItems(projectId);
+  }
+
+  const supabase = await createSupabaseServerClient();
+  let query = supabase
+    .from("extracted_items")
+    .select(
+      "id,project_id,source_document_id,extraction_job_id,raw_extracted_data,product_name,brand,model,category,supplier,location,warranty_text,maintenance_text,confidence_score,match_status,review_status,matched_product_id,approved_by,approved_at,excluded_at,exclusion_reason,created_at,updated_at",
+    )
+    .order("created_at", { ascending: false });
+
+  if (projectId) {
+    query = query.eq("project_id", projectId);
+  }
+
+  const { data, error } = await query;
+
+  if (error || !data) {
+    return [];
+  }
+
+  return data.map((item) => ({
+    id: item.id,
+    projectId: item.project_id,
+    sourceDocumentId: item.source_document_id,
+    extractionJobId: item.extraction_job_id || undefined,
+    rawExtractedData: item.raw_extracted_data || {},
+    productName: item.product_name || undefined,
+    brand: item.brand || undefined,
+    model: item.model || undefined,
+    category: item.category || undefined,
+    supplier: item.supplier || undefined,
+    location: item.location || undefined,
+    warrantyText: item.warranty_text || undefined,
+    maintenanceText: item.maintenance_text || undefined,
+    confidenceScore: item.confidence_score,
+    matchStatus: item.match_status,
+    reviewStatus: item.review_status,
+    matchedProductId: item.matched_product_id || undefined,
+    approvedBy: item.approved_by || undefined,
+    approvedAt: item.approved_at || undefined,
+    excludedAt: item.excluded_at || undefined,
+    exclusionReason: item.exclusion_reason || undefined,
+    createdAt: item.created_at,
+    updatedAt: item.updated_at,
   }));
 }
 
