@@ -348,6 +348,11 @@ Supabase is not configured.
   original route.
 - Supabase schema includes `client_requests`, `client_request_type`, and
   `client_request_status` for homeowner request intake and admin triage.
+- Phase 1 of the document upload/extraction/review/publish-blocking workflow is
+  modelled in schema and TypeScript constants only. It adds parallel workflow
+  primitives for `uploaded_documents`, `document_extraction_jobs`,
+  `extracted_items`, `product_matches`, `item_review_actions`,
+  `handover_items`, and `audit_logs`; current runtime behaviour is unchanged.
 - Magic-link login scaffold at `/login`.
 
 ## Tested Demo Flow
@@ -528,6 +533,8 @@ Both passed after the latest changes.
   run `docs/supabase-add-maintenance-completion-policies.sql`.
 - If the schema was applied before editable organisation settings were added,
   also run `docs/supabase-add-organisation-update-policy.sql`.
+- If the schema was applied before the phased document workflow model was added,
+  also run `docs/supabase-add-document-workflow-phase1.sql`.
 - Add `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and
   `SUPABASE_SERVICE_ROLE_KEY` to
   `.env.local`.
@@ -555,26 +562,29 @@ Both passed after the latest changes.
 
 ## Next Best Work
 
-1. Apply `docs/supabase-schema.sql` to a Supabase project and add env vars to
+1. Continue Phase 2 of the controlled document workflow: upload project
+   documents into `uploaded_documents`, show processing status, and record
+   `document_uploaded` audit logs without implementing AI extraction yet.
+2. Apply `docs/supabase-schema.sql` to a Supabase project and add env vars to
    `.env.local`.
-2. Continue improving PDF extraction for long, table-heavy specification files:
+3. Continue improving PDF extraction for long, table-heavy specification files:
    tune table extraction and OCR limits against real builder specifications.
-3. Replace the deterministic source-enrichment scaffold with a real AI/search
+4. Replace the deterministic source-enrichment scaffold with a real AI/search
    workflow: official source search, extraction, critic scoring, source storage,
    and admin review for low-confidence records.
-4. Tune the PDF intake progress and warning copy against real builder files,
+5. Tune the PDF intake progress and warning copy against real builder files,
    especially long scanned/image-only specifications and table-heavy schedules.
-5. Apply `docs/supabase-add-extracted-item-review-reason.sql` to existing
+6. Apply `docs/supabase-add-extracted-item-review-reason.sql` to existing
    Supabase projects so reviewer notes persist remotely, then remove the legacy
    no-column fallback once all environments have the field.
-6. Replace `POST /api/ai/product-draft` deterministic enrichment with the real
+7. Replace `POST /api/ai/product-draft` deterministic enrichment with the real
    source-backed AI/search workflow.
-7. Test Resend client invite delivery against a verified sender domain and
+8. Test Resend client invite delivery against a verified sender domain and
    decide final invite email copy.
-8. Test the Stripe Checkout/webhook flow against a real Stripe test account and
+9. Test the Stripe Checkout/webhook flow against a real Stripe test account and
    confirm the `/admin/billing` manual adjustment path works for support
    recovery.
-9. Add richer client-facing document previews once signed URL behaviour is
+10. Add richer client-facing document previews once signed URL behaviour is
     stable with real uploads.
 
 ## Good Resume Prompt
