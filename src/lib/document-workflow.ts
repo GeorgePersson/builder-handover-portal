@@ -146,3 +146,18 @@ export type WorkflowHandoverItem = {
   approvedAt?: string;
   createdAt: string;
 };
+
+export type HandoverApprovalRecord = {
+  id: string;
+  projectId: string;
+  approvedBy?: string;
+  approvedAt: string;
+  handoverVersion: string;
+  builderConfirmationText: string;
+  aiConfirmationText?: string;
+  includedItemIds: string[];
+  excludedItemIds: string[];
+  aiGeneratedItemCount: number;
+  reviewedItemCount: number;
+  metadata: Record<string, unknown>;
+};

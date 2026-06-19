@@ -2,7 +2,11 @@
 
 import { createHash, randomBytes } from "node:crypto";
 import { redirect } from "next/navigation";
-import { productVersions } from "@/lib/data";
+import {
+  extractedHandoverItems,
+  productVersions,
+  specificationUploads,
+} from "@/lib/data";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
   extractDocumentText,
@@ -21,7 +25,9 @@ import {
 } from "@/lib/server/upload-utils";
 import {
   createLocalExtractionFromClientRequest,
+  getLocalExtractedItems,
   getLocalExtractedItem,
+  getLocalSpecificationUploads,
   publishLocalHandoverPackage,
   updateLocalExtractedItem,
   updateLocalExtractedItemStatus,
@@ -33,6 +39,7 @@ import {
   getLocalExtractedWorkflowItems,
   getLocalUploadedDocuments,
   generateLocalWorkflowHandoverItems,
+  saveLocalHandoverApprovalRecord,
   saveLocalDocumentExtractionJob,
   saveLocalExtractedWorkflowItems,
   saveLocalItemReviewAction,
@@ -41,6 +48,10 @@ import {
   updateLocalExtractedWorkflowItemReview,
   updateLocalUploadedDocumentStatus,
 } from "@/lib/server/local-store/uploaded-documents";
+import {
+  aiHandoverApprovalText,
+  builderHandoverApprovalText,
+} from "@/lib/handover-approval";
 import { getWorkflowPublishReadiness } from "@/lib/workflow-readiness";
 import {
   getLocalClientRequest,
@@ -1312,6 +1323,95 @@ async function getLocalWorkflowPublishReadiness(projectId: string) {
   ]);
 
   return getWorkflowPublishReadiness({ documents, jobs, items });
+}
+
+function validateHandoverApprovalConfirmation(input: {
+  formData: FormData;
+  hasAiGeneratedItems: boolean;
+}) {
+  if (input.formData.get("builderApprovalConfirmed") !== "on") {
+    redirect("/builder/projects?error=handover-approval-required");
+  }
+
+  if (input.hasAiGeneratedItems && input.formData.get("aiApprovalConfirmed") !== "on") {
+    redirect("/builder/projects?error=handover-ai-approval-required");
+  }
+}
+
+async function recordSupabaseHandoverApproval(input: {
+  context: BuilderActionContext;
+  projectId: string;
+  approvedAt: string;
+  handoverVersion: string;
+  includedItemIds: string[];
+  excludedItemIds: string[];
+  aiGeneratedItemCount: number;
+  reviewedItemCount: number;
+  legacyItemCount: number;
+}) {
+  const { error } = await input.context.supabase.from("handover_approvals").insert({
+    project_id: input.projectId,
+    approved_by: input.context.userId,
+    approved_at: input.approvedAt,
+    handover_version: input.handoverVersion,
+    builder_confirmation_text: builderHandoverApprovalText,
+    ai_confirmation_text: input.aiGeneratedItemCount > 0 ? aiHandoverApprovalText : null,
+    included_item_ids: input.includedItemIds,
+    excluded_item_ids: input.excludedItemIds,
+    ai_generated_item_count: input.aiGeneratedItemCount,
+    reviewed_item_count: input.reviewedItemCount,
+    metadata: {
+      legacy_item_count: input.legacyItemCount,
+      approval_source: "builder_publish",
+    },
+  });
+
+  if (error) {
+    redirect("/builder/projects?error=handover-approval-record-failed");
+  }
+
+  await insertWorkflowAuditLog(input.context, {
+    projectId: input.projectId,
+    eventType: "handover_final_approval",
+    detail: `Final handover approval recorded for ${input.handoverVersion}.`,
+    metadata: {
+      handover_version: input.handoverVersion,
+      included_item_ids: input.includedItemIds,
+      excluded_item_ids: input.excludedItemIds,
+      ai_generated_item_count: input.aiGeneratedItemCount,
+      reviewed_item_count: input.reviewedItemCount,
+      builder_confirmation_text: builderHandoverApprovalText,
+      ai_confirmation_text: input.aiGeneratedItemCount > 0 ? aiHandoverApprovalText : null,
+    },
+  });
+}
+
+async function recordLocalHandoverApproval(input: {
+  projectId: string;
+  approvedAt: string;
+  handoverVersion: string;
+  includedItemIds: string[];
+  excludedItemIds: string[];
+  aiGeneratedItemCount: number;
+  reviewedItemCount: number;
+  legacyItemCount: number;
+}) {
+  await saveLocalHandoverApprovalRecord({
+    projectId: input.projectId,
+    approvedBy: "local-scaffold",
+    approvedAt: input.approvedAt,
+    handoverVersion: input.handoverVersion,
+    builderConfirmationText: builderHandoverApprovalText,
+    aiConfirmationText: input.aiGeneratedItemCount > 0 ? aiHandoverApprovalText : undefined,
+    includedItemIds: input.includedItemIds,
+    excludedItemIds: input.excludedItemIds,
+    aiGeneratedItemCount: input.aiGeneratedItemCount,
+    reviewedItemCount: input.reviewedItemCount,
+    metadata: {
+      legacy_item_count: input.legacyItemCount,
+      approval_source: "builder_publish",
+    },
+  });
 }
 
 async function getSupabaseVerifiedProductCandidates(context: BuilderActionContext): Promise<VerifiedProductCandidate[]> {
@@ -2639,18 +2739,45 @@ export async function publishHandoverPackageAction(formData: FormData) {
       redirect("/builder/projects?error=workflow-publish-blocked");
     }
 
-    const generatedWorkflowItems = await generateSupabaseWorkflowHandoverItems(context, projectId);
     const { data: acceptedItems } = await context.supabase
       .from("extracted_handover_items")
       .select("id,specification_uploads(project_id)")
       .in("status", ["accepted", "auto_approved", "builder_approved", "global_approved"])
       .eq("specification_uploads.project_id", projectId);
+    validateHandoverApprovalConfirmation({
+      formData,
+      hasAiGeneratedItems: readiness.approvedItemCount > 0 || Boolean(acceptedItems?.length),
+    });
+
+    const generatedWorkflowItems = await generateSupabaseWorkflowHandoverItems(context, projectId);
+    const { data: excludedItems } = await context.supabase
+      .from("extracted_items")
+      .select("id")
+      .eq("project_id", projectId)
+      .eq("review_status", "excluded");
+    const approvedAt = new Date().toISOString();
+    const handoverVersion = `handover-${projectId}-${approvedAt}`;
+    const includedItemIds = generatedWorkflowItems.length
+      ? generatedWorkflowItems.map((item) => item.id)
+      : (acceptedItems || []).map((item) => item.id);
+
+    await recordSupabaseHandoverApproval({
+      context,
+      projectId,
+      approvedAt,
+      handoverVersion,
+      includedItemIds,
+      excludedItemIds: (excludedItems || []).map((item) => item.id),
+      aiGeneratedItemCount: generatedWorkflowItems.length,
+      reviewedItemCount: readiness.approvedItemCount,
+      legacyItemCount: acceptedItems?.length || 0,
+    });
 
     const { error: projectError } = await context.supabase
       .from("projects")
       .update({
         status: "published",
-        published_at: new Date().toISOString(),
+        published_at: approvedAt,
       })
       .eq("id", projectId)
       .eq("organisation_id", context.organisationId);
@@ -2675,8 +2802,46 @@ export async function publishHandoverPackageAction(formData: FormData) {
       redirect("/builder/projects?error=workflow-publish-blocked");
     }
 
-    await generateLocalWorkflowHandoverItems(projectId);
-    await publishLocalHandoverPackage(projectId);
+    const localSpecifications = [
+      ...(await getLocalSpecificationUploads()),
+      ...specificationUploads,
+    ];
+    const localProjectSpecificationIds = new Set(
+      localSpecifications
+        .filter((specification) => specification.projectId === projectId)
+        .map((specification) => specification.id),
+    );
+    const localAcceptedItems = [
+      ...(await getLocalExtractedItems()),
+      ...extractedHandoverItems,
+    ].filter(
+      (item) =>
+        localProjectSpecificationIds.has(item.specificationId) &&
+        ["accepted", "auto_approved", "builder_approved", "global_approved"].includes(item.status),
+    );
+    validateHandoverApprovalConfirmation({
+      formData,
+      hasAiGeneratedItems: readiness.approvedItemCount > 0 || localAcceptedItems.length > 0,
+    });
+
+    const [workflowItems, generatedWorkflowItems] = await Promise.all([
+      getLocalExtractedWorkflowItems(projectId),
+      generateLocalWorkflowHandoverItems(projectId),
+    ]);
+    const localPublish = await publishLocalHandoverPackage(projectId);
+
+    await recordLocalHandoverApproval({
+      projectId,
+      approvedAt: localPublish.publishedAt,
+      handoverVersion: `handover-${projectId}-${localPublish.publishedAt}`,
+      includedItemIds: generatedWorkflowItems.map((item) => item.id),
+      excludedItemIds: workflowItems
+        .filter((item) => item.reviewStatus === "excluded")
+        .map((item) => item.id),
+      aiGeneratedItemCount: generatedWorkflowItems.length,
+      reviewedItemCount: readiness.approvedItemCount,
+      legacyItemCount: localPublish.itemIds.length,
+    });
   }
 
   redirect(`/builder/projects?draft=package-published&storage=${hasSupabaseConfig() ? "supabase" : "stub"}`);

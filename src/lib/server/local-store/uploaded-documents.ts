@@ -4,6 +4,7 @@ import type {
   DocumentExtractionJob,
   ExtractedItemReviewStatus,
   ExtractedWorkflowItem,
+  HandoverApprovalRecord,
   ItemReviewAction,
   ItemReviewActionType,
   ProductMatch,
@@ -18,6 +19,7 @@ type LocalUploadedDocumentStore = {
   extractedItems: ExtractedWorkflowItem[];
   itemReviewActions: ItemReviewAction[];
   handoverItems: WorkflowHandoverItem[];
+  handoverApprovals: HandoverApprovalRecord[];
   productMatches: ProductMatch[];
 };
 
@@ -52,6 +54,7 @@ async function readStore(): Promise<LocalUploadedDocumentStore> {
       extractedItems: parsed.extractedItems || [],
       itemReviewActions: parsed.itemReviewActions || [],
       handoverItems: parsed.handoverItems || [],
+      handoverApprovals: parsed.handoverApprovals || [],
       productMatches: parsed.productMatches || [],
     };
   } catch {
@@ -61,6 +64,7 @@ async function readStore(): Promise<LocalUploadedDocumentStore> {
       extractedItems: [],
       itemReviewActions: [],
       handoverItems: [],
+      handoverApprovals: [],
       productMatches: [],
     };
   }
@@ -293,6 +297,23 @@ export async function getLocalWorkflowHandoverItems(projectId?: string) {
   return projectId
     ? store.handoverItems.filter((item) => item.projectId === projectId)
     : store.handoverItems;
+}
+
+export async function saveLocalHandoverApprovalRecord(
+  input: Omit<HandoverApprovalRecord, "id">,
+) {
+  const store = await readStore();
+  const approval: HandoverApprovalRecord = {
+    ...input,
+    id: `local-handover-approval-${Date.now()}`,
+  };
+
+  await writeStore({
+    ...store,
+    handoverApprovals: [approval, ...store.handoverApprovals],
+  });
+
+  return approval;
 }
 
 export async function saveLocalDocumentExtractionJob(

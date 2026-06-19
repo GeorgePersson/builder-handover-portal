@@ -533,6 +533,11 @@ Supabase is not configured.
   or workflow review items remain unresolved. The builder send panel shows the
   same blockers that `publishHandoverPackageAction` enforces on the backend.
   Runtime publish-blocking tests are queued in `TESTING_LOG.txt`.
+- Lint/build check for Phase 9 final approval: the send panel shows a final
+  approval summary, requires the builder confirmation checkbox, conditionally
+  requires the AI confirmation checkbox, and `publishHandoverPackageAction`
+  stores `handover_approvals` metadata before publishing. Runtime approval
+  tests are queued in `TESTING_LOG.txt`.
 - HTTP smoke check for unauthenticated `/builder/onboarding`: route returns
   `307` to `/login?next=%2Fbuilder%2Fonboarding` with Supabase auth active.
 - HTTP smoke check for unauthenticated
@@ -599,6 +604,8 @@ Both passed after the latest changes.
   also run `docs/supabase-add-organisation-update-policy.sql`.
 - If the schema was applied before the phased document workflow model was added,
   also run `docs/supabase-add-document-workflow-phase1.sql`.
+- If the schema was applied before final approval records were added, also run
+  `docs/supabase-add-handover-approvals.sql`.
 - Add `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and
   `SUPABASE_SERVICE_ROLE_KEY` to
   `.env.local`.
@@ -626,9 +633,9 @@ Both passed after the latest changes.
 
 ## Next Best Work
 
-1. Continue Phase 9 of the controlled document workflow: add the final handover
-   approval summary, required approval checkboxes, approval metadata, and
-   version-preserving approval record.
+1. Continue Phase 10 of the controlled document workflow: harden tests, edge
+   cases, and cleanup around upload permissions, extraction retries, review
+   actions, publish blocking, homeowner filtering, and approval records.
 2. Apply `docs/supabase-schema.sql` to a Supabase project and add env vars to
    `.env.local`.
 3. Continue improving PDF extraction for long, table-heavy specification files:
@@ -653,9 +660,9 @@ Both passed after the latest changes.
 
 ## Good Resume Prompt
 
-Continue from `HANDOFF.md`. The current priority is Phase 9 of the controlled
-document workflow: add the final approval summary and required builder
-confirmation checkboxes before release to the homeowner.
+Continue from `HANDOFF.md`. The current priority is Phase 10 of the controlled
+document workflow: harden tests, edge cases, and cleanup for the
+upload/extraction/review/publish/approval pipeline.
 
 ## Notes
 

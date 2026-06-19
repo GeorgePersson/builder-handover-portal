@@ -330,6 +330,46 @@ Pending Tests
    Result:
    Notes:
 
+25. Date added: 2026-06-19
+   Area: Phase 9 required approval checkbox
+   What to test: Publishing is blocked until the builder approval checkbox is checked.
+   Steps:
+   - Resolve all workflow blockers for a project.
+   - Open Send package.
+   - Leave the builder approval checkbox unchecked and try to publish.
+   - Then check it and submit again.
+   Expected result: The unchecked submission is blocked by the browser and by
+   the backend if tampered. Checked submission can proceed if all readiness
+   checks pass.
+   Result:
+   Notes:
+
+26. Date added: 2026-06-19
+   Area: Phase 9 AI approval checkbox
+   What to test: AI-assisted handovers require the AI confirmation checkbox.
+   Steps:
+   - Use a project with AI/workflow extracted items or package-ready spec items.
+   - Open Send package.
+   - Confirm the AI checkbox appears.
+   - Tamper-submit without aiApprovalConfirmed if testing from devtools.
+   Expected result: The backend rejects missing AI confirmation with
+   handover-ai-approval-required, and normal publish stores the AI checkbox text.
+   Result:
+   Notes:
+
+27. Date added: 2026-06-19
+   Area: Phase 9 approval record metadata
+   What to test: Final approval creates a stored approval record.
+   Steps:
+   - Run docs/supabase-add-handover-approvals.sql if using an existing Supabase project.
+   - Publish a ready project with all required checkboxes checked.
+   - Inspect Supabase handover_approvals or .local-data/uploaded-documents.json.
+   Expected result: The approval record stores approved_at, approving builder,
+   handover version, accepted checkbox text, included item IDs, excluded item
+   IDs, AI-generated item count, reviewed item count, and metadata.
+   Result:
+   Notes:
+
 Tested
 
 - No manual tests recorded yet.

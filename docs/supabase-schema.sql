@@ -354,6 +354,22 @@ create table public.handover_items (
   created_at timestamptz not null default now()
 );
 
+create table public.handover_approvals (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references public.projects(id) on delete cascade,
+  approved_by uuid references auth.users(id) on delete set null,
+  approved_at timestamptz not null default now(),
+  handover_version text not null,
+  builder_confirmation_text text not null,
+  ai_confirmation_text text,
+  included_item_ids uuid[] not null default '{}',
+  excluded_item_ids uuid[] not null default '{}',
+  ai_generated_item_count integer not null default 0 check (ai_generated_item_count >= 0),
+  reviewed_item_count integer not null default 0 check (reviewed_item_count >= 0),
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
 create table public.audit_events (
   id uuid primary key default gen_random_uuid(),
   organisation_id uuid references public.organisations(id) on delete cascade,
@@ -396,6 +412,7 @@ alter table public.extracted_items enable row level security;
 alter table public.product_matches enable row level security;
 alter table public.item_review_actions enable row level security;
 alter table public.handover_items enable row level security;
+alter table public.handover_approvals enable row level security;
 alter table public.audit_events enable row level security;
 alter table public.audit_logs enable row level security;
 
@@ -879,6 +896,24 @@ using (
     where p.id = project_id and public.is_org_member(p.organisation_id)
   )
 )
+with check (
+  exists (
+    select 1 from public.projects p
+    where p.id = project_id and public.is_org_member(p.organisation_id)
+  )
+);
+
+create policy "Members can read handover approvals"
+on public.handover_approvals for select
+using (
+  exists (
+    select 1 from public.projects p
+    where p.id = project_id and public.is_org_member(p.organisation_id)
+  )
+);
+
+create policy "Members can create handover approvals"
+on public.handover_approvals for insert
 with check (
   exists (
     select 1 from public.projects p

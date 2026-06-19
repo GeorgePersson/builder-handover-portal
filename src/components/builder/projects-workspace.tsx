@@ -46,6 +46,10 @@ import {
   uploadWorkflowItemSupportingDocumentAction,
 } from "@/lib/server/actions";
 import { formatDate } from "@/lib/utils";
+import {
+  aiHandoverApprovalText,
+  builderHandoverApprovalText,
+} from "@/lib/handover-approval";
 import type {
   DocumentDownloadEvent,
   ExtractedHandoverItem,
@@ -244,6 +248,9 @@ export function ProjectsWorkspace({
             "create-request-failed": "The missing item request could not be created.",
             "extraction-job-not-found": "That extraction job could not be found.",
             "extraction-job-not-retryable": "Only failed extraction jobs can be retried.",
+            "handover-ai-approval-required": "Confirm the AI-assisted information has been reviewed before release.",
+            "handover-approval-record-failed": "The final approval record could not be saved. Run the Phase 9 Supabase migration if needed.",
+            "handover-approval-required": "Confirm the final builder approval before release.",
             "invalid-document-upload": "That file type is not supported. Upload a PDF, image, Word, Excel, or CSV file.",
             "insufficient-project-credits": "This organisation does not have a project credit available yet.",
             "invite-email-not-configured": "Invite link created, but email is not configured. Add RESEND_API_KEY and RESEND_FROM_EMAIL.",
@@ -977,6 +984,10 @@ function SendPackagePanel({
   const approvedWorkflowItems = snapshot.workflowItems.filter((item) =>
     approvedWorkflowReviewStatuses.has(item.reviewStatus),
   );
+  const excludedWorkflowItems = snapshot.workflowItems.filter((item) => item.reviewStatus === "excluded");
+  const editedWorkflowItems = snapshot.workflowItems.filter((item) => item.reviewStatus === "edited_by_builder");
+  const builderSuppliedWorkflowItems = snapshot.workflowItems.filter((item) => item.reviewStatus === "builder_supplied");
+  const hasAiAssistedItems = snapshot.workflowItems.length > 0 || snapshot.readyItems.length > 0;
   const packageReadyCount = snapshot.readyItems.length + approvedWorkflowItems.length;
   const readiness = getWorkflowPublishReadiness({
     documents: snapshot.workflowDocuments,
@@ -1012,9 +1023,34 @@ function SendPackagePanel({
           Builder confirmation: AI-assisted package details must be reviewed against the actual
           specification, warranties, and supplied documents before sending to the homeowner.
         </div>
-        <form action={publishHandoverPackageAction} className="mt-5 flex justify-end">
+        <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <p className="text-sm font-semibold text-slate-950">Final approval summary</p>
+          <div className="mt-3 grid gap-2 text-sm text-slate-700 sm:grid-cols-2">
+            <span>{packageReadyCount} items included</span>
+            <span>{approvedWorkflowItems.length} workflow items reviewed</span>
+            <span>{editedWorkflowItems.length} manually edited</span>
+            <span>{builderSuppliedWorkflowItems.length} builder-supplied</span>
+            <span>{excludedWorkflowItems.length} excluded</span>
+            <span>{readiness.blockers.length} unresolved blockers</span>
+            <span>{snapshot.tasks.length} maintenance reminders scheduled</span>
+            <span>{snapshot.workflowDocuments.length} uploaded source documents</span>
+          </div>
+        </div>
+        <form action={publishHandoverPackageAction} className="mt-5 space-y-4">
           <input name="projectId" type="hidden" value={project.id} />
-          <SubmitButton disabled={!canPublish} icon={Send} label="Confirm and send package" />
+          <label className="flex gap-3 rounded-md border border-slate-200 bg-white p-3 text-sm leading-6 text-slate-700">
+            <input className="mt-1 size-4 accent-cyan-700" name="builderApprovalConfirmed" required type="checkbox" />
+            <span>{builderHandoverApprovalText}</span>
+          </label>
+          {hasAiAssistedItems ? (
+            <label className="flex gap-3 rounded-md border border-slate-200 bg-white p-3 text-sm leading-6 text-slate-700">
+              <input className="mt-1 size-4 accent-cyan-700" name="aiApprovalConfirmed" required type="checkbox" />
+              <span>{aiHandoverApprovalText}</span>
+            </label>
+          ) : null}
+          <div className="flex justify-end">
+            <SubmitButton disabled={!canPublish} icon={Send} label="Confirm and send package" />
+          </div>
         </form>
       </section>
       <section className="rounded-lg border border-slate-200 p-5">
