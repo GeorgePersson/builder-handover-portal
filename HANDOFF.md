@@ -528,6 +528,11 @@ Supabase is not configured.
   organisation-scoped, and local scaffold mode stores generated workflow
   handover items separately. Runtime homeowner visibility tests are queued in
   `TESTING_LOG.txt`.
+- Lint/build check for Phase 8 publish readiness: shared readiness rules block
+  publishing when workflow documents/jobs are incomplete, extraction has failed,
+  or workflow review items remain unresolved. The builder send panel shows the
+  same blockers that `publishHandoverPackageAction` enforces on the backend.
+  Runtime publish-blocking tests are queued in `TESTING_LOG.txt`.
 - HTTP smoke check for unauthenticated `/builder/onboarding`: route returns
   `307` to `/login?next=%2Fbuilder%2Fonboarding` with Supabase auth active.
 - HTTP smoke check for unauthenticated
@@ -621,9 +626,9 @@ Both passed after the latest changes.
 
 ## Next Best Work
 
-1. Continue Phase 8 of the controlled document workflow: add backend-enforced
-   publish-blocking/readiness logic for in-progress extraction jobs, failed
-   jobs, and unresolved review items.
+1. Continue Phase 9 of the controlled document workflow: add the final handover
+   approval summary, required approval checkboxes, approval metadata, and
+   version-preserving approval record.
 2. Apply `docs/supabase-schema.sql` to a Supabase project and add env vars to
    `.env.local`.
 3. Continue improving PDF extraction for long, table-heavy specification files:
@@ -648,9 +653,9 @@ Both passed after the latest changes.
 
 ## Good Resume Prompt
 
-Continue from `HANDOFF.md`. The current priority is Phase 8 of the controlled
-document workflow: block publishing while extraction is incomplete or workflow
-review items remain unresolved, with backend enforcement as well as UI checks.
+Continue from `HANDOFF.md`. The current priority is Phase 9 of the controlled
+document workflow: add the final approval summary and required builder
+confirmation checkboxes before release to the homeowner.
 
 ## Notes
 

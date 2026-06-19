@@ -55,6 +55,7 @@ import type {
   Project,
   SpecificationUpload,
 } from "@/lib/types";
+import { getWorkflowPublishReadiness } from "@/lib/workflow-readiness";
 
 type ProjectsWorkspaceProps = {
   draft?: string;
@@ -257,8 +258,10 @@ export function ProjectsWorkspace({
             "uploaded-document-download-failed": "The uploaded document could not be loaded for extraction retry.",
             "uploaded-document-not-found": "The uploaded document for that extraction job could not be found.",
             "workflow-item-not-found": "That extracted item could not be found.",
+            "workflow-publish-blocked": "This project is not ready to publish yet. Resolve workflow processing and review blockers first.",
             "workflow-review-action-failed": "The review action could not be saved.",
             "workflow-review-update-failed": "The extracted item could not be updated.",
+            "publish-readiness-check-failed": "The project readiness check could not be completed.",
           }}
           storage={storage}
         />
@@ -966,6 +969,8 @@ function SendPackagePanel({
     awaitingAdmin: ExtractedHandoverItem[];
     readyItems: ExtractedHandoverItem[];
     tasks: MaintenanceTask[];
+    workflowDocuments: UploadedProjectDocument[];
+    workflowJobs: DocumentExtractionJob[];
     workflowItems: ExtractedWorkflowItem[];
   };
 }) {
@@ -973,6 +978,12 @@ function SendPackagePanel({
     approvedWorkflowReviewStatuses.has(item.reviewStatus),
   );
   const packageReadyCount = snapshot.readyItems.length + approvedWorkflowItems.length;
+  const readiness = getWorkflowPublishReadiness({
+    documents: snapshot.workflowDocuments,
+    jobs: snapshot.workflowJobs,
+    items: snapshot.workflowItems,
+  });
+  const canPublish = readiness.ready && packageReadyCount > 0;
 
   return (
     <div className="grid gap-5 xl:grid-cols-[1fr_0.85fr]">
@@ -981,16 +992,29 @@ function SendPackagePanel({
         <div className="mt-4 space-y-3">
           <CheckRow label={`${packageReadyCount} approved package items`} ok={packageReadyCount > 0} />
           <CheckRow label={`${approvedWorkflowItems.length} approved workflow items`} ok={approvedWorkflowItems.length > 0} />
+          <CheckRow label="Workflow processing complete" ok={readiness.ready} />
           <CheckRow label={`${snapshot.awaitingAdmin.length} items still awaiting admin`} ok={snapshot.awaitingAdmin.length === 0} />
           <CheckRow label={`${snapshot.tasks.length} maintenance tasks attached`} ok={snapshot.tasks.length > 0} />
         </div>
+        {readiness.blockers.length ? (
+          <div className="mt-5 rounded-md border border-rose-200 bg-rose-50 p-4">
+            <p className="text-sm font-semibold text-rose-900">Publish blocked</p>
+            <ul className="mt-2 space-y-1 text-sm leading-6 text-rose-800">
+              {readiness.blockers.map((blocker) => (
+                <li key={blocker.code}>
+                  {blocker.label}: {blocker.count}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         <div className="mt-5 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
           Builder confirmation: AI-assisted package details must be reviewed against the actual
           specification, warranties, and supplied documents before sending to the homeowner.
         </div>
         <form action={publishHandoverPackageAction} className="mt-5 flex justify-end">
           <input name="projectId" type="hidden" value={project.id} />
-          <SubmitButton icon={Send} label="Confirm and send package" />
+          <SubmitButton disabled={!canPublish} icon={Send} label="Confirm and send package" />
         </form>
       </section>
       <section className="rounded-lg border border-slate-200 p-5">

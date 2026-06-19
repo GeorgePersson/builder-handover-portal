@@ -30,6 +30,7 @@ import {
   applyLocalProductMatches,
   getLocalDocumentExtractionJobs,
   getLocalExtractedWorkflowItem,
+  getLocalExtractedWorkflowItems,
   getLocalUploadedDocuments,
   generateLocalWorkflowHandoverItems,
   saveLocalDocumentExtractionJob,
@@ -40,6 +41,7 @@ import {
   updateLocalExtractedWorkflowItemReview,
   updateLocalUploadedDocumentStatus,
 } from "@/lib/server/local-store/uploaded-documents";
+import { getWorkflowPublishReadiness } from "@/lib/workflow-readiness";
 import {
   getLocalClientRequest,
   saveLocalClientRequest,
@@ -1211,6 +1213,105 @@ async function generateSupabaseWorkflowHandoverItems(
   });
 
   return insertedItems || [];
+}
+
+async function getSupabaseWorkflowPublishReadiness(
+  context: BuilderActionContext,
+  projectId: string,
+) {
+  const { data: project, error: projectError } = await context.supabase
+    .from("projects")
+    .select("id")
+    .eq("id", projectId)
+    .eq("organisation_id", context.organisationId)
+    .single();
+
+  if (projectError || !project) {
+    redirect("/builder/projects?error=project-not-found");
+  }
+
+  const [documentsResult, jobsResult, itemsResult] = await Promise.all([
+    context.supabase
+      .from("uploaded_documents")
+      .select("id,project_id,original_filename,file_type,mime_type,storage_path,processing_status,uploaded_by,created_at,updated_at")
+      .eq("project_id", projectId),
+    context.supabase
+      .from("document_extraction_jobs")
+      .select("id,project_id,uploaded_document_id,status,error_message,started_at,completed_at,retry_count,created_at,updated_at")
+      .eq("project_id", projectId),
+    context.supabase
+      .from("extracted_items")
+      .select(
+        "id,project_id,source_document_id,extraction_job_id,raw_extracted_data,product_name,brand,model,category,supplier,location,warranty_text,maintenance_text,confidence_score,match_status,review_status,matched_product_id,approved_by,approved_at,excluded_at,exclusion_reason,created_at,updated_at",
+      )
+      .eq("project_id", projectId),
+  ]);
+
+  if (documentsResult.error || jobsResult.error || itemsResult.error) {
+    redirect("/builder/projects?error=publish-readiness-check-failed");
+  }
+
+  return getWorkflowPublishReadiness({
+    documents: (documentsResult.data || []).map((document) => ({
+      id: document.id,
+      projectId: document.project_id,
+      originalFilename: document.original_filename,
+      fileType: document.file_type || undefined,
+      mimeType: document.mime_type,
+      storagePath: document.storage_path,
+      processingStatus: document.processing_status,
+      uploadedBy: document.uploaded_by || undefined,
+      createdAt: document.created_at,
+      updatedAt: document.updated_at,
+    })),
+    jobs: (jobsResult.data || []).map((job) => ({
+      id: job.id,
+      projectId: job.project_id,
+      uploadedDocumentId: job.uploaded_document_id,
+      status: job.status,
+      errorMessage: job.error_message || undefined,
+      startedAt: job.started_at || undefined,
+      completedAt: job.completed_at || undefined,
+      retryCount: job.retry_count,
+      createdAt: job.created_at,
+      updatedAt: job.updated_at,
+    })),
+    items: (itemsResult.data || []).map((item) => ({
+      id: item.id,
+      projectId: item.project_id,
+      sourceDocumentId: item.source_document_id,
+      extractionJobId: item.extraction_job_id || undefined,
+      rawExtractedData: item.raw_extracted_data || {},
+      productName: item.product_name || undefined,
+      brand: item.brand || undefined,
+      model: item.model || undefined,
+      category: item.category || undefined,
+      supplier: item.supplier || undefined,
+      location: item.location || undefined,
+      warrantyText: item.warranty_text || undefined,
+      maintenanceText: item.maintenance_text || undefined,
+      confidenceScore: item.confidence_score,
+      matchStatus: item.match_status,
+      reviewStatus: item.review_status,
+      matchedProductId: item.matched_product_id || undefined,
+      approvedBy: item.approved_by || undefined,
+      approvedAt: item.approved_at || undefined,
+      excludedAt: item.excluded_at || undefined,
+      exclusionReason: item.exclusion_reason || undefined,
+      createdAt: item.created_at,
+      updatedAt: item.updated_at,
+    })),
+  });
+}
+
+async function getLocalWorkflowPublishReadiness(projectId: string) {
+  const [documents, jobs, items] = await Promise.all([
+    getLocalUploadedDocuments(projectId),
+    getLocalDocumentExtractionJobs(projectId),
+    getLocalExtractedWorkflowItems(projectId),
+  ]);
+
+  return getWorkflowPublishReadiness({ documents, jobs, items });
 }
 
 async function getSupabaseVerifiedProductCandidates(context: BuilderActionContext): Promise<VerifiedProductCandidate[]> {
@@ -2532,6 +2633,12 @@ export async function publishHandoverPackageAction(formData: FormData) {
   const context = await getBuilderContext();
 
   if (context) {
+    const readiness = await getSupabaseWorkflowPublishReadiness(context, projectId);
+
+    if (!readiness.ready) {
+      redirect("/builder/projects?error=workflow-publish-blocked");
+    }
+
     const generatedWorkflowItems = await generateSupabaseWorkflowHandoverItems(context, projectId);
     const { data: acceptedItems } = await context.supabase
       .from("extracted_handover_items")
@@ -2562,6 +2669,12 @@ export async function publishHandoverPackageAction(formData: FormData) {
       detail: `Published ${packageItemCount} approved handover items to the client portal.`,
     });
   } else {
+    const readiness = await getLocalWorkflowPublishReadiness(projectId);
+
+    if (!readiness.ready) {
+      redirect("/builder/projects?error=workflow-publish-blocked");
+    }
+
     await generateLocalWorkflowHandoverItems(projectId);
     await publishLocalHandoverPackage(projectId);
   }

@@ -280,6 +280,56 @@ Pending Tests
    Result:
    Notes:
 
+21. Date added: 2026-06-19
+   Area: Phase 8 processing publish block
+   What to test: A project cannot publish while workflow processing is incomplete.
+   Steps:
+   - Upload a supported project document.
+   - Before the extraction job completes, open Send package for that project.
+   - Try to publish if the button is available, or tamper-submit the publish form.
+   Expected result: The UI shows a publish blocker for incomplete processing,
+   the button is disabled when the modal has current data, and the backend
+   rejects direct publish attempts with workflow-publish-blocked.
+   Result:
+   Notes:
+
+22. Date added: 2026-06-19
+   Area: Phase 8 failed extraction publish block
+   What to test: Failed extraction jobs block publishing until retried/resolved.
+   Steps:
+   - Upload a supported document whose filename includes fail-extraction.
+   - Open Send package for that project.
+   - Try to publish.
+   Expected result: The UI shows failed extraction/document blockers and the
+   backend refuses publishing with workflow-publish-blocked.
+   Result:
+   Notes: With the same fail-extraction filename, retry will keep failing by design.
+
+23. Date added: 2026-06-19
+   Area: Phase 8 unresolved review publish block
+   What to test: Unresolved workflow items block publishing.
+   Steps:
+   - Upload a document that produces needs_review, low_confidence, or unmatched items.
+   - Leave at least one unresolved.
+   - Open Send package and try to publish.
+   Expected result: The UI lists unresolved review items as a publish blocker
+   and the backend rejects direct publish attempts.
+   Result:
+   Notes:
+
+24. Date added: 2026-06-19
+   Area: Phase 8 resolved review publish allowed
+   What to test: Publishing succeeds once processing is complete and uncertain items are resolved.
+   Steps:
+   - Resolve all workflow review items by approving, editing, excluding, or
+     marking builder-supplied.
+   - Confirm no extraction jobs are queued, processing, or failed.
+   - Open Send package and publish.
+   Expected result: Publish succeeds, generated handover_items remain the
+   homeowner-facing source, and excluded items do not appear in the client portal.
+   Result:
+   Notes:
+
 Tested
 
 - No manual tests recorded yet.
