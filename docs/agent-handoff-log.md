@@ -1,4 +1,33 @@
 # Agent Handoff Log
+## 2026-06-21 - Supabase Smoke Preflight Prepared
+
+### What Changed
+
+- Added a repeatable `npm.cmd run supabase:smoke:preflight` script for Supabase-mode smoke preparation.
+- The script loads `.env.local` when present, does not print secrets, reports missing Supabase credentials, verifies key REST tables and the `handover-documents` bucket when configured, and optionally checks password login with non-committed test account variables.
+- Documented the preflight in the full test requirements and updated the worksheet with the current cloud blocker.
+
+### Files Changed
+
+- `scripts/smoke-supabase-mode.mjs`
+- `package.json`
+- `docs/full-test-flow-requirements.md`
+- `WORKSHEET.md`
+- `docs/agent-handoff-log.md`
+
+### Checks Run
+
+- `node scripts/smoke-supabase-mode.mjs` - completed as a blocked preflight because this environment has no `.env.local` and is missing `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`.
+
+### Unknowns/Risks
+
+- The actual Supabase REST/auth/browser upload smoke was not run in this cloud environment because the required Supabase secrets are not configured here.
+- Realistic scanned/table-heavy extraction still needs `OPENAI_API_KEY` and/or `LLAMACLOUD_API_KEY`; otherwise the app can only exercise mocked/local fallback paths.
+
+### Suggested Next Task
+
+Configure the Supabase secrets in the execution environment or run locally with `.env.local`, then run `npm.cmd run supabase:smoke:preflight`, start the app, sign in as the builder, upload `docs/demo-assets/bayview-demo-spec.csv`, resolve review items, and verify publish-readiness behavior.
+
 ## 2026-06-21 - Bedtime Codex Cloud Handoff Prompt
 
 ### What Changed

@@ -117,6 +117,24 @@ steps and numbers to record. The runbook includes a quick guarded debug route
 for JSON-only measurement and a full project upload test for UI/runtime
 verification.
 
+
+### Supabase-Mode Smoke Preflight Script
+
+Before opening the browser flow, run the repeatable preflight from the repo root:
+
+```powershell
+npm.cmd run supabase:smoke:preflight
+```
+
+The script never prints secret values. It loads `.env.local` when present, checks whether the Supabase URL, anon key, and service-role key are configured, verifies the key workflow REST tables plus the private `handover-documents` bucket when secrets are available, and optionally performs password-login automation when these non-committed test variables are set:
+
+```txt
+TEST_BUILDER_EMAIL=test@gmail.com
+TEST_BUILDER_PASSWORD=testingtest
+```
+
+If the script reports missing Supabase secrets in Codex cloud, do not invent them and do not print them. Configure `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` in that environment, or continue with docs/code-only work. `OPENAI_API_KEY` and/or `LLAMACLOUD_API_KEY` are still needed for realistic extraction of scanned/table-heavy specs; without them, the app can still exercise mocked/local fallback paths.
+
 ### Pre-Demo Checklist
 
 Run this before the person is watching:
