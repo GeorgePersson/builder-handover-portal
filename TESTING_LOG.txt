@@ -796,8 +796,18 @@ Tested
   - Direct Worker module mock check for `GET /health` and `POST /jobs` passed
     without a D1 binding; `/health` returned `d1Configured=false` and `/jobs`
     returned `d1State.skipped`.
-  - No real Cloudflare D1 database was created, no deployed Worker was called,
-    and no paid/live source enrichment ran.
+  - Later the same day, Wrangler OAuth login succeeded and a remote Cloudflare
+    D1 database named `builder-handover-pipeline` was created in region `OC`.
+  - Bound the database as `PIPELINE_DB` in
+    `cloudflare/handover-pipeline/wrangler.jsonc`.
+  - Applied `cloudflare/handover-pipeline/schema.sql` to the remote database:
+    19 queries, 27 rows read, 36 rows written, database size 0.13 MB.
+  - Remote table readback confirmed `_cf_KV`, `pipeline_jobs`,
+    `pipeline_job_events`, `context_segments`, `identity_lookup_cache`,
+    `source_search_candidates`, `source_search_results`, `source_cache_index`,
+    `idempotency_keys`, and `cost_meter_events`.
+  - No deployed Worker was called, no R2 object was written, and no paid/live
+    source enrichment ran.
 
 - 2026-06-20 Codex Cloudflare progress sync scaffold:
   - Added a server-side sync action that fetches dry-run Worker job status and

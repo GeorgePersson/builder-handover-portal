@@ -154,13 +154,14 @@ Exit criteria:
 Goal: give the Worker pipeline SQL state without moving the whole product
 database.
 
-Current status: started. `cloudflare/handover-pipeline/schema.sql` defines the
-D1 pipeline metadata tables, and the dry-run Worker now mirrors job creation,
-candidate queueing, batch completion, and zero-cost dry-run meter events through
-prepared statements when an optional `PIPELINE_DB` binding is configured. When
-the binding is absent, the Worker continues using Durable Object status only.
-No raw PDFs, auth records, billing truth, review state, or homeowner publication
-data is stored in D1.
+Current status: remote D1 is created and schema-applied. The Cloudflare account
+now has a `builder-handover-pipeline` D1 database bound as `PIPELINE_DB` in
+`cloudflare/handover-pipeline/wrangler.jsonc`. The schema apply created the
+pipeline metadata tables and the readback confirmed the expected table list.
+The dry-run Worker mirrors job creation, candidate queueing, batch completion,
+and zero-cost dry-run meter events through prepared statements when the binding
+is active. No raw PDFs, auth records, billing truth, review state, or homeowner
+publication data is stored in D1.
 
 Tasks:
 
@@ -180,9 +181,8 @@ Exit criteria:
 
 Remaining setup:
 
-- Create the real D1 database in Cloudflare, paste its `database_id` into the
-  commented `PIPELINE_DB` binding in `cloudflare/handover-pipeline/wrangler.jsonc`,
-  apply `schema.sql`, then run a local D1 dry-run job smoke.
+- Run a local Worker D1 dry-run job smoke with the bound database and confirm
+  `/jobs` mirrors rows into D1 as expected.
 
 ## Phase 11: Cloudflare Dry-Run Local Dispatch
 

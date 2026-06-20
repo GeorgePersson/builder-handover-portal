@@ -153,3 +153,32 @@ Continue the Builder Handover Portal from C:\Users\hunte\OneDrive\Desktop\TestWe
 
 - End-to-end refresh was not clicked through a real browser with a running local Worker in this pass.
 - Publish-readiness blocking on incomplete pipeline work is still intentionally deferred until live enrichment mode exists.
+
+## 2026-06-20 - Cloudflare D1 Remote Setup
+
+### What Changed
+
+- Logged into Cloudflare through Wrangler OAuth.
+- Created the remote D1 database `builder-handover-pipeline` in region `OC`.
+- Bound the database as `PIPELINE_DB` in `cloudflare/handover-pipeline/wrangler.jsonc`.
+- Applied `cloudflare/handover-pipeline/schema.sql` to the remote database.
+- Verified the remote table list through `wrangler d1 execute --remote`.
+
+### Files Changed
+
+- `cloudflare/handover-pipeline/wrangler.jsonc`
+- `docs/implementation-phases.md`
+- `HANDOFF.md`
+- `TESTING_LOG.txt`
+- `docs/agent-handoff-log.md`
+
+### Checks Run
+
+- `npx.cmd wrangler d1 create builder-handover-pipeline` - passed.
+- `npx.cmd wrangler d1 execute builder-handover-pipeline --remote --config cloudflare/handover-pipeline/wrangler.jsonc --file cloudflare/handover-pipeline/schema.sql` - passed, 19 queries, 36 rows written, 0.13 MB database.
+- `npx.cmd wrangler d1 execute builder-handover-pipeline --remote --config cloudflare/handover-pipeline/wrangler.jsonc --command "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name;"` - passed.
+
+### Unknowns/Risks
+
+- No Worker deployment or live pipeline job used the remote D1 database yet.
+- Next verification should run a tiny dry-run Worker job with D1 active and confirm pipeline rows are mirrored.
