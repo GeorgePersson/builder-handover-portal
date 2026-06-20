@@ -786,6 +786,11 @@ function ProjectEditPanel({
                                 Pipeline usage: {formatCloudflareBudgetUsage(usage.cloudflarePipeline.budgetUsage)}
                               </span>
                             ) : null}
+                            {usage.cloudflarePipeline?.sourceCacheReferences?.length ? (
+                              <span className="sm:col-span-2 break-all">
+                                Source cache dry-run: {formatCloudflareSourceCacheReferences(usage.cloudflarePipeline.sourceCacheReferences)}
+                              </span>
+                            ) : null}
                             {usage.cloudflarePipeline?.lastSyncedAt ? (
                               <span className="sm:col-span-2">
                                 Pipeline status checked {formatDate(usage.cloudflarePipeline.lastSyncedAt)}
@@ -1656,12 +1661,53 @@ type WorkflowUsageMetrics = {
       estimatedCostUsd?: number;
       dryRun?: boolean;
     };
+    sourceCacheReferences?: Array<{
+      status?: string;
+      objectKey?: string;
+      dryRun?: boolean;
+      identityFingerprint?: string;
+      sourceHash?: string;
+    }>;
     error?: string;
   };
 };
 
+type CloudflareSourceCacheReference = NonNullable<
+  NonNullable<WorkflowUsageMetrics["cloudflarePipeline"]>["sourceCacheReferences"]
+>[number];
+
 function getNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function getCloudflareSourceCacheReferences(value: unknown): CloudflareSourceCacheReference[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const references = value.reduce<CloudflareSourceCacheReference[]>((items, reference) => {
+    if (!reference || typeof reference !== "object") {
+      return items;
+    }
+
+    const record = reference as Record<string, unknown>;
+
+    if (typeof record.objectKey !== "string") {
+      return items;
+    }
+
+    items.push({
+      status: typeof record.status === "string" ? record.status : undefined,
+      objectKey: record.objectKey,
+      dryRun: typeof record.dryRun === "boolean" ? record.dryRun : undefined,
+      identityFingerprint: typeof record.identityFingerprint === "string" ? record.identityFingerprint : undefined,
+      sourceHash: typeof record.sourceHash === "string" ? record.sourceHash : undefined,
+    });
+
+    return items;
+  }, []);
+
+  return references.length ? references : undefined;
 }
 
 function getWorkflowUsageMetrics(
@@ -1687,6 +1733,7 @@ function getWorkflowUsageMetrics(
   const budgetUsage = cloudflarePipeline?.budgetUsage && typeof cloudflarePipeline.budgetUsage === "object"
     ? cloudflarePipeline.budgetUsage
     : undefined;
+  const sourceCacheReferences = getCloudflareSourceCacheReferences(cloudflarePipeline?.sourceCacheReferences);
 
   return {
     extractedRowCount: getNumber(usage.extractedRowCount),
@@ -1722,6 +1769,7 @@ function getWorkflowUsageMetrics(
                 dryRun: typeof budgetUsage.dryRun === "boolean" ? budgetUsage.dryRun : undefined,
               }
             : undefined,
+          sourceCacheReferences,
           error: typeof cloudflarePipeline.error === "string" ? cloudflarePipeline.error : undefined,
         }
       : undefined,
@@ -1774,6 +1822,16 @@ function formatCloudflareBudgetUsage(budgetUsage: NonNullable<NonNullable<Workfl
   const dryRunLabel = budgetUsage.dryRun ? " dry-run" : "";
 
   return `${formatUsageNumber(searches)} searches, $${estimatedCost.toFixed(2)} estimated${dryRunLabel}`;
+}
+
+function formatCloudflareSourceCacheReferences(
+  references: NonNullable<NonNullable<WorkflowUsageMetrics["cloudflarePipeline"]>["sourceCacheReferences"]>,
+) {
+  const [firstReference] = references;
+  const remainingCount = Math.max(0, references.length - 1);
+  const suffix = remainingCount ? `, +${remainingCount} more planned` : "";
+
+  return `${references.length} planned keys (${firstReference.objectKey}${suffix})`;
 }
 
 function canRetryCloudflarePipeline(pipeline: NonNullable<WorkflowUsageMetrics["cloudflarePipeline"]>) {

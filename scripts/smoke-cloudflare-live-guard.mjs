@@ -190,6 +190,11 @@ async function main() {
   assert(completedStatus.batches?.[0]?.safety?.livePilotBudget?.maxEstimatedCostUsd === 0.5, "Expected processed batch to retain safety budget.");
   assert(completedStatus.batches?.[0]?.budgetUsage?.searchesUsed === 0, "Expected processed batch to record zero dry-run searches.");
   assert(completedStatus.budgetUsage?.estimatedCostUsd === 0, "Expected job budget usage to remain zero in dry-run.");
+  assert(completedStatus.sourceCacheReferences?.length === 1, "Expected completed dry-run status to expose planned source cache metadata.");
+  assert(
+    completedStatus.sourceCacheReferences[0].objectKey.startsWith("dry-run/source-cache/"),
+    "Expected planned source cache key to use the dry-run source-cache prefix.",
+  );
 
   console.log(JSON.stringify({
     ok: true,
@@ -203,6 +208,7 @@ async function main() {
     finalStatus: completedStatus.status,
     processedBatchBudget: completedStatus.batches[0].safety.livePilotBudget,
     budgetUsage: completedStatus.budgetUsage,
+    sourceCacheReference: completedStatus.sourceCacheReferences[0],
     ackedMessages: acceptedQueue.acked.length,
   }, null, 2));
 }

@@ -34,6 +34,7 @@ export type CloudflarePipelineJobStatus = {
   failedBatchCount?: number;
   resultsCount?: number;
   budgetUsage?: CloudflarePipelineBudgetUsage;
+  sourceCacheReferences?: CloudflarePipelineSourceCacheReference[];
   updatedAt?: string;
   syncedAt: string;
   workerUrl?: string;
@@ -44,6 +45,14 @@ export type CloudflarePipelineBudgetUsage = {
   searchesUsed?: number;
   estimatedCostUsd?: number;
   dryRun?: boolean;
+};
+
+export type CloudflarePipelineSourceCacheReference = {
+  status?: string;
+  objectKey?: string;
+  dryRun?: boolean;
+  identityFingerprint?: string;
+  sourceHash?: string;
 };
 
 export type CloudflarePipelineRetryResult = {
@@ -71,6 +80,7 @@ type PipelineJobStatusResponse = {
   failedBatchCount?: unknown;
   results?: unknown;
   budgetUsage?: unknown;
+  sourceCacheReferences?: unknown;
   updatedAt?: unknown;
 };
 
@@ -104,6 +114,37 @@ function getBudgetUsage(value: unknown): CloudflarePipelineBudgetUsage | undefin
     estimatedCostUsd: getNumber(budgetUsage.estimatedCostUsd),
     dryRun: typeof budgetUsage.dryRun === "boolean" ? budgetUsage.dryRun : undefined,
   };
+}
+
+function getSourceCacheReferences(value: unknown): CloudflarePipelineSourceCacheReference[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const references = value.reduce<CloudflarePipelineSourceCacheReference[]>((items, item) => {
+    if (!item || typeof item !== "object") {
+      return items;
+    }
+
+    const reference = item as Record<string, unknown>;
+    const objectKey = typeof reference.objectKey === "string" ? reference.objectKey : undefined;
+
+    if (!objectKey) {
+      return items;
+    }
+
+    items.push({
+      status: typeof reference.status === "string" ? reference.status : undefined,
+      objectKey,
+      dryRun: typeof reference.dryRun === "boolean" ? reference.dryRun : undefined,
+      identityFingerprint: typeof reference.identityFingerprint === "string" ? reference.identityFingerprint : undefined,
+      sourceHash: typeof reference.sourceHash === "string" ? reference.sourceHash : undefined,
+    });
+
+    return items;
+  }, []);
+
+  return references.length ? references : undefined;
 }
 
 export async function dispatchDryRunSourceEnrichmentJob(input: {
@@ -216,6 +257,7 @@ export async function fetchCloudflarePipelineJobStatus(input: {
       failedBatchCount: getNumber(body.failedBatchCount),
       resultsCount: Array.isArray(body.results) ? body.results.length : undefined,
       budgetUsage: getBudgetUsage(body.budgetUsage),
+      sourceCacheReferences: getSourceCacheReferences(body.sourceCacheReferences),
       updatedAt: typeof body.updatedAt === "string" ? body.updatedAt : undefined,
       syncedAt,
       workerUrl,

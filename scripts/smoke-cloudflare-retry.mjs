@@ -156,6 +156,12 @@ async function main() {
   assert(completed.completedBatchCount === 1, "Expected completed batch count to be one.");
   assert(completed.failedBatchCount === 0, "Expected no failed batches after retry completion.");
   assert(completed.results?.length === 2, "Expected dry-run results for both candidates.");
+  assert(completed.sourceCacheReferences?.length === 2, "Expected planned source cache references for both candidates.");
+  assert(
+    completed.sourceCacheReferences[0].objectKey.startsWith("dry-run/source-cache/"),
+    "Expected source cache key to use the dry-run source-cache prefix.",
+  );
+  assert(completed.sourceCacheReferences[0].dryRun === true, "Expected source cache reference to be dry-run only.");
   assert(completed.budgetUsage?.searchesUsed === 0, "Expected dry-run retry completion to record zero searches.");
   assert(completed.budgetUsage?.estimatedCostUsd === 0, "Expected dry-run retry completion to record zero cost.");
 
@@ -166,6 +172,8 @@ async function main() {
     retryStatus: retry.status,
     finalStatus: completed.status,
     resultCount: completed.results.length,
+    sourceCacheReferenceCount: completed.sourceCacheReferences.length,
+    firstSourceCacheKey: completed.sourceCacheReferences[0].objectKey,
     budgetUsage: completed.budgetUsage,
     dryRunOnly: true,
   }, null, 2));

@@ -333,6 +333,15 @@ Remaining setup:
 Goal: prove source document cache metadata and R2 object paths without fetching
 or storing real source PDFs yet.
 
+Current status: started. The Worker dry-run queue path now adds deterministic
+planned source-cache references to each dry-run result and the aggregate job
+status using the `dry-run/source-cache/<job>/<identity>/<source-hash>.json`
+key pattern. The Next.js status sync preserves those references in extraction
+job usage metrics, and the builder project workspace displays the planned keys
+as source-cache dry-run metadata. This normal job path does not write R2; the
+separate `/cache/smoke` endpoint remains the only synthetic R2 write test and
+should not be called on the deployed Worker without confirmation.
+
 Tasks:
 
 - Add a dry-run R2 write/read smoke path using synthetic text metadata only.

@@ -235,7 +235,9 @@ With the Worker running locally or deployed publicly:
 6. Click `Refresh pipeline status` after the Worker queue has had time to
    process the batch, then refresh the page and confirm the stored status
    remains visible with pipeline usage showing 0 searches and $0.00 estimated
-   cost for dry-run jobs.
+   cost for dry-run jobs, plus a `Source cache dry-run` line with planned
+   `dry-run/source-cache/...` keys. These planned keys are metadata only; the
+   normal dry-run queue path does not write R2 objects.
 7. If a dry-run failure scenario is configured and failed batches are present,
    click `Retry failed batches`, then refresh status again after the retry queue
    processes.

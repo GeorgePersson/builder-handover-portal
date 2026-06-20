@@ -416,3 +416,47 @@ Continue the Builder Handover Portal from C:\Users\hunte\OneDrive\Desktop\TestWe
 - The future live-pilot implementation must deliberately set
   `requiredForPublish`, `liveEnrichmentRequired`, `pipelineMode=live_pilot`, or
   equivalent live metadata when a source job should block publish.
+
+## 2026-06-20 - Source Cache Metadata Dry Run
+
+### What Changed
+
+- Added deterministic planned source-cache references to Worker dry-run results
+  and aggregate job status.
+- Used the key pattern
+  `dry-run/source-cache/<job>/<identity>/<source-hash>.json`.
+- Parsed and persisted planned source-cache references during app-side
+  Cloudflare status sync.
+- Updated the builder project extraction job card to show `Source cache
+  dry-run` metadata.
+- Updated Worker module smokes, the runbook, phase plan, handoff, and testing
+  log.
+
+### Files Changed
+
+- `cloudflare/handover-pipeline/src/index.js`
+- `scripts/smoke-cloudflare-live-guard.mjs`
+- `scripts/smoke-cloudflare-retry.mjs`
+- `src/lib/server/cloudflare-pipeline.ts`
+- `src/lib/server/actions.ts`
+- `src/components/builder/projects-workspace.tsx`
+- `docs/cloudflare-pipeline-runbook.md`
+- `docs/implementation-phases.md`
+- `HANDOFF.md`
+- `TESTING_LOG.txt`
+- `docs/agent-handoff-log.md`
+
+### Checks Run
+
+- `node --check cloudflare\handover-pipeline\src\index.js` - passed.
+- `npm.cmd run cloudflare:smoke:retry` - passed.
+- `npm.cmd run cloudflare:smoke:live-guard` - passed.
+- `npm.cmd run lint` - passed.
+- `npm.cmd run build` - passed after tightening TypeScript narrowing in the
+  app-side cache-reference parsers.
+
+### Unknowns/Risks
+
+- Planned cache keys are metadata only. The normal dry-run queue path still
+  does not write R2 objects; `/cache/smoke` remains the only synthetic R2 write
+  endpoint and should not be called publicly without confirmation.

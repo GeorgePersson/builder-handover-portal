@@ -928,6 +928,12 @@ Both passed after the latest changes.
   pipeline status is not `completed` or its sync status failed. Current dry-run
   jobs remain non-blocking, so the gate is ready for a future live pilot without
   breaking local/public dry-run QA.
+- Source-cache metadata dry-run update: Phase 14 has started. Normal dry-run
+  queue completion now attaches planned source-cache references to result and
+  job status metadata using `dry-run/source-cache/<job>/<identity>/<source-hash>.json`.
+  The app status sync stores those references, and the builder project modal
+  shows them as `Source cache dry-run` metadata. This does not write R2 objects;
+  only the separate `/cache/smoke` endpoint performs a tiny synthetic R2 write.
 - Cloudflare public dry-run update: Phase 12 public Worker dry-run is deployed
   at `https://builder-handover-pipeline.gpersson2002.workers.dev`. Wrangler
   created the queue `builder-handover-source-enrichment`, R2 bucket

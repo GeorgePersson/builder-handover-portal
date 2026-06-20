@@ -214,6 +214,29 @@ function candidateIdFor(jobId, batchIndex, candidateIndex, candidate) {
   return `${jobId}:${batchIndex}:${fingerprint}`.replace(/[^a-zA-Z0-9:._-]/g, "-").slice(0, 240);
 }
 
+function safeCacheSegment(value, fallback) {
+  const normalized = typeof value === "string" && value.trim()
+    ? value.trim().toLowerCase()
+    : fallback;
+
+  return normalized.replace(/[^a-z0-9._-]/g, "-").replace(/-+/g, "-").slice(0, 120) || fallback;
+}
+
+function getDryRunSourceCacheReference(jobId, batchIndex, candidateIndex, candidate) {
+  const fingerprint = safeCacheSegment(candidate.fingerprint, `candidate-${candidateIndex}`);
+  const sourceHash = safeCacheSegment(candidate.sourceHash || candidate.sourceUrlHash || candidate.searchQuery, "source-pending");
+
+  return {
+    status: "planned",
+    dryRun: true,
+    objectKey: `dry-run/source-cache/${safeCacheSegment(jobId, "job")}/${fingerprint}/${sourceHash}.json`,
+    identityFingerprint: typeof candidate.fingerprint === "string" ? candidate.fingerprint : undefined,
+    sourceHash,
+    batchIndex,
+    note: "Dry-run metadata only. No source PDF or cache object was written.",
+  };
+}
+
 async function writeJobCreatedToD1(env, job, batches) {
   const now = new Date().toISOString();
   return runPipelineStateWrite(env, async (db) => {
@@ -640,12 +663,18 @@ async function handleQueueMessage(message, env) {
       throw new Error("Simulated dry-run batch failure.");
     }
 
-    const results = candidates.map((candidate) => ({
-      fingerprint: candidate.fingerprint,
-      productName: candidate.productName,
-      status: "dry_run_not_enriched",
-      reviewReason: "Cloudflare pipeline accepted this candidate without calling OpenAI or web search.",
-    }));
+    const results = candidates.map((candidate, candidateIndex) => {
+      const sourceCacheReference = getDryRunSourceCacheReference(jobId, payload.batchIndex || 0, candidateIndex, candidate);
+
+      return {
+        fingerprint: candidate.fingerprint,
+        productName: candidate.productName,
+        status: "dry_run_not_enriched",
+        reviewReason: "Cloudflare pipeline accepted this candidate without calling OpenAI or web search.",
+        sourceCacheReference,
+      };
+    });
+    const sourceCacheReferences = results.map((result) => result.sourceCacheReference);
     const budgetUsage = getDryRunBudgetUsage(payload, results.length);
 
     await writeBatchCompletedToD1(env, payload, results, budgetUsage);
@@ -656,6 +685,7 @@ async function handleQueueMessage(message, env) {
       candidateCount: results.length,
       safety: payload.safety,
       budgetUsage,
+      sourceCacheReferences,
       results,
       completedAt: new Date().toISOString(),
     });
@@ -790,9 +820,14 @@ export class HandoverPipelineJob {
           candidateCount: update.candidateCount,
           safety: update.safety || batches[update.batchIndex]?.safety,
           budgetUsage,
+          sourceCacheReferences: Array.isArray(update.sourceCacheReferences) ? update.sourceCacheReferences : [],
           completedAt: update.completedAt,
         };
         results.push(...(Array.isArray(update.results) ? update.results : []));
+        job.sourceCacheReferences = [
+          ...(Array.isArray(job.sourceCacheReferences) ? job.sourceCacheReferences : []),
+          ...(Array.isArray(update.sourceCacheReferences) ? update.sourceCacheReferences : []),
+        ];
         job.completedBatchCount = (job.completedBatchCount || 0) + 1;
         job.budgetUsage = {
           searchesUsed: (job.budgetUsage?.searchesUsed || 0) + (budgetUsage.searchesUsed || 0),

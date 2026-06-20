@@ -935,3 +935,21 @@ Tested
   - `npm.cmd run build` passed.
   - No public Cloudflare call, R2 write, OpenAI call, source search, source PDF
     fetch, or live enrichment ran.
+
+- 2026-06-20 Codex source-cache metadata dry-run:
+  - Added planned source-cache references to Worker dry-run results and
+    aggregate job status with `dry-run/source-cache/<job>/<identity>/<source-hash>.json`
+    keys.
+  - Status sync now preserves those planned references in extraction job usage
+    metrics.
+  - Builder project extraction job cards now show `Source cache dry-run`
+    metadata after pipeline status refresh.
+  - Updated the retry and live-guard module smokes to assert planned cache keys.
+  - `node --check cloudflare\handover-pipeline\src\index.js` passed.
+  - `npm.cmd run cloudflare:smoke:retry` passed.
+  - `npm.cmd run cloudflare:smoke:live-guard` passed.
+  - `npm.cmd run lint` passed.
+  - `npm.cmd run build` passed after tightening TypeScript narrowing in the
+    app-side cache-reference parsers.
+  - No public Cloudflare call, R2 write, OpenAI call, source search, source PDF
+    fetch, or live enrichment ran.
