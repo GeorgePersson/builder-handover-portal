@@ -730,3 +730,28 @@ Continue the Builder Handover Portal from C:\Users\hunte\OneDrive\Desktop\TestWe
   binding smoke is still useful before relying on local dev behavior, but no
   public Cloudflare, R2, OpenAI, source search, source PDF fetch, or live
   enrichment ran here.
+
+## 2026-06-20 - Phase 3 Builder-Supplied Review Note Hardening
+
+### What Changed
+
+- Moved the builder-supplied workflow action out of the instant card header action area and into the detailed review controls.
+- Added a required builder note field for project-specific source-gap resolution so the review action captures the quote, site decision, supplier evidence, or builder knowledge that made the item safe for this project.
+- Kept the action explicitly project-scoped: builder-supplied items may become package-ready after review, but still need admin review before global reuse.
+- Updated the worksheet with the next recommended browser smoke for the Phase 3 review card controls.
+
+### Files Changed
+
+- `src/components/builder/projects-workspace.tsx`
+- `WORKSHEET.md`
+- `TESTING_LOG.txt`
+- `docs/agent-handoff-log.md`
+
+### Checks Run
+
+- `npm run lint` - passed.
+- `npm run build` - failed in this environment because Next/font could not fetch Google Fonts (`Geist` and `Geist Mono`).
+
+### Unknowns/Risks
+
+- Browser automation was not run in this pass. The next agent should smoke `/builder/projects` and verify the required note, supporting evidence upload, exclude action, and publish-readiness gate together.

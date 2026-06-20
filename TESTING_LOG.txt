@@ -990,3 +990,8 @@ Tested
   - `npm.cmd run lint` passed.
   - `npm.cmd run build` passed.
   - Restarted the local dev server and verified `/builder` returned HTTP 200.
+
+- 2026-06-20 Codex Phase 3 builder-supplied note hardening:
+  - Moved `Builder supplied` from an instant header button to the detailed review controls on project workspace review cards.
+  - The action now requires a note describing the project-specific quote, site decision, supplier evidence, or builder knowledge that resolved the source gap.
+  - Manual follow-up requested: open `/builder/projects`, find a review item with missing fields/builder prompts, confirm the note is required before marking builder supplied, then confirm publish readiness still does not expose unresolved prompts to the homeowner.

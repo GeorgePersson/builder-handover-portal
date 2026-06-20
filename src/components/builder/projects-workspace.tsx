@@ -1097,15 +1097,6 @@ function WorkflowReviewCard({
               Approve
             </button>
           </form>
-          <form action={markWorkflowItemBuilderSuppliedAction}>
-            <input name="itemId" type="hidden" value={item.id} />
-            <button
-              className="inline-flex h-9 items-center rounded-md border border-emerald-200 bg-white px-3 text-xs font-semibold text-emerald-800 hover:bg-emerald-50"
-              type="submit"
-            >
-              Builder supplied
-            </button>
-          </form>
         </div>
       </div>
 
@@ -1247,6 +1238,30 @@ function WorkflowReviewCard({
               type="submit"
             >
               {quoteLike ? "Attach quote" : "Attach evidence"}
+            </button>
+          </div>
+        </form>
+
+        <form action={markWorkflowItemBuilderSuppliedAction} className="rounded-md border border-emerald-200 bg-emerald-50 p-3">
+          <input name="itemId" type="hidden" value={item.id} />
+          <label className="block">
+            <span className="text-sm font-medium text-emerald-950">Mark as builder supplied</span>
+            <textarea
+              className="mt-2 min-h-20 w-full rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
+              name="notes"
+              placeholder="Describe the project-specific source, quote, site decision, or builder knowledge that resolves this gap."
+              required
+            />
+          </label>
+          <p className="mt-2 text-xs leading-5 text-emerald-900">
+            Use this only for project-specific facts. It can become package-ready after builder review, but it will still need admin review before global reuse.
+          </p>
+          <div className="mt-3 flex justify-end">
+            <button
+              className="inline-flex h-9 items-center rounded-md border border-emerald-300 bg-white px-3 text-xs font-semibold text-emerald-800 hover:bg-emerald-100"
+              type="submit"
+            >
+              Mark builder supplied
             </button>
           </div>
         </form>

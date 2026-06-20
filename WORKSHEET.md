@@ -47,13 +47,14 @@ After the push, update this worksheet and `docs/agent-handoff-log.md` with what 
 ## Needs Doing / Next Work
 
 - Continue from `HANDOFF.md` and `docs/phased-work.md`; do not change product direction without documenting the decision.
-- Keep hardening Phase 3 builder review/edit workflow unless the user gives a more specific priority.
+- Keep hardening Phase 3 builder review/edit workflow unless the user gives a more specific priority. Next useful check: browser-smoke the project workspace review cards and confirm missing-field prompts, required builder-supplied notes, evidence upload, exclude, and publish readiness behave together.
 - Verify current app checks before pushing meaningful app changes: usually `npm.cmd run lint` and `npm.cmd run build`.
 - Keep publish readiness strict: unresolved source gaps, quote references, or builder-context prompts should not silently become client-facing.
 - Continue documenting any Cloudflare/LlamaCloud/Supabase production setup steps as they are actually verified.
 
 ## Last Updated
 
+- 2026-06-20: Hardened the Phase 3 builder-supplied review action so project-specific source-gap approvals require an explanatory note in the builder workspace.
 - 2026-06-21: Added bedtime Codex cloud/mobile handoff prompt and clarified that local Hermes cannot continue after the computer is off.
 - 2026-06-21: Pushed Supabase migration verification and agent skills setup to `codex/llamacloud-greenfield` at commit `9332619`.
 - 2026-06-21: Applied all repo Supabase add-migrations, verified missing REST tables now exist, and installed Supabase agent skills.
