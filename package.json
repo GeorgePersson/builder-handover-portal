@@ -12,7 +12,8 @@
     "cloudflare:smoke:live-guard": "node scripts/smoke-cloudflare-live-guard.mjs",
     "cloudflare:smoke:retry": "node scripts/smoke-cloudflare-retry.mjs",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "supabase:smoke:readiness": "node scripts/smoke-supabase-app-readiness.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",

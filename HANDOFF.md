@@ -60,6 +60,8 @@ source-ready unknowns go to web/source search. Privacy, durable review state,
 correct item storage, and versioned warranty/manual/source records are part of
 the baseline requirements, not later polish.
 
+Supabase app smoke prep update: `npm run supabase:smoke:readiness` now checks whether the current environment has the required Supabase-mode smoke configuration without printing secrets, and `docs/supabase-app-smoke-test.md` contains the manual magic-link, builder workspace, upload, extraction/review, publish-readiness, and client portal checklist. In this Codex environment, Supabase/LlamaCloud/OpenAI/Resend secrets were missing, so only the readiness/docs prep could run.
+
 Builder records update: client portal opens now create a lightweight
 `handover_open_events` record for published packages. Builders can see the first
 open date and total open count in the project workspace, separate from

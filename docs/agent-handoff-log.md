@@ -730,3 +730,30 @@ Continue the Builder Handover Portal from C:\Users\hunte\OneDrive\Desktop\TestWe
   binding smoke is still useful before relying on local dev behavior, but no
   public Cloudflare, R2, OpenAI, source search, source PDF fetch, or live
   enrichment ran here.
+
+## 2026-06-20 - Supabase App Smoke Readiness Prep
+
+### What Changed
+
+- Added a repeatable Supabase-mode app smoke readiness command that checks for required environment variable names, optional extraction/email configuration, and repo smoke prerequisites without printing secret values or contacting Supabase.
+- Added a manual Supabase browser smoke checklist covering magic-link login, builder workspace bootstrap, project upload, extraction/review queue creation, publish-readiness blocking, builder approval, and homeowner portal visibility.
+- Documented that this Codex environment did not have Supabase, LlamaCloud, OpenAI, or Resend secrets available, so the real browser smoke could not be run here.
+
+### Files Changed
+
+- `package.json`
+- `scripts/smoke-supabase-app-readiness.mjs`
+- `docs/supabase-app-smoke-test.md`
+- `HANDOFF.md`
+- `WORKSHEET.md`
+- `docs/agent-handoff-log.md`
+
+### Checks Run
+
+- `npm run supabase:smoke:readiness` - warning/not ready because required Supabase app smoke environment variables are missing in this Codex environment; repo prerequisites passed.
+
+### Unknowns/Risks
+
+- The actual Supabase-mode browser smoke still needs an environment with `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and `NEXT_PUBLIC_APP_URL` configured.
+- Realistic scanned/image-heavy PDF extraction still needs `LLAMACLOUD_API_KEY` or another OCR-capable provider configured.
+- Magic-link delivery may require Supabase Auth email settings to be configured and may hit email/rate-limit constraints.

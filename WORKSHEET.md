@@ -51,9 +51,11 @@ After the push, update this worksheet and `docs/agent-handoff-log.md` with what 
 - Verify current app checks before pushing meaningful app changes: usually `npm.cmd run lint` and `npm.cmd run build`.
 - Keep publish readiness strict: unresolved source gaps, quote references, or builder-context prompts should not silently become client-facing.
 - Continue documenting any Cloudflare/LlamaCloud/Supabase production setup steps as they are actually verified.
+- Run the real Supabase-mode browser smoke from `docs/supabase-app-smoke-test.md` once cloud/local secrets are available; this Codex environment was missing required Supabase smoke env vars.
 
 ## Last Updated
 
+- 2026-06-20: Added Supabase app smoke readiness script/checklist; real browser smoke is blocked here because Supabase/LlamaCloud/OpenAI/Resend secrets are not configured in this environment.
 - 2026-06-21: Added bedtime Codex cloud/mobile handoff prompt and clarified that local Hermes cannot continue after the computer is off.
 - 2026-06-21: Pushed Supabase migration verification and agent skills setup to `codex/llamacloud-greenfield` at commit `9332619`.
 - 2026-06-21: Applied all repo Supabase add-migrations, verified missing REST tables now exist, and installed Supabase agent skills.
