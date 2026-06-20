@@ -781,6 +781,11 @@ function ProjectEditPanel({
                                 Cloudflare dry-run: {formatCloudflarePipelineStatus(usage.cloudflarePipeline)}
                               </span>
                             ) : null}
+                            {usage.cloudflarePipeline?.budgetUsage ? (
+                              <span className="sm:col-span-2">
+                                Pipeline usage: {formatCloudflareBudgetUsage(usage.cloudflarePipeline.budgetUsage)}
+                              </span>
+                            ) : null}
                             {usage.cloudflarePipeline?.lastSyncedAt ? (
                               <span className="sm:col-span-2">
                                 Pipeline status checked {formatDate(usage.cloudflarePipeline.lastSyncedAt)}
@@ -1646,6 +1651,11 @@ type WorkflowUsageMetrics = {
     retryStatus?: string;
     requeuedBatchCount?: number;
     lastRetriedAt?: string;
+    budgetUsage?: {
+      searchesUsed?: number;
+      estimatedCostUsd?: number;
+      dryRun?: boolean;
+    };
     error?: string;
   };
 };
@@ -1673,6 +1683,9 @@ function getWorkflowUsageMetrics(
     : {};
   const cloudflarePipeline = usage.cloudflarePipeline && typeof usage.cloudflarePipeline === "object"
     ? usage.cloudflarePipeline as WorkflowUsageMetrics["cloudflarePipeline"]
+    : undefined;
+  const budgetUsage = cloudflarePipeline?.budgetUsage && typeof cloudflarePipeline.budgetUsage === "object"
+    ? cloudflarePipeline.budgetUsage
     : undefined;
 
   return {
@@ -1702,6 +1715,13 @@ function getWorkflowUsageMetrics(
           retryStatus: typeof cloudflarePipeline.retryStatus === "string" ? cloudflarePipeline.retryStatus : undefined,
           requeuedBatchCount: getNumber(cloudflarePipeline.requeuedBatchCount),
           lastRetriedAt: typeof cloudflarePipeline.lastRetriedAt === "string" ? cloudflarePipeline.lastRetriedAt : undefined,
+          budgetUsage: budgetUsage
+            ? {
+                searchesUsed: getNumber(budgetUsage.searchesUsed),
+                estimatedCostUsd: getNumber(budgetUsage.estimatedCostUsd),
+                dryRun: typeof budgetUsage.dryRun === "boolean" ? budgetUsage.dryRun : undefined,
+              }
+            : undefined,
           error: typeof cloudflarePipeline.error === "string" ? cloudflarePipeline.error : undefined,
         }
       : undefined,
@@ -1746,6 +1766,14 @@ function formatCloudflarePipelineStatus(pipeline: NonNullable<WorkflowUsageMetri
   }
 
   return pipeline.status || "unknown";
+}
+
+function formatCloudflareBudgetUsage(budgetUsage: NonNullable<NonNullable<WorkflowUsageMetrics["cloudflarePipeline"]>["budgetUsage"]>) {
+  const searches = budgetUsage.searchesUsed ?? 0;
+  const estimatedCost = budgetUsage.estimatedCostUsd ?? 0;
+  const dryRunLabel = budgetUsage.dryRun ? " dry-run" : "";
+
+  return `${formatUsageNumber(searches)} searches, $${estimatedCost.toFixed(2)} estimated${dryRunLabel}`;
 }
 
 function canRetryCloudflarePipeline(pipeline: NonNullable<WorkflowUsageMetrics["cloudflarePipeline"]>) {

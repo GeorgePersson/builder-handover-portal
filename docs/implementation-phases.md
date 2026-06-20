@@ -275,7 +275,9 @@ Worker job status and merges the latest Cloudflare progress back into
 `document_extraction_jobs.usage_metrics` in Supabase mode, or the local scaffold
 job record in local mode. The builder project workspace exposes a refresh
 control for dispatched Worker jobs and displays completed/processing batch
-progress from the stored usage metrics.
+progress from the stored usage metrics. Status sync now also preserves Worker
+`budgetUsage` and the builder project workspace displays searches used plus
+estimated cost, keeping dry-run jobs visibly at 0 searches and $0.00.
 
 The Worker also has a dry-run batch retry primitive:
 `POST /jobs/<jobId>/retry-failed` requeues only failed batches using the
@@ -298,6 +300,7 @@ Tasks:
 - Add a server-side poll/sync action or internal route that reads Worker job
   status and stores it on the extraction job.
 - Show batch progress and failure state in the project workspace.
+- Show Worker budget usage in the project workspace after status sync.
 - Ensure publish readiness can block on incomplete pipeline work once live
   enrichment begins.
 
@@ -305,6 +308,8 @@ Exit criteria:
 
 - Refreshing the app does not lose Cloudflare pipeline progress.
 - Supabase and local scaffold modes show equivalent pipeline status.
+- Dry-run budget usage remains visible as 0 searches and $0.00 estimated cost
+  after a status refresh.
 - Failed or incomplete Cloudflare jobs are visible and retryable.
 
 Remaining setup:

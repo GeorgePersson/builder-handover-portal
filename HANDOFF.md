@@ -916,9 +916,12 @@ Both passed after the latest changes.
 - Cloudflare progress sync update: Phase 13 has started. Builder project
   extraction job cards can now refresh a dispatched dry-run Worker job; the
   server action fetches `/jobs/<jobId>` from the configured Worker and persists
-  status, batch counts, result counts, sync time, and any sync error into the
-  extraction job usage metrics in Supabase or local scaffold mode. A real local
-  Worker UI smoke is still needed to confirm the refresh button end to end.
+  status, batch counts, result counts, zero-cost budget usage, sync time, and
+  any sync error into the extraction job usage metrics in Supabase or local
+  scaffold mode. The builder project modal now renders the synced pipeline
+  usage as searches used plus estimated cost, so dry-run jobs visibly remain at
+  0 searches and $0.00. A real local Worker UI smoke is still needed to confirm
+  the refresh button end to end.
 - Cloudflare public dry-run update: Phase 12 public Worker dry-run is deployed
   at `https://builder-handover-pipeline.gpersson2002.workers.dev`. Wrangler
   created the queue `builder-handover-source-enrichment`, R2 bucket

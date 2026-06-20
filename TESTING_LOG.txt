@@ -907,3 +907,19 @@ Tested
   - `npm.cmd run cloudflare:smoke:retry` still passed after the guard change.
   - No public Cloudflare call, R2 write, OpenAI call, source search, source PDF
     fetch, or live enrichment ran.
+
+- 2026-06-20 Codex Cloudflare app-side budget usage sync:
+  - Added app-side parsing for Worker `budgetUsage` on `/jobs/<jobId>` status
+    sync.
+  - Status refresh now merges `budgetUsage` into extraction job usage metrics in
+    Supabase or local scaffold mode.
+  - Builder project extraction job cards now show pipeline usage as searches
+    used plus estimated cost, so dry-run jobs visibly report 0 searches and
+    $0.00 estimated cost after refresh.
+  - `node --check src\lib\server\cloudflare-pipeline.ts` passed.
+  - `npm.cmd run lint` passed.
+  - `npm.cmd run build` passed.
+  - `npm.cmd run cloudflare:smoke:live-guard` passed.
+  - `npm.cmd run cloudflare:smoke:retry` passed.
+  - No public Cloudflare call, R2 write, OpenAI call, source search, source PDF
+    fetch, or live enrichment ran.

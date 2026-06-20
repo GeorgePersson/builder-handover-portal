@@ -33,10 +33,17 @@ export type CloudflarePipelineJobStatus = {
   completedBatchCount?: number;
   failedBatchCount?: number;
   resultsCount?: number;
+  budgetUsage?: CloudflarePipelineBudgetUsage;
   updatedAt?: string;
   syncedAt: string;
   workerUrl?: string;
   error?: string;
+};
+
+export type CloudflarePipelineBudgetUsage = {
+  searchesUsed?: number;
+  estimatedCostUsd?: number;
+  dryRun?: boolean;
 };
 
 export type CloudflarePipelineRetryResult = {
@@ -63,6 +70,7 @@ type PipelineJobStatusResponse = {
   completedBatchCount?: unknown;
   failedBatchCount?: unknown;
   results?: unknown;
+  budgetUsage?: unknown;
   updatedAt?: unknown;
 };
 
@@ -82,6 +90,20 @@ function getPipelineSecret() {
 
 function getNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function getBudgetUsage(value: unknown): CloudflarePipelineBudgetUsage | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const budgetUsage = value as Record<string, unknown>;
+
+  return {
+    searchesUsed: getNumber(budgetUsage.searchesUsed),
+    estimatedCostUsd: getNumber(budgetUsage.estimatedCostUsd),
+    dryRun: typeof budgetUsage.dryRun === "boolean" ? budgetUsage.dryRun : undefined,
+  };
 }
 
 export async function dispatchDryRunSourceEnrichmentJob(input: {
@@ -193,6 +215,7 @@ export async function fetchCloudflarePipelineJobStatus(input: {
       completedBatchCount: getNumber(body.completedBatchCount),
       failedBatchCount: getNumber(body.failedBatchCount),
       resultsCount: Array.isArray(body.results) ? body.results.length : undefined,
+      budgetUsage: getBudgetUsage(body.budgetUsage),
       updatedAt: typeof body.updatedAt === "string" ? body.updatedAt : undefined,
       syncedAt,
       workerUrl,

@@ -234,7 +234,8 @@ With the Worker running locally or deployed publicly:
 5. Confirm it shows source-ready identity counts and `Cloudflare dry-run`.
 6. Click `Refresh pipeline status` after the Worker queue has had time to
    process the batch, then refresh the page and confirm the stored status
-   remains visible.
+   remains visible with pipeline usage showing 0 searches and $0.00 estimated
+   cost for dry-run jobs.
 7. If a dry-run failure scenario is configured and failed batches are present,
    click `Retry failed batches`, then refresh status again after the retry queue
    processes.

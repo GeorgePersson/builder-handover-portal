@@ -349,3 +349,39 @@ Continue the Builder Handover Portal from C:\Users\hunte\OneDrive\Desktop\TestWe
 - Live source enrichment is still not implemented and remains intentionally
   disabled. The next live-pilot step needs a concrete per-job cost/search budget
   before any OpenAI or web-search call is wired behind the gate.
+
+## 2026-06-20 - Cloudflare Budget Usage In App Status
+
+### What Changed
+
+- Added app-side parsing for Worker `budgetUsage` returned by
+  `/jobs/<jobId>`.
+- Merged synced `budgetUsage` into extraction job usage metrics for Supabase
+  and local scaffold persistence.
+- Updated the builder project extraction job card to show pipeline usage as
+  searches used plus estimated cost.
+- Updated the handoff, implementation phase plan, runbook, and testing log.
+
+### Files Changed
+
+- `src/lib/server/cloudflare-pipeline.ts`
+- `src/lib/server/actions.ts`
+- `src/components/builder/projects-workspace.tsx`
+- `docs/cloudflare-pipeline-runbook.md`
+- `docs/implementation-phases.md`
+- `HANDOFF.md`
+- `TESTING_LOG.txt`
+- `docs/agent-handoff-log.md`
+
+### Checks Run
+
+- `node --check src\lib\server\cloudflare-pipeline.ts` - passed.
+- `npm.cmd run lint` - passed.
+- `npm.cmd run build` - passed.
+- `npm.cmd run cloudflare:smoke:live-guard` - passed.
+- `npm.cmd run cloudflare:smoke:retry` - passed.
+
+### Unknowns/Risks
+
+- Still needs a real `/builder/projects` UI smoke with a running Worker to
+  click refresh and confirm the displayed 0-search/$0.00 usage survives reload.

@@ -2769,6 +2769,7 @@ function mergeCloudflarePipelineStatus(
       completedBatchCount: status.completedBatchCount,
       failedBatchCount: status.failedBatchCount,
       resultsCount: status.resultsCount,
+      budgetUsage: status.budgetUsage || existing.budgetUsage,
       workerUpdatedAt: status.updatedAt,
       lastSyncedAt: status.syncedAt,
       error: status.error,
