@@ -1,4 +1,29 @@
 # Agent Handoff Log
+## 2026-06-21 - Supabase Migration Setup Push Completed
+
+### What Changed
+
+- Pushed Supabase migration/setup documentation and Supabase agent skills to GitHub on branch `codex/llamacloud-greenfield`.
+- Commit pushed: `9332619`.
+- Left `.env.local` and `.codex/` uncommitted.
+
+### Files Changed
+
+- `WORKSHEET.md`
+- `docs/agent-handoff-log.md`
+
+### Checks Run
+
+- `git push origin HEAD` - passed.
+- `git status --short --branch` - branch is aligned with origin except existing untracked `.codex/`.
+
+### Unknowns/Risks
+
+- This entry records the push; app/browser smoke tests still need to be run separately.
+
+### Suggested Next Task
+
+Run the app in Supabase mode and test magic-link login, builder workspace bootstrap, document upload, extraction/review queue creation, and publish-readiness behavior.
 ## 2026-06-21 - Supabase Migrations Applied And Agent Skills Installed
 
 ### What Changed
