@@ -730,3 +730,48 @@ Continue the Builder Handover Portal from C:\Users\hunte\OneDrive\Desktop\TestWe
   binding smoke is still useful before relying on local dev behavior, but no
   public Cloudflare, R2, OpenAI, source search, source PDF fetch, or live
   enrichment ran here.
+
+## 2026-06-20 - Supabase App Smoke Readiness Prep
+
+### What Changed
+
+- Added an automated Supabase app readiness smoke that loads local env files
+  without printing secrets, verifies required Supabase env names, checks the
+  deterministic demo upload asset, probes the Supabase REST tables needed for
+  upload/extraction/publish-readiness flows, and confirms the
+  `handover-documents` bucket is private when service-role credentials are
+  available.
+- Added an npm script for the readiness smoke.
+- Added a Supabase app smoke-test checklist for magic-link/password login,
+  builder workspace bootstrap, project/spec upload, extraction/review queue
+  creation, publish-readiness blockers, final handover approval, and homeowner
+  event checks.
+- Ran the readiness smoke in Codex cloud without Supabase/OpenAI/LlamaCloud
+  secrets. It correctly reported missing required Supabase env vars and optional
+  realistic-extraction warnings; no secrets were printed.
+
+### Files Changed
+
+- `package.json`
+- `scripts/smoke-supabase-app-readiness.mjs`
+- `docs/supabase-app-smoke-test.md`
+- `WORKSHEET.md`
+- `docs/agent-handoff-log.md`
+
+### Checks Run
+
+- `npm run supabase:smoke:app-readiness` - failed as expected in this cloud
+  environment because `NEXT_PUBLIC_SUPABASE_URL`,
+  `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` are not
+  configured here. The demo asset check passed, and missing `OPENAI_API_KEY` /
+  `LLAMA_CLOUD_API_KEY` were reported as optional warnings for realistic
+  extraction.
+- `npm run lint` - passed.
+- `npm run build` - failed in this environment because Next.js could not fetch Google-hosted `Geist` / `Geist Mono` fonts during the build.
+
+### Unknowns/Risks
+
+- A real Supabase-mode browser smoke still needs configured Supabase secrets and
+  a test builder account/session in the target environment.
+- Realistic scanned-PDF extraction still needs `LLAMA_CLOUD_API_KEY` or another
+  OCR-capable provider plus access to the scanned test PDF.
