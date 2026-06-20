@@ -43,17 +43,20 @@ After the push, update this worksheet and `docs/agent-handoff-log.md` with what 
 - LlamaCloud/document-context adapter work exists on the active branch.
 - Cloudflare pipeline/D1/R2 dry-run scaffolding and runbooks exist.
 - Agent startup and handoff rules are now documented in `AGENTS.md` and this worksheet.
+- Supabase readiness smoke script is available as `npm.cmd run supabase:smoke:readiness` and passed locally against the configured Supabase project.
+- Source-gap approval hardening is ported from Codex cloud work: source-gap items cannot be approved as correct until missing fields/quote references/builder-info prompts are resolved, and builder-supplied approval requires a project-specific note.
 
 ## Needs Doing / Next Work
 
 - Continue from `HANDOFF.md` and `docs/phased-work.md`; do not change product direction without documenting the decision.
-- Keep hardening Phase 3 builder review/edit workflow unless the user gives a more specific priority.
+- Continue Phase 3 browser smoke testing: magic-link login, builder workspace bootstrap, project/spec upload, extraction/review queue creation, builder-supplied/source-gap handling, and publish-readiness behavior.
 - Verify current app checks before pushing meaningful app changes: usually `npm.cmd run lint` and `npm.cmd run build`.
 - Keep publish readiness strict: unresolved source gaps, quote references, or builder-context prompts should not silently become client-facing.
 - Continue documenting any Cloudflare/LlamaCloud/Supabase production setup steps as they are actually verified.
 
 ## Last Updated
 
+- 2026-06-21: Consolidated selected Codex cloud branches: Supabase readiness smoke plus source-gap/publish-readiness hardening; lint/build passed.
 - 2026-06-21: Added bedtime Codex cloud/mobile handoff prompt and clarified that local Hermes cannot continue after the computer is off.
 - 2026-06-21: Pushed Supabase migration verification and agent skills setup to `codex/llamacloud-greenfield` at commit `9332619`.
 - 2026-06-21: Applied all repo Supabase add-migrations, verified missing REST tables now exist, and installed Supabase agent skills.

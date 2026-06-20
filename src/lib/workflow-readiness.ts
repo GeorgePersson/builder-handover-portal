@@ -94,8 +94,18 @@ function isPublishRequiredPipeline(pipeline: Record<string, unknown>) {
     || pipeline.dryRunEnrichment === false;
 }
 
-function hasUnresolvedSourceGap(item: ExtractedWorkflowItem) {
+export function hasUnresolvedSourceGap(item: ExtractedWorkflowItem) {
   if (item.reviewStatus === "excluded" || approvedReviewStatuses.has(item.reviewStatus)) {
+    return false;
+  }
+
+  return hasSourceGapSignals(item);
+}
+
+type SourceGapSignalItem = Pick<ExtractedWorkflowItem, "reviewStatus"> & Partial<Pick<ExtractedWorkflowItem, "quoteReferenceStatus" | "rawExtractedData">>;
+
+export function hasSourceGapSignals(item: SourceGapSignalItem) {
+  if (item.reviewStatus === "excluded") {
     return false;
   }
 

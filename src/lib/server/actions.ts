@@ -61,7 +61,10 @@ import {
   aiHandoverApprovalText,
   builderHandoverApprovalText,
 } from "@/lib/handover-approval";
-import { getWorkflowPublishReadiness } from "@/lib/workflow-readiness";
+import {
+  getWorkflowPublishReadiness,
+  hasSourceGapSignals,
+} from "@/lib/workflow-readiness";
 import {
   getLocalClientRequest,
   saveLocalClientRequest,
@@ -2964,6 +2967,18 @@ export async function retryCloudflarePipelineFailedBatchesAction(formData: FormD
 export async function approveWorkflowItemAction(formData: FormData) {
   const itemId = getRequired(formData, "itemId");
   const now = new Date().toISOString();
+  const context = await getBuilderContext();
+  const item = context
+    ? await getSupabaseWorkflowReviewItem(context, itemId)
+    : await getLocalExtractedWorkflowItem(itemId);
+
+  if (!item) {
+    redirect("/builder/projects?error=workflow-item-not-found");
+  }
+
+  if (hasSourceGapSignals(item)) {
+    redirect("/builder/projects?error=workflow-source-gap-approval-blocked");
+  }
 
   await reviewWorkflowItem(itemId, {
     actionType: "approved_as_correct",

@@ -1,4 +1,41 @@
 # Agent Handoff Log
+## 2026-06-21 - Cloud Branch Consolidation: Supabase Smoke And Source-Gap Readiness
+
+### What Changed
+
+- Fetched Codex cloud branches and selectively consolidated the safest changes into `codex/llamacloud-greenfield`.
+- Added `scripts/smoke-supabase-readiness.mjs` and `npm.cmd run supabase:smoke:readiness` for a secret-safe Supabase readiness check.
+- Updated the hunter testing checklist to run the Supabase readiness smoke before browser testing.
+- Ported source-gap publish/readiness hardening from the Codex cloud branch: unresolved quote references, missing fields, and builder-info prompts block normal “Approve as correct”.
+- Added a builder-supplied review form that requires notes explaining the project-specific source/quote/site decision/builder knowledge.
+- Adjusted the source-gap helper typing so both full UI workflow items and minimal server review items can be checked safely.
+
+### Files Changed
+
+- `package.json`
+- `scripts/smoke-supabase-readiness.mjs`
+- `docs/hunter-testing-checklist.md`
+- `src/lib/workflow-readiness.ts`
+- `src/lib/server/actions.ts`
+- `src/components/builder/projects-workspace.tsx`
+- `WORKSHEET.md`
+- `docs/agent-handoff-log.md`
+
+### Checks Run
+
+- `npm.cmd run supabase:smoke:readiness` - passed.
+- `npm.cmd run lint` - passed.
+- `npm.cmd run build` - passed.
+
+### Unknowns/Risks
+
+- Browser-level Supabase smoke is still the next step; this pass verified build/readiness but did not click through magic-link login or upload flows.
+- The real outline spec PDF remains scanned/image-heavy, so LlamaCloud/OCR is still needed for realistic extraction quality.
+- Other cloud branches added overlapping smoke scripts and extraction/admin-noise guardrails; these were reviewed but not all merged blindly. Extraction guardrails should be considered in a follow-up after the app smoke test.
+
+### Suggested Next Task
+
+Run the Supabase-mode browser smoke: sign in, confirm builder workspace bootstrap, upload a demo asset or the real PDF when LlamaCloud is ready, verify extraction/review queue creation, test builder-supplied/source-gap paths, and confirm publish-readiness blocks unsafe handover publication.
 ## 2026-06-21 - Bedtime Codex Cloud Handoff Prompt
 
 ### What Changed
