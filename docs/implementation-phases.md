@@ -161,7 +161,10 @@ pipeline metadata tables and the readback confirmed the expected table list.
 The dry-run Worker mirrors job creation, candidate queueing, batch completion,
 and zero-cost dry-run meter events through prepared statements when the binding
 is active. No raw PDFs, auth records, billing truth, review state, or homeowner
-publication data is stored in D1.
+publication data is stored in D1. The local module smoke
+`npm.cmd run cloudflare:smoke:d1-dry-run` now verifies the D1 write contract
+with mocked bindings: job creation, source candidates, job events, zero-cost
+meter events, planned cache index rows, and identity cache links.
 
 Tasks:
 
@@ -181,8 +184,9 @@ Exit criteria:
 
 Remaining setup:
 
-- Run a local Worker D1 dry-run job smoke with the bound database and confirm
-  `/jobs` mirrors rows into D1 as expected.
+- Optional manual Wrangler smoke with local simulated bindings remains useful,
+  but the module-level D1 dry-run write contract is now covered without remote
+  Cloudflare, R2, OpenAI, or web search.
 
 ## Phase 11: Cloudflare Dry-Run Local Dispatch
 

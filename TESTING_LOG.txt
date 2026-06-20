@@ -969,3 +969,16 @@ Tested
     metadata separately from ordinary dry-run jobs.
   - This keeps the future live-pilot publish gate tied to stored Worker
     metadata while ordinary dry-run jobs remain non-blocking.
+
+- 2026-06-21 Codex Cloudflare D1 dry-run smoke:
+  - Added `npm.cmd run cloudflare:smoke:d1-dry-run`.
+  - The smoke imports the Worker module, uses mocked Durable Object, Queue, and
+    D1 bindings, creates a two-candidate dry-run job, processes the queued
+    batch, and verifies D1 prepared-statement writes for pipeline jobs,
+    source candidates, job events, zero-cost meter events, planned source-cache
+    rows, and identity cache links.
+  - First run passed with 2 candidate rows, 3 job events, 1 zero-cost meter
+    event, 2 planned cache rows, 2 identity cache rows, 0 searches, and $0.00
+    estimated cost.
+  - No remote Cloudflare binding, R2 write, OpenAI call, source search, source
+    PDF fetch, or live enrichment ran.

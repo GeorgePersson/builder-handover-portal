@@ -500,3 +500,41 @@ Continue the Builder Handover Portal from C:\Users\hunte\OneDrive\Desktop\TestWe
 
 - This only persists safety metadata. It does not enable live source
   enrichment, public Cloudflare calls, R2 writes, OpenAI calls, or web search.
+
+## 2026-06-21 - Cloudflare D1 Dry-Run Smoke
+
+### What Changed
+
+- Added `scripts/smoke-cloudflare-d1-dry-run.mjs`.
+- Added `npm.cmd run cloudflare:smoke:d1-dry-run`.
+- The smoke imports the Worker module and uses mocked Durable Object, Queue, and
+  D1 bindings to verify the local dry-run D1 write contract.
+- It covers job creation, source candidate inserts, job events, zero-cost meter
+  events, planned source-cache index rows, identity cache links, and completed
+  dry-run job status.
+- Updated the phase plan, handoff, and testing log so Phase 11D has a local
+  repeatable D1 smoke without remote Cloudflare.
+
+### Files Changed
+
+- `package.json`
+- `scripts/smoke-cloudflare-d1-dry-run.mjs`
+- `docs/implementation-phases.md`
+- `HANDOFF.md`
+- `TESTING_LOG.txt`
+- `docs/agent-handoff-log.md`
+
+### Checks Run
+
+- `npm.cmd run cloudflare:smoke:d1-dry-run` - passed.
+- `npm.cmd run cloudflare:smoke:live-guard` - passed.
+- `npm.cmd run cloudflare:smoke:retry` - passed.
+- `npm.cmd run lint` - passed.
+- `npm.cmd run build` - passed.
+
+### Unknowns/Risks
+
+- This is a module-level smoke with mocked bindings. A Wrangler-local simulated
+  binding smoke is still useful before relying on local dev behavior, but no
+  public Cloudflare, R2, OpenAI, source search, source PDF fetch, or live
+  enrichment ran here.

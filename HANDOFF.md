@@ -912,7 +912,11 @@ Both passed after the latest changes.
   segments, identity cache, source candidates/results, source cache indexes,
   idempotency keys, and dry-run cost events. D1 must remain pipeline
   metadata/cache state; Supabase remains the auth, tenant, review, billing, and
-  homeowner publication source of truth.
+  homeowner publication source of truth. `npm.cmd run cloudflare:smoke:d1-dry-run`
+  now verifies the local module-level D1 write contract with mocked bindings:
+  job creation, two source candidates, job events, one zero-cost meter event,
+  planned source-cache rows, and identity cache links. This smoke does not use
+  remote Cloudflare, R2, OpenAI, or web search.
 - Cloudflare progress sync update: Phase 13 has started. Builder project
   extraction job cards can now refresh a dispatched dry-run Worker job; the
   server action fetches `/jobs/<jobId>` from the configured Worker and persists
@@ -1070,9 +1074,10 @@ Both passed after the latest changes.
    `docs/azure-cloudflare-context-processing-architecture.md`: test direct PDF,
    scanned PDF, image-only PDF, and table-heavy schedules; confirm whether
    Azure can consume the files directly or needs local conversion/OCR first.
-4. Run a local D1 dry-run smoke to confirm `/jobs` mirrors rows into the bound
-   Cloudflare D1 database without moving product auth/review/homeowner truth out
-   of Supabase.
+4. Optionally run a Wrangler-local D1 smoke with simulated bindings; the
+   module-level D1 dry-run write contract is now covered by
+   `npm.cmd run cloudflare:smoke:d1-dry-run` without moving product
+   auth/review/homeowner truth out of Supabase.
 5. Manually run the remaining Phase 11/13 `/builder/projects` upload smoke
    against the public dry-run Worker configured in `.env.local`; confirm the
    app-created extraction job shows source-ready counts and `Cloudflare dry-run`
