@@ -3827,6 +3827,12 @@ export async function publishHandoverPackageAction(formData: FormData) {
     });
 
     const generatedWorkflowItems = await generateSupabaseWorkflowHandoverItems(context, projectId);
+    const packageItemCount = generatedWorkflowItems.length || acceptedItems?.length || 0;
+
+    if (packageItemCount === 0) {
+      redirect("/builder/projects?error=workflow-publish-blocked");
+    }
+
     const { data: excludedItems } = await context.supabase
       .from("extracted_items")
       .select("id")
@@ -3862,8 +3868,6 @@ export async function publishHandoverPackageAction(formData: FormData) {
     if (projectError) {
       redirect("/builder/projects?error=publish-package-failed");
     }
-
-    const packageItemCount = generatedWorkflowItems.length || acceptedItems?.length || 0;
 
     await context.supabase.from("audit_events").insert({
       organisation_id: context.organisationId,
@@ -3905,6 +3909,12 @@ export async function publishHandoverPackageAction(formData: FormData) {
       getLocalExtractedWorkflowItems(projectId),
       generateLocalWorkflowHandoverItems(projectId),
     ]);
+    const packageItemCount = generatedWorkflowItems.length || localAcceptedItems.length;
+
+    if (packageItemCount === 0) {
+      redirect("/builder/projects?error=workflow-publish-blocked");
+    }
+
     const localPublish = await publishLocalHandoverPackage(projectId);
 
     await recordLocalHandoverApproval({

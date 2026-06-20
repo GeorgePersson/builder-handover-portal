@@ -730,3 +730,33 @@ Continue the Builder Handover Portal from C:\Users\hunte\OneDrive\Desktop\TestWe
   binding smoke is still useful before relying on local dev behavior, but no
   public Cloudflare, R2, OpenAI, source search, source PDF fetch, or live
   enrichment ran here.
+
+## 2026-06-20 - Cloud Mode Publish Guard Hardening
+
+### What Changed
+
+- Hardened the final publish server action so it refuses to publish when readiness blockers are clear but the project has zero package-ready handover items.
+- Applied the zero-item guard before Supabase project publication and before local scaffold publish persistence, keeping the existing `workflow-publish-blocked` redirect path.
+- Removed runtime dependency on Google-hosted `next/font/google` fonts and replaced them with local CSS fallback variables so cloud builds do not fail when Google Fonts cannot be fetched.
+
+### Files Changed
+
+- `src/lib/server/actions.ts`
+- `src/app/layout.tsx`
+- `src/app/globals.css`
+- `WORKSHEET.md`
+- `docs/agent-handoff-log.md`
+
+### Checks Run
+
+- `npm run lint` - passed.
+- `npm run build` - passed after removing the Google Fonts network dependency.
+
+### Unknowns/Risks
+
+- This was a cloud-safe code hardening pass, not a live Supabase browser smoke test.
+- Magic-link login, builder workspace bootstrap, real upload, and publish flow still need an end-to-end Supabase-mode browser run when cloud secrets and a usable test PDF/OCR path are available.
+
+### Suggested Next Task
+
+Run the Supabase-mode smoke test for login, workspace bootstrap, document upload, extraction queue creation, review, and publish blocking/publish success with real project data.
