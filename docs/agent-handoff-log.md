@@ -270,3 +270,35 @@ Continue the Builder Handover Portal from C:\Users\hunte\OneDrive\Desktop\TestWe
 
 - A synthetic failing dry-run job still needs to be smoked through the real
   `/builder/projects` UI to prove the retry action end to end.
+
+## 2026-06-20 - Cloudflare Local Retry Smoke Harness
+
+### What Changed
+
+- Added `scripts/smoke-cloudflare-retry.mjs`.
+- Added `npm.cmd run cloudflare:smoke:retry`.
+- The script imports the Worker module, mocks Durable Object storage and the
+  Queue, runs `PIPELINE_MODE=dry_run_failure_test`, confirms the first batch
+  fails once, retries exactly that failed batch, and confirms the retry
+  completes with dry-run results.
+- Updated the runbook, handoff, implementation phases, and testing log with the
+  new repeatable local smoke.
+
+### Files Changed
+
+- `scripts/smoke-cloudflare-retry.mjs`
+- `package.json`
+- `docs/cloudflare-pipeline-runbook.md`
+- `docs/implementation-phases.md`
+- `HANDOFF.md`
+- `TESTING_LOG.txt`
+- `docs/agent-handoff-log.md`
+
+### Checks Run
+
+- `npm.cmd run cloudflare:smoke:retry` - passed.
+
+### Unknowns/Risks
+
+- The real `/builder/projects` UI still needs to click through the failing
+  dry-run retry flow with a running Worker/dev app.

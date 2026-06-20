@@ -147,6 +147,18 @@ Expected result: only failed batches are requeued, using the candidates already
 stored in the job status object. If no failed batches exist, the endpoint
 returns `no_failed_batches`.
 
+Run the local module smoke for the failure and retry path:
+
+```powershell
+npm.cmd run cloudflare:smoke:retry
+```
+
+Expected result: the script imports the Worker, mocks the Queue and Durable
+Object, forces batch 0 to fail once, retries exactly that failed batch with
+`retryAttempt=1`, then confirms the retry completes with dry-run results. This
+does not start Wrangler, call public Cloudflare, write R2, call OpenAI, or use
+web search.
+
 Smoke test the synthetic R2 cache path locally:
 
 ```powershell
@@ -237,7 +249,8 @@ default.
 
 1. Run the app workflow smoke from `/builder/projects` against the public
    dry-run Worker URL now stored in `.env.local`.
-2. Add a builder/admin surface for retrying failed dry-run batches from the app.
+2. Run the failing dry-run UI smoke from `/builder/projects` and confirm the
+   app-side retry button reflects the local module smoke behavior.
 3. Replace dry-run queue processing with a one-candidate live pilot only after
    cost guards are implemented.
 4. Add cost guards before enabling live OpenAI/web-search calls.

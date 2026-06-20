@@ -869,3 +869,15 @@ Tested
   - `npm.cmd run build` passed.
   - Still needs a failing dry-run UI smoke to prove the button appears,
     requeues failed batches, and survives a follow-up refresh/page reload.
+
+- 2026-06-20 Codex Cloudflare local retry smoke harness:
+  - Added `scripts/smoke-cloudflare-retry.mjs` and
+    `npm.cmd run cloudflare:smoke:retry`.
+  - The script imports the Worker module from source, mocks Durable Object
+    storage and the Queue, and runs with `PIPELINE_MODE=dry_run_failure_test`.
+  - Verified batch 0 fails once, failed batch candidates are retained,
+    `POST /jobs/<jobId>/retry-failed` requeues exactly one batch with
+    `retryAttempt=1`, and the retry completes with 2 dry-run results.
+  - `npm.cmd run cloudflare:smoke:retry` passed.
+  - No public Cloudflare call, R2 write, OpenAI call, source search, source PDF
+    fetch, or live enrichment ran.

@@ -943,6 +943,13 @@ Both passed after the latest changes.
   `POST /jobs/<jobId>/retry-failed`, merges retry status, requeued batch count,
   retry time, and cleared retry errors into extraction job usage metrics in
   Supabase or local scaffold mode, and keeps live enrichment disabled.
+- Cloudflare retry smoke update: `npm.cmd run cloudflare:smoke:retry` imports
+  the Worker module, mocks the Durable Object and Queue, runs
+  `PIPELINE_MODE=dry_run_failure_test`, confirms batch 0 fails once, confirms
+  `POST /jobs/<jobId>/retry-failed` requeues exactly that batch with
+  `retryAttempt=1`, and confirms the retry completes with two dry-run results.
+  This smoke is local-only and does not touch public Cloudflare, R2, OpenAI, or
+  web search.
 - Product direction update: prefer context-first extraction and builder
   source-gap capture before internet/source enrichment. The uploaded PDF/spec is
   parsed into a strict handover schema with document evidence, missing fields,
@@ -1032,9 +1039,11 @@ Both passed after the latest changes.
    batch/result status survives page refresh. Codex confirmed the route renders
    in scaffold mode, but the in-app browser did not activate project modal
    buttons, so this remains a real desktop check.
-6. Smoke a failing dry-run scenario through `/builder/projects`: confirm the
-   app-side retry button appears for failed Cloudflare batches, requeues only
-   failed batches, and then persists the refreshed status after page reload.
+6. Smoke the same failing dry-run scenario through `/builder/projects`: confirm
+   the app-side retry button appears for failed Cloudflare batches, requeues
+   only failed batches, and then persists the refreshed status after page
+   reload. The module-level retry smoke now passes via
+   `npm.cmd run cloudflare:smoke:retry`.
 7. Continue Hunter's desktop QA checklist in
    `docs/hunter-testing-checklist.md`, focusing on credentialed Supabase/OpenAI
    upload, review, publish, and homeowner visibility checks that cannot be

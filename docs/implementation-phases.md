@@ -285,6 +285,9 @@ call OpenAI, web search, R2 source writes, or live enrichment. The builder
 project workspace now exposes this retry route through a `Retry failed batches`
 action when stored Cloudflare metrics indicate a failed job or failed batch
 count, then persists retry status and requeued counts back into usage metrics.
+The local module smoke `npm.cmd run cloudflare:smoke:retry` confirms the
+Worker's failure-test mode fails a batch once, requeues only that failed batch,
+and completes the retry without touching public Cloudflare resources.
 
 Tasks:
 
@@ -310,8 +313,8 @@ Remaining setup:
   control after queue completion, and confirm the persisted metrics survive page
   refresh in both local scaffold and Supabase modes.
 - Smoke a failing dry-run scenario from the project workspace to prove the retry
-  button requeues only failed Worker batches and the follow-up refresh survives
-  page reload in both local scaffold and Supabase modes.
+  button surfaces the already-tested Worker retry path and the follow-up refresh
+  survives page reload in both local scaffold and Supabase modes.
 - Decide the publish-readiness blocking rule for incomplete pipeline work before
   live enrichment is enabled.
 
