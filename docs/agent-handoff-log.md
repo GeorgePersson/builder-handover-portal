@@ -182,3 +182,26 @@ Continue the Builder Handover Portal from C:\Users\hunte\OneDrive\Desktop\TestWe
 
 - No Worker deployment or live pipeline job used the remote D1 database yet.
 - Next verification should run a tiny dry-run Worker job with D1 active and confirm pipeline rows are mirrored.
+
+## 2026-06-20 - Cloudflare Public Worker Dry Run
+
+### What Changed
+
+- Created Cloudflare Queue `builder-handover-source-enrichment`.
+- Created R2 bucket `builder-handover-source-cache`.
+- Set `PIPELINE_SHARED_SECRET` on the Worker with a generated random value.
+- Deployed the dry-run Worker to `https://builder-handover-pipeline.gpersson2002.workers.dev`.
+- Updated local `.env.local` to point at the public dry-run Worker URL with the matching shared secret.
+
+### Checks Run
+
+- `GET /health` on the public Worker - passed with `d1Configured=true`.
+- Authenticated `POST /jobs` on the public Worker - passed for `public-dry-run-d1-smoke-001`, 2 candidates, 1 batch, `d1State.skipped=false`.
+- Follow-up `GET /jobs/public-dry-run-d1-smoke-001` - passed with `completed`, 1 completed batch, 0 failed batches, 2 dry-run results.
+- Remote D1 count query - passed with 1 job, 2 candidates, 3 events, and 1 cost meter event for the smoke job.
+
+### Unknowns/Risks
+
+- The app upload flow has not yet dispatched to the public Worker from `/builder/projects`.
+- R2 bucket exists for binding, but no object write was performed in this pass.
+- Live source enrichment remains disabled.

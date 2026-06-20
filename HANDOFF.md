@@ -919,6 +919,16 @@ Both passed after the latest changes.
   status, batch counts, result counts, sync time, and any sync error into the
   extraction job usage metrics in Supabase or local scaffold mode. A real local
   Worker UI smoke is still needed to confirm the refresh button end to end.
+- Cloudflare public dry-run update: Phase 12 public Worker dry-run is deployed
+  at `https://builder-handover-pipeline.gpersson2002.workers.dev`. Wrangler
+  created the queue `builder-handover-source-enrichment`, R2 bucket
+  `builder-handover-source-cache`, and Worker secret `PIPELINE_SHARED_SECRET`.
+  Public `/health` returned `d1Configured: true`; authenticated `POST /jobs`
+  accepted `public-dry-run-d1-smoke-001`; queue processing completed one batch
+  with two `dry_run_not_enriched` results; D1 readback confirmed 1 job,
+  2 candidates, 3 events, and 1 zero-cost meter event. `.env.local` now points
+  at the public dry-run Worker. No R2 objects, OpenAI calls, web searches, or
+  live source enrichment ran.
 - Product direction update: prefer context-first extraction and builder
   source-gap capture before internet/source enrichment. The uploaded PDF/spec is
   parsed into a strict handover schema with document evidence, missing fields,
@@ -1001,16 +1011,14 @@ Both passed after the latest changes.
 4. Run a local D1 dry-run smoke to confirm `/jobs` mirrors rows into the bound
    Cloudflare D1 database without moving product auth/review/homeowner truth out
    of Supabase.
-5. Manually run the remaining Phase 11/13 `/builder/projects` upload smoke with
-   the local Worker running and `CLOUDFLARE_PIPELINE_URL=http://127.0.0.1:8787`
-   in `.env.local`; confirm the app-created extraction job shows source-ready
-   counts and `Cloudflare dry-run` status, then click refresh after queue
-   completion and confirm the synced batch/result status survives page refresh.
-   Codex confirmed the route renders in scaffold mode, but the in-app browser
-   did not activate project modal buttons, so this remains a real desktop check.
-6. Continue Phase 12 Cloudflare account/public Worker dry-run setup: Wrangler
-   login, queue/R2 creation, shared secret, deploy, public `/health`, public
-   `POST /jobs`, and app dispatch to the public Worker.
+5. Manually run the remaining Phase 11/13 `/builder/projects` upload smoke
+   against the public dry-run Worker configured in `.env.local`; confirm the
+   app-created extraction job shows source-ready counts and `Cloudflare dry-run`
+   status, then click refresh after queue completion and confirm the synced
+   batch/result status survives page refresh. Codex confirmed the route renders
+   in scaffold mode, but the in-app browser did not activate project modal
+   buttons, so this remains a real desktop check.
+6. Add a retry path for failed Cloudflare dry-run batches before any live pilot.
 7. Continue Hunter's desktop QA checklist in
    `docs/hunter-testing-checklist.md`, focusing on credentialed Supabase/OpenAI
    upload, review, publish, and homeowner visibility checks that cannot be

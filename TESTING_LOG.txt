@@ -820,3 +820,25 @@ Tested
   - Still needs a real local Worker UI smoke from `/builder/projects` to click
     the refresh action after a queue batch completes and confirm the persisted
     metrics survive page refresh.
+
+- 2026-06-20 Codex Cloudflare public Worker dry-run smoke:
+  - Created Cloudflare Queue `builder-handover-source-enrichment`.
+  - Created R2 bucket `builder-handover-source-cache`; no objects were written.
+  - Set Worker secret `PIPELINE_SHARED_SECRET` with a generated random value;
+    the temporary scratch file used for smoke authentication was deleted after
+    `.env.local` was updated.
+  - Deployed dry-run Worker to
+    `https://builder-handover-pipeline.gpersson2002.workers.dev`.
+  - Public `GET /health` returned `ok=true`, `dryRunEnrichment=true`, and
+    `d1Configured=true`.
+  - Authenticated public `POST /jobs` for `public-dry-run-d1-smoke-001`
+    accepted 2 source candidates, returned `d1State.skipped=false`, and queued
+    1 batch.
+  - Follow-up `GET /jobs/public-dry-run-d1-smoke-001` returned `completed` with
+    1 completed batch, 0 failed batches, and 2 `dry_run_not_enriched` results.
+  - Remote D1 readback confirmed 1 `pipeline_jobs` row, 2
+    `source_search_candidates` rows, 3 `pipeline_job_events` rows, and 1
+    `cost_meter_events` row for the smoke job.
+  - Updated `.env.local` with the public Worker URL and matching shared secret.
+  - No OpenAI, LlamaCloud, web search, live enrichment, source PDF fetch, or R2
+    object write ran.

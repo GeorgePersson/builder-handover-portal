@@ -231,6 +231,15 @@ Remaining manual check:
 Goal: deploy the same dry-run pipeline to Hunter's Cloudflare account and prove
 it works from a public Workers domain.
 
+Current status: public dry-run Worker is deployed and smoke-tested at
+`https://builder-handover-pipeline.gpersson2002.workers.dev`. The Cloudflare
+queue, R2 bucket, D1 binding, Durable Object binding, and shared secret are
+configured. Public `/health` returned `d1Configured: true`; authenticated
+`POST /jobs` accepted a two-candidate dry-run job; the queue consumer completed
+one batch with `dry_run_not_enriched` results; D1 readback confirmed 1 job,
+2 source candidates, 3 job events, and 1 zero-cost meter event. No R2 objects,
+OpenAI calls, web searches, or live source enrichment ran.
+
 Tasks:
 
 - Run `npx.cmd wrangler login`.
@@ -249,6 +258,12 @@ Exit criteria:
 - Public `POST /jobs` works with the shared secret.
 - Next.js can dispatch source-ready identities to the public Worker.
 - Job status is readable through the Worker for manual verification.
+
+Remaining setup:
+
+- Run the real `/builder/projects` app upload smoke against the public Worker
+  URL in `.env.local` and confirm the project modal can refresh persisted
+  pipeline status.
 
 ## Phase 13: Progress Sync And Supabase Persistence
 

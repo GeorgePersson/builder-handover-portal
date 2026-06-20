@@ -216,10 +216,9 @@ default.
 
 ## Next Build Steps
 
-1. Bind a real `PIPELINE_DB` D1 database and run the local D1 dry-run smoke.
-2. Add progress sync from Worker job status back into Supabase/local scaffold
-   job records.
-3. Add a retry path for failed dry-run batches.
-4. Replace dry-run queue processing with a one-candidate live pilot only after
+1. Run the app workflow smoke from `/builder/projects` against the public
+   dry-run Worker URL now stored in `.env.local`.
+2. Add a retry path for failed dry-run batches.
+3. Replace dry-run queue processing with a one-candidate live pilot only after
    cost guards are implemented.
-5. Add cost guards before enabling live OpenAI/web-search calls.
+4. Add cost guards before enabling live OpenAI/web-search calls.
