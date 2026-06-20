@@ -1,4 +1,39 @@
 # Agent Handoff Log
+## 2026-06-20 - Admin/Service Extraction Guardrails
+
+### What Changed
+
+- Continued Phase 2/3 hardening from the documented real-world scanned spec finding: OCR can over-extract legal/admin/site-service lines as if they were source-enrichment identities.
+- Tightened the outline-spec extraction schema guidance so legal clauses, preliminaries, payment terms, project admin, council/inspection obligations, site setup, temporary works, subcontractor obligations, and generic workmanship requirements are classified as internal review context instead of handover products.
+- Added a deterministic normalization guardrail that routes obvious admin/contract/site-service rows to low-confidence manual review unless they contain explicit handover evidence such as a warranty/manual/certificate, maintenance requirement, named supplier/manufacturer, model/SKU, finish/colour, or installed fixture/material.
+- Documented the product-vs-admin/service guardrail in the context-first extraction strategy so future agents do not run live source search over OCR noise.
+- Removed the build-time Google Fonts dependency and switched Tailwind font tokens to local system stacks so `next build` is not blocked by outbound `fonts.googleapis.com` access.
+
+### Files Changed
+
+- `src/lib/extraction/outline-spec-schema.ts`
+- `src/lib/ai/outline-spec-normalize.ts`
+- `docs/context-first-extraction-and-source-gap-strategy.md`
+- `src/app/layout.tsx`
+- `src/app/globals.css`
+- `WORKSHEET.md`
+- `docs/agent-handoff-log.md`
+
+### Checks Run
+
+- `npm run lint` - passed.
+- `npm run build` - passed after switching to local system font stacks.
+
+### Unknowns/Risks
+
+- The guardrail is intentionally conservative: rows with explicit handover evidence are not suppressed, but a builder still needs to review/exclude low-confidence admin rows.
+- Real scanned-PDF validation still needs `OPENAI_API_KEY` for real extraction and ideally `LLAMACLOUD_API_KEY` / LlamaCloud configuration for preferred document parsing. Without those secrets, local/OCR fallback can be used but is not the preferred realistic path.
+- Font rendering now uses system stacks instead of Geist; visual spacing may differ slightly and should be checked in a browser during the next desktop smoke test.
+
+### Suggested Next Task
+
+Run the Supabase-mode smoke test from the worksheet when desktop secrets are available: login/onboarding, project creation/credit handling, document upload, extraction queue creation, builder review, and send-package publish readiness. If using the real scanned spec, configure LlamaCloud or accept the slower local OCR fallback.
+
 ## 2026-06-21 - Bedtime Codex Cloud Handoff Prompt
 
 ### What Changed

@@ -73,7 +73,7 @@ export const outlineSpecItemsJsonSchema = {
     Items: {
       type: "array",
       description:
-        "Exhaustive list of distinct homeowner-handover products, fixtures, fittings, appliances, materials, components, project documents, and maintenance-relevant items named in the document.",
+        "Exhaustive list of distinct homeowner-handover products, fixtures, fittings, appliances, materials, components, project documents, and maintenance-relevant items named in the document. Do not promote legal clauses, preliminaries, payment terms, project admin, council/inspection obligations, site setup, temporary works, subcontractor obligations, or generic trade workmanship requirements as handover products; classify those as admin_or_contract or not_handover_relevant when they are useful review context.",
       items: {
         type: "object",
         additionalProperties: false,

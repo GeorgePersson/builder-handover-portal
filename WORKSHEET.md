@@ -49,11 +49,12 @@ After the push, update this worksheet and `docs/agent-handoff-log.md` with what 
 - Continue from `HANDOFF.md` and `docs/phased-work.md`; do not change product direction without documenting the decision.
 - Keep hardening Phase 3 builder review/edit workflow unless the user gives a more specific priority.
 - Verify current app checks before pushing meaningful app changes: usually `npm.cmd run lint` and `npm.cmd run build`.
-- Keep publish readiness strict: unresolved source gaps, quote references, or builder-context prompts should not silently become client-facing.
+- Keep publish readiness strict: unresolved source gaps, quote references, OCR admin/site-service noise, or builder-context prompts should not silently become client-facing.
 - Continue documenting any Cloudflare/LlamaCloud/Supabase production setup steps as they are actually verified.
 
 ## Last Updated
 
+- 2026-06-20: Added product-vs-admin/service extraction guardrails so OCR legal/site-service noise stays internal review context instead of becoming source-enrichment identities, and switched app font tokens to system stacks so builds do not depend on Google Fonts fetches.
 - 2026-06-21: Added bedtime Codex cloud/mobile handoff prompt and clarified that local Hermes cannot continue after the computer is off.
 - 2026-06-21: Pushed Supabase migration verification and agent skills setup to `codex/llamacloud-greenfield` at commit `9332619`.
 - 2026-06-21: Applied all repo Supabase add-migrations, verified missing REST tables now exist, and installed Supabase agent skills.
@@ -74,6 +75,7 @@ After the push, update this worksheet and `docs/agent-handoff-log.md` with what 
 
 ### LlamaCloud
 
+- Secret needed on desktop/cloud when ready: `LLAMACLOUD_API_KEY` plus any project/pipeline identifiers required by the chosen provider configuration. Do not commit these secrets.
 - Not configured yet. This does not block local development because `DOCUMENT_CONTEXT_PROVIDER=local_pdf` can continue using the local PDF fallback.
 - It does block validation of the preferred LlamaCloud Parse path for real PDFs, scanned/table-heavy specs, latency, and failure handling.
 

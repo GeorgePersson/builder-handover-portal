@@ -41,8 +41,66 @@ function getItemType(item: OutlineSpecExtractedItem): ProposedSpecItem["item_typ
   return "product";
 }
 
+const adminOrContractPatterns = [
+  /\b(consent|council|inspection|code\s+compliance|ccc|producer\s+statement|ps[1-4])\b/i,
+  /\b(contract|payment|claim|variation|preliminar(?:y|ies)|insurance|health\s+and\s+safety)\b/i,
+  /\b(site\s+(?:setup|access|security|fencing|clean|clearance|management|services?))\b/i,
+  /\b(scaffold|temporary\s+works|skip\s+bin|rubbish|waste\s+management|portaloo)\b/i,
+  /\b(excavat(?:e|ion)|earthworks|setout|survey|drainage\s+connection|service\s+trench)\b/i,
+  /\b(builder'?s?\s+work|workmanship|install(?:ation)?\s+by|allow(?:ance|ances)|provisional\s+sum)\b/i,
+];
+
+const handoverSpecificPatterns = [
+  /\b(warranty|manual|certificate|producer\s+statement|maintenance|care|cleaning)\b/i,
+  /\b(appliance|fixture|fitting|tap|mixer|sink|vanity|toilet|bath|shower|tile|carpet|flooring)\b/i,
+  /\b(door|window|hardware|paint|cladding|roof|spouting|gutter|heat\s+pump|ventilation)\b/i,
+  /\b(brand|model|sku|product\s+code|colour|finish|supplier|manufacturer)\b/i,
+];
+
+function getCombinedItemText(item: OutlineSpecExtractedItem) {
+  return [
+    item.ItemName.Name,
+    item.ItemName.Category,
+    item.ItemName.Description,
+    item.ItemName.Notes,
+    item.Evidence?.SourceSection,
+    item.Evidence?.SourceSnippet,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function looksLikeAdminOrContractNoise(item: OutlineSpecExtractedItem) {
+  const classification = item.Review?.ContextClassification;
+
+  if (classification === "admin_or_contract" || classification === "not_handover_relevant") {
+    return true;
+  }
+
+  if (
+    classification === "known_match_candidate" ||
+    classification === "source_ready_unknown" ||
+    classification === "project_document"
+  ) {
+    return false;
+  }
+
+  const hasIdentityEvidence = Boolean(getStrongestIdentity(item.ItemName));
+  const text = getCombinedItemText(item);
+
+  if (hasIdentityEvidence || handoverSpecificPatterns.some((pattern) => pattern.test(text))) {
+    return false;
+  }
+
+  return adminOrContractPatterns.some((pattern) => pattern.test(text));
+}
+
 function getRecommendedAction(item: OutlineSpecExtractedItem): ProposedSpecItem["recommended_action"] {
   const classification = item.Review?.ContextClassification;
+
+  if (looksLikeAdminOrContractNoise(item)) {
+    return "manual_review";
+  }
 
   if (classification === "project_document") {
     return "request_document";
@@ -129,6 +187,10 @@ function getQuoteReferenceText(item: OutlineSpecExtractedItem) {
 function getInitialReviewStatus(item: OutlineSpecExtractedItem): ExtractedWorkflowItem["reviewStatus"] {
   const classification = item.Review?.ContextClassification;
   const confidence = clampConfidence(item.Evidence?.Confidence);
+
+  if (looksLikeAdminOrContractNoise(item)) {
+    return "low_confidence";
+  }
 
   if (
     classification === "builder_input_needed" ||

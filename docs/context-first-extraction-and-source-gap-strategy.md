@@ -62,6 +62,27 @@ Each extracted workflow item should preserve:
   a project document, generic allowance, admin/contract text, or not relevant.
 - `classificationReason`: why it landed in that path.
 
+## Product Vs Admin/Service Guardrails
+
+Large scanned outline specs can contain many legal, site-management, service,
+and contract rows that are useful project context but are not homeowner
+handover items. Extraction should keep those rows away from source enrichment
+unless a builder explicitly turns them into package content.
+
+Guardrails:
+
+- Treat legal clauses, preliminaries, payment/variation language, site setup,
+  temporary works, inspections, council obligations, and generic workmanship
+  requirements as `admin_or_contract` or `not_handover_relevant`.
+- Do not run internet/source search for those rows just because OCR extracted
+  them as named lines.
+- Preserve them as low-confidence/internal review context when useful, so a
+  builder can exclude them or convert them into a real document/maintenance row.
+- Allow explicit handover evidence to override the guardrail, for example a
+  warranty, manual, certificate, maintenance requirement, named manufacturer,
+  supplier, model, SKU, finish, colour, or installed fixture/material.
+- Keep the final client portal limited to builder-reviewed package content.
+
 ## Builder-Supplied And Unfindable Items
 
 If internet/source lookup cannot find a reliable official source, or the item is
