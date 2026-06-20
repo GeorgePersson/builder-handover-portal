@@ -56,6 +56,7 @@ After the push, update this worksheet and `docs/agent-handoff-log.md` with what 
 
 ## Last Updated
 
+- 2026-06-21: Pushed consolidated Supabase smoke/source-gap readiness work to `codex/llamacloud-greenfield` at commit `9d8ff14`.
 - 2026-06-21: Consolidated selected Codex cloud branches: Supabase readiness smoke plus source-gap/publish-readiness hardening; lint/build passed.
 - 2026-06-21: Added bedtime Codex cloud/mobile handoff prompt and clarified that local Hermes cannot continue after the computer is off.
 - 2026-06-21: Pushed Supabase migration verification and agent skills setup to `codex/llamacloud-greenfield` at commit `9332619`.

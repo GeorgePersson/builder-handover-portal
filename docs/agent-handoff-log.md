@@ -1,4 +1,30 @@
 # Agent Handoff Log
+## 2026-06-21 - Consolidation Push Completed
+
+### What Changed
+
+- Pushed the consolidated Supabase readiness smoke and source-gap/publish-readiness hardening work to GitHub.
+- Commit pushed: `9d8ff14` on branch `codex/llamacloud-greenfield`.
+- Left local `.codex/` untracked and uncommitted.
+
+### Files Changed
+
+- `WORKSHEET.md`
+- `docs/agent-handoff-log.md`
+
+### Checks Run
+
+- `git push origin HEAD` - passed.
+- `git status --short --branch` - branch is aligned with origin except existing untracked `.codex/`.
+
+### Unknowns/Risks
+
+- Browser-level Supabase smoke remains the next step.
+- LlamaCloud/OCR remains needed for realistic scanned-PDF extraction.
+
+### Suggested Next Task
+
+Run the app locally in Supabase mode and complete the browser smoke from `docs/hunter-testing-checklist.md`, starting with `npm.cmd run supabase:smoke:readiness`, then magic-link login/workspace bootstrap/upload/review/publish-readiness checks.
 ## 2026-06-21 - Cloud Branch Consolidation: Supabase Smoke And Source-Gap Readiness
 
 ### What Changed
