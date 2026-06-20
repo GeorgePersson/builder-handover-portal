@@ -54,6 +54,7 @@ After the push, update this worksheet and `docs/agent-handoff-log.md` with what 
 
 ## Last Updated
 
+- 2026-06-20: Added `npm run supabase:smoke:readiness` to verify Supabase REST tables and the `handover-documents` bucket before browser auth/upload smoke tests.
 - 2026-06-21: Added bedtime Codex cloud/mobile handoff prompt and clarified that local Hermes cannot continue after the computer is off.
 - 2026-06-21: Pushed Supabase migration verification and agent skills setup to `codex/llamacloud-greenfield` at commit `9332619`.
 - 2026-06-21: Applied all repo Supabase add-migrations, verified missing REST tables now exist, and installed Supabase agent skills.
@@ -70,6 +71,7 @@ After the push, update this worksheet and `docs/agent-handoff-log.md` with what 
 - Private storage bucket `handover-documents` was created/confirmed for app uploads. An older underscore bucket `handover_documents` also exists but the app expects the hyphenated bucket.
 - All repo Supabase add-migrations in `docs/supabase-add-*.sql` were applied successfully on 2026-06-21.
 - REST verification now passes for `uploaded_documents`, `document_extraction_jobs`, `project_credit_events`, `handover_open_events`, `document_download_events`, and `handover_approvals`.
+- `npm run supabase:smoke:readiness` can rerun the service-role readiness check without printing secrets; it checks the core workflow REST tables and the private `handover-documents` bucket.
 - Database verification confirms the newer workflow tables, project credit tables, handover event/approval tables, expected enums, and `ensure_builder_workspace` / `accept_project_client_invite` RPCs exist.
 
 ### LlamaCloud

@@ -1,4 +1,37 @@
 # Agent Handoff Log
+## 2026-06-20 - Supabase Readiness Smoke Helper
+
+### What Changed
+
+- Added `scripts/smoke-supabase-readiness.mjs` for a repeatable Supabase-mode backend readiness check.
+- Added the `npm run supabase:smoke:readiness` package script.
+- The smoke validates required Supabase env vars, service-role REST access to core workflow tables, and the private `handover-documents` bucket without printing secrets.
+- Updated the worksheet and testing log so the next agent can run the backend check before browser auth/upload testing.
+
+### Files Changed
+
+- `package.json`
+- `scripts/smoke-supabase-readiness.mjs`
+- `WORKSHEET.md`
+- `TESTING_LOG.txt`
+- `docs/agent-handoff-log.md`
+
+### Checks Run
+
+- `node --check scripts/smoke-supabase-readiness.mjs` - passed.
+- `npm run supabase:smoke:readiness` - warning in this environment because Supabase env vars were not present; the script failed closed before making network calls or printing secrets.
+- `npm run lint` - passed.
+- `npm run build` - warning in this environment because Next.js could not fetch Google-hosted `Geist` / `Geist Mono` fonts during `next/font` optimization.
+
+### Unknowns/Risks
+
+- This is not a browser auth smoke. Magic-link login, builder workspace bootstrap, real PDF upload, review queue creation, and publish-readiness still require an interactive Supabase-mode browser test.
+- The provided real PDF is scanned/image-heavy, so realistic extraction remains dependent on LlamaCloud or OCR-capable processing.
+
+### Suggested Next Task
+
+Run the Supabase-mode browser smoke: magic-link login, builder workspace bootstrap, project/spec upload, extraction/review queue creation, and strict publish-readiness behavior.
+
 ## 2026-06-21 - Bedtime Codex Cloud Handoff Prompt
 
 ### What Changed

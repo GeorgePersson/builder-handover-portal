@@ -990,3 +990,9 @@ Tested
   - `npm.cmd run lint` passed.
   - `npm.cmd run build` passed.
   - Restarted the local dev server and verified `/builder` returned HTTP 200.
+
+- 2026-06-20 Codex Supabase readiness smoke helper:
+  - Added `npm run supabase:smoke:readiness` to verify required Supabase env vars, core REST tables, and the private `handover-documents` bucket before a browser login/upload smoke.
+  - The helper uses the service-role key server-side only and redacts the project URL to host-level output.
+  - `npm run supabase:smoke:readiness` warned in this environment because Supabase env vars were not present; the script failed closed before making network calls or printing secrets.
+  - This is a backend readiness check only; magic-link login, builder workspace bootstrap, real PDF upload, extraction/review queue creation, and publish-readiness still need browser testing.
