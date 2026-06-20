@@ -962,7 +962,10 @@ Both passed after the latest changes.
   a budgeted one-candidate admission still queues dry-run work only. The same
   safety snapshot, including live-pilot budget, is now persisted in Durable
   Object job status and copied onto queue messages so future live work can
-  consume the approved budget deliberately.
+  consume the approved budget deliberately. The queue consumer now rejects
+  `PIPELINE_MODE=live_pilot` messages that are missing the admitted safety
+  budget, so live-pilot execution cannot be triggered by an unsafely crafted
+  queue payload.
 - Product direction update: prefer context-first extraction and builder
   source-gap capture before internet/source enrichment. The uploaded PDF/spec is
   parsed into a strict handover schema with document evidence, missing fields,

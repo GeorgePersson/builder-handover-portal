@@ -898,6 +898,9 @@ Tested
     and budgeted one-candidate admission queued dry-run work only.
   - The live-guard smoke also confirms the admitted safety/budget snapshot is
     copied onto the queue message and persisted in Worker job status.
+  - The live-guard smoke now also verifies a tampered live-pilot queue message
+    without the admitted safety budget is rejected before processing, while the
+    valid budgeted message still completes as dry-run only.
   - `npm.cmd run cloudflare:smoke:retry` still passed after the guard change.
   - No public Cloudflare call, R2 write, OpenAI call, source search, source PDF
     fetch, or live enrichment ran.

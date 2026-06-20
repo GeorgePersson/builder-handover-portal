@@ -107,6 +107,23 @@ function validateJobSafety(env, sourceCandidates) {
   return { ok: true, safety };
 }
 
+function validateQueueSafety(env, payload) {
+  if (getPipelineMode(env) !== "live_pilot") {
+    return;
+  }
+
+  const safety = payload.safety && typeof payload.safety === "object" ? payload.safety : undefined;
+  if (
+    !safety ||
+    safety.mode !== "live_pilot" ||
+    safety.livePilotEnabled !== true ||
+    !safety.livePilotBudget ||
+    safety.livePilotBudget.configured !== true
+  ) {
+    throw new Error("Live pilot queue payload is missing the admitted safety budget.");
+  }
+}
+
 function shouldSimulateFailure(env, payload) {
   if (getPipelineMode(env) !== "dry_run_failure_test") {
     return false;
@@ -590,6 +607,7 @@ async function handleQueueMessage(message, env) {
 
   const candidates = Array.isArray(payload.candidates) ? payload.candidates : [];
   try {
+    validateQueueSafety(env, payload);
     await writeBatchStartedToD1(env, payload, candidates.length);
 
     await sendJobUpdate(env, jobId, {

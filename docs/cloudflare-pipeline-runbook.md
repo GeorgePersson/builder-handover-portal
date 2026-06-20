@@ -172,6 +172,8 @@ Expected result: `PIPELINE_MODE=live_pilot` returns 403 unless
 one-candidate job as dry-run only. This does not enable live source enrichment;
 the Worker still reports `liveEnrichmentEnabled: false`. The accepted safety
 snapshot is visible on `/jobs/<jobId>` and copied onto the queue message.
+Tampered live-pilot queue messages without that admitted safety budget are
+rejected before processing.
 
 Smoke test the synthetic R2 cache path locally:
 
@@ -267,6 +269,6 @@ default.
    app-side retry button reflects the local module smoke behavior.
 3. Replace dry-run queue processing with a one-candidate live pilot only after
    the implementation consumes the admitted search/cost budget snapshot from
-   the queue payload.
+   the queue payload and records per-step budget usage.
 4. Keep live OpenAI/web-search calls disabled until budget consumption and
    review persistence are implemented.

@@ -354,7 +354,9 @@ rejected, oversized jobs are rejected, missing-budget jobs are rejected, and a
 budgeted one-candidate admitted job still queues dry-run work only. The admitted
 safety snapshot is persisted in Durable Object job status and copied onto queue
 messages, so later live source logic can consume the approved budget rather than
-reading fresh mutable environment state mid-job.
+reading fresh mutable environment state mid-job. The queue consumer rejects
+`PIPELINE_MODE=live_pilot` messages that do not carry the admitted safety
+budget.
 
 Tasks:
 
@@ -362,6 +364,8 @@ Tasks:
   default-off.
 - Keep the max candidate count plus explicit per-job search/cost budgets.
 - Preserve the admitted budget snapshot on job status and source batch messages.
+- Reject live-pilot queue messages that do not carry the admitted budget
+  snapshot.
 - Run one source-ready candidate through official-source search.
 - Do not search builder-input-needed or generic/source-gap rows until the
   builder supplies enough identity detail.
@@ -375,6 +379,8 @@ Exit criteria:
   present, the candidate cap is respected, and search/cost budgets are set.
 - Accepted live-pilot jobs expose the admitted budget snapshot through status
   and queue payloads.
+- Live-pilot queue execution refuses messages without that admitted budget
+  snapshot.
 - One live candidate can be enriched and reviewed.
 - Cost/search usage is recorded and visible.
 - No homeowner-facing data changes until the builder/admin approves it.

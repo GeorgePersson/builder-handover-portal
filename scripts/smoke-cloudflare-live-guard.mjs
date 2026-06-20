@@ -40,10 +40,21 @@ class JobStatusNamespace {
 class QueueMock {
   constructor() {
     this.messages = [];
+    this.acked = [];
   }
 
   async send(body) {
     this.messages.push(body);
+  }
+
+  takeBatch() {
+    const bodies = this.messages.splice(0, this.messages.length);
+    return {
+      messages: bodies.map((body) => ({
+        body,
+        ack: () => this.acked.push(body),
+      })),
+    };
   }
 }
 
@@ -152,6 +163,32 @@ async function main() {
   assert(acceptedStatus.safety?.mode === "live_pilot", "Expected live pilot safety to persist in job status.");
   assert(acceptedStatus.safety?.livePilotBudget?.maxSearches === 2, "Expected job status to persist live pilot search budget.");
 
+  try {
+    await worker.queue({
+      messages: [{
+        body: {
+          jobId: "live-guard-tampered",
+          projectId: "live-guard-project",
+          batchIndex: 0,
+          candidates: [createCandidate(1)],
+          retryAttempt: 0,
+        },
+        ack: () => {},
+      }],
+    }, acceptedEnv);
+    throw new Error("Expected live pilot queue processing to reject missing safety metadata.");
+  } catch (error) {
+    assert(
+      error instanceof Error && error.message === "Live pilot queue payload is missing the admitted safety budget.",
+      "Expected missing safety metadata rejection.",
+    );
+  }
+
+  await worker.queue(acceptedQueue.takeBatch(), acceptedEnv);
+  const completedStatus = await readJson(await worker.fetch(new Request("https://worker.test/jobs/live-guard-accepted"), acceptedEnv));
+  assert(completedStatus.status === "completed", "Expected budgeted dry-run live-pilot-shaped job to complete.");
+  assert(completedStatus.batches?.[0]?.safety?.livePilotBudget?.maxEstimatedCostUsd === 0.5, "Expected processed batch to retain safety budget.");
+
   console.log(JSON.stringify({
     ok: true,
     disabledStatus: disabledResponse.status,
@@ -161,7 +198,9 @@ async function main() {
     acceptedDryRunOnly: accepted.dryRunEnrichment === true && accepted.safety.liveEnrichmentEnabled === false,
     acceptedBudget: accepted.safety.livePilotBudget,
     persistedBudget: acceptedStatus.safety.livePilotBudget,
-    queuedMessages: acceptedQueue.messages.length,
+    finalStatus: completedStatus.status,
+    processedBatchBudget: completedStatus.batches[0].safety.livePilotBudget,
+    ackedMessages: acceptedQueue.acked.length,
   }, null, 2));
 }
 
