@@ -5,21 +5,25 @@ publish, and homeowner flows.
 
 ## Setup
 
-1. Run the app locally.
+1. Run the Supabase readiness smoke before browser testing when Supabase secrets are configured.
+   - Command: `npm run supabase:smoke:readiness`
+   - Expected: The smoke reports the required REST tables, private `handover-documents` bucket, and `ensure_builder_workspace` RPC as reachable without printing secrets.
+
+2. Run the app locally.
    - Command: `npm.cmd run dev`
    - Expected: App opens at `http://127.0.0.1:3000`.
 
-2. Apply the latest Supabase migrations if testing against Supabase.
+3. Apply the latest Supabase migrations if testing against Supabase.
    - Run `docs/supabase-add-document-workflow-phase1.sql`.
    - Run `docs/supabase-add-handover-approvals.sql`.
    - Expected: Tables include `uploaded_documents`, `document_extraction_jobs`,
      `extracted_items`, `product_matches`, `item_review_actions`,
      `handover_items`, `handover_approvals`, and `audit_logs`.
 
-3. Sign in as the builder test account.
+4. Sign in as the builder test account.
    - Expected: `/builder/projects` loads and shows your projects.
 
-4. Use the demo upload file for the first clean run.
+5. Use the demo upload file for the first clean run.
    - File: `docs/demo-assets/bayview-demo-spec.csv`
    - Expected: This gives a predictable upload containing cladding, bathroom
      ventilation, kitchen oven, roofing document, and garage door maintenance

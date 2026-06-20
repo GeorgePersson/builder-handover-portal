@@ -730,3 +730,30 @@ Continue the Builder Handover Portal from C:\Users\hunte\OneDrive\Desktop\TestWe
   binding smoke is still useful before relying on local dev behavior, but no
   public Cloudflare, R2, OpenAI, source search, source PDF fetch, or live
   enrichment ran here.
+
+## 2026-06-20 - Supabase Readiness Smoke Script
+
+### What Changed
+
+- Added a repeatable Supabase readiness smoke script for cloud/local agents that verifies required Supabase env names are configured without printing secret values.
+- The smoke checks service-role REST reachability for the core workflow/event tables, confirms the `handover-documents` bucket is private and reachable, and confirms the `ensure_builder_workspace` RPC is exposed and authentication-gated.
+- Added an npm script so agents can run the smoke with one command before manual magic-link/upload testing.
+
+### Files Changed
+
+- `scripts/smoke-supabase-readiness.mjs`
+- `package.json`
+- `docs/hunter-testing-checklist.md`
+- `HANDOFF.md`
+- `WORKSHEET.md`
+- `docs/agent-handoff-log.md`
+
+### Checks Run
+
+- `npm run supabase:smoke:readiness` - warning/blocked in this Codex environment because Supabase secrets are not configured here.
+
+### Unknowns/Risks
+
+- This Codex environment has no `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, or `SUPABASE_SERVICE_ROLE_KEY`, so the smoke could not verify the live Supabase project here.
+- The script is a readiness/API smoke only; it does not click through magic-link auth, upload a file, or validate LlamaCloud/OCR extraction quality.
+- A real desktop/browser smoke is still needed with configured secrets and a test user/session.

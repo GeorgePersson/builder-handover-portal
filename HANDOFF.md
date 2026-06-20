@@ -86,6 +86,8 @@ legacy columns plus `raw_extracted_data` when older Supabase schemas are still
 in use. Local scaffold mode carries the richer fields and records edit-history
 snapshots in `.local-data/uploaded-documents.json`.
 
+Supabase readiness smoke update: agents can now run `npm run supabase:smoke:readiness` to verify the configured Supabase URL/anon/service-role setup, core REST workflow tables, private `handover-documents` bucket, and `ensure_builder_workspace` RPC without printing secret values. In this Codex environment the command is blocked until `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` are configured.
+
 Async extraction workflow update: upload/extraction jobs now use durable states
 for `uploaded`, `processing`, `needs_review`, `partially_reviewed`,
 `package_ready`, and `failed` in both Supabase and local scaffold mode. OpenAI
