@@ -237,26 +237,54 @@ function PublishedColumn({
   items: Array<{
     id: string;
     title: string;
+    category: string;
     location: string;
     extractedText: string;
   }>;
   title: string;
 }) {
+  const groupedItems = groupPublishedItemsByCategory(items);
+
   return (
     <div className="rounded-lg border border-slate-200 bg-white">
       <h3 className="border-b border-slate-100 px-4 py-3 text-sm font-semibold text-slate-950">{title}</h3>
-      <div className="divide-y divide-slate-100">
+      <div>
         {items.length === 0 ? <p className="p-4 text-sm text-slate-500">No published items yet.</p> : null}
-        {items.map((item) => (
-          <article className="p-4" key={item.id}>
-            <p className="text-sm font-semibold text-slate-950">{item.title}</p>
-            <p className="mt-1 text-xs text-slate-500">{item.location || "No location captured"}</p>
-            <p className="mt-2 text-sm leading-6 text-slate-600">{item.extractedText}</p>
-          </article>
+        {groupedItems.map((group) => (
+          <section className="border-b border-slate-100 last:border-b-0" key={group.category}>
+            <div className="bg-slate-50 px-4 py-2">
+              <p className="text-xs font-semibold uppercase tracking-normal text-slate-600">{group.category}</p>
+            </div>
+            <div className="divide-y divide-slate-100">
+              {group.items.map((item) => (
+                <article className="p-4" key={item.id}>
+                  <p className="text-sm font-semibold text-slate-950">{item.title}</p>
+                  <p className="mt-1 text-xs text-slate-500">{item.location || "No location captured"}</p>
+                  <p className="mt-2 whitespace-pre-line text-sm leading-6 text-slate-600">{item.extractedText}</p>
+                </article>
+              ))}
+            </div>
+          </section>
         ))}
       </div>
     </div>
   );
+}
+
+function groupPublishedItemsByCategory<T extends { category: string }>(items: T[]) {
+  const groups = new Map<string, T[]>();
+
+  for (const item of items) {
+    const category = item.category || "General";
+    groups.set(category, [...(groups.get(category) || []), item]);
+  }
+
+  return Array.from(groups.entries())
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([category, groupedItems]) => ({
+      category,
+      items: groupedItems,
+    }));
 }
 
 function PortalSummary({

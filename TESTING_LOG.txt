@@ -505,6 +505,21 @@ Pending Tests
    Result:
    Notes:
 
+36. Date added: 2026-06-20
+   Area: LlamaCloud greenfield integration browser smoke
+   What to test: Hydrated builder review lanes, rich edit submit, quote upload, and client category/care grouping in a real browser.
+   Steps:
+   - Start the app locally.
+   - Open /builder/projects and edit the Bayview project or a project with workflow items.
+   - Confirm lanes render: Ready to accept, Needs detail, Project documents/quotes, Search results ready, Not handover.
+   - Expand an older/local scaffold row and confirm missing original values show Not captured.
+   - Edit manufacturer, supplier, supplier SKU, approved category, warranty, care text, and care guidance label.
+   - Attach a quote to a quote-like item and confirm the upload creates a linked child extraction/re-match before any source search.
+   - Publish only after review, then open /client/portal and confirm items are grouped by approved category with care guidance labels.
+   Expected result: Builder fields save without breaking, quote rows stay gated until quote extraction/re-match, source search is not triggered for unconfirmed unknowns, and homeowners see only approved package fields.
+   Result:
+   Notes: Codex could not run the browser-level check because the local Playwright browser binary is not installed. Lint, build, and route-level scaffold smoke passed; finish this from the desktop browser.
+
 Tested
 
 - 2026-06-20 Codex automated local smoke:
@@ -665,3 +680,89 @@ Tested
   - The exact file upload through the modal could not be automated because the
     in-app browser runtime does not expose file attachment for file inputs.
     Keep pending test 34 open for Hunter's desktop/manual upload confirmation.
+
+- 2026-06-20 Codex builder/client review UI slice:
+  - Added builder project review lanes for Ready to accept, Needs detail,
+    Project documents, Search results ready, and Not handover.
+  - Added item edit controls for manufacturer, approved category, supplier,
+    quantity, finish, colour, location, warranty text, care text, and care
+    guidance source label. Colour and quote document kind are review metadata
+    only until first-class schema fields are added.
+  - Quote-like rows now show an explicit upload quote action against the item.
+  - Client portal published package sections now group items by approved
+    category and show care text with manufacturer/supplier/builder/general AI
+    guidance labels.
+  - `npm.cmd run lint` passed.
+  - `npm.cmd run build` passed.
+
+- 2026-06-20 Codex builder/client comparison refinement:
+  - Added an original extracted vs current edited comparison table inside the
+    workflow item edit drawer for item, manufacturer, model, supplier,
+    quantity, finish, colour, location, category, and care label.
+  - Renamed the project document lane to `Project documents/quotes` and
+    simplified builder-facing care label options to Manufacturer, Supplier,
+    Builder supplied, and General AI care guidance.
+  - Older workflow rows without original extraction history gracefully show
+    `Not captured`.
+  - `npm.cmd run lint` passed.
+  - `npm.cmd run build` passed.
+
+- 2026-06-20 Codex LlamaCloud backend data-model slice:
+  - Added Supabase schema and incremental migration support for multi-unit
+    replication batches/units, supplier records, supplier documents, source
+    documents/source versions, care guidance versions, quote-linked extracted
+    items, original-vs-edited item values, category overrides, and care guidance
+    source labels.
+  - Extended workflow TypeScript/local scaffold types so manufacturer and
+    supplier stay distinct, builder edits record value-history snapshots, and
+    generated handover items preserve supplier/category/care/source-version
+    metadata.
+  - Extended AI extraction mapping to capture manufacturer, supplier SKU,
+    quantity, finish/variation, source page/section/snippet, quote references,
+    original extracted values, and care guidance source type without exposing
+    raw AI output to homeowners.
+  - Supabase insertion now attempts rich workflow columns first and falls back
+    to legacy columns plus `raw_extracted_data` for older schemas.
+  - `npm.cmd run lint` passed.
+  - `npm.cmd run build` passed.
+
+- 2026-06-20 Codex LlamaCloud async extraction workflow slice:
+  - Added durable extraction/upload status handling for uploaded, processing,
+    needs_review, partially_reviewed, package_ready, and failed states, with
+    legacy Supabase enum fallbacks where needed.
+  - Rewired AI extraction to request the repo-owned outline-spec schema and
+    normalize the schema output into durable workflow rows with original values,
+    source evidence, supplier/manufacturer separation, quote-reference status,
+    and category override fields.
+  - Supporting quote/invoice/supplier-schedule uploads now link to the parent
+    extracted item, create supplier-document traceability where available,
+    extract child rows, and run database matching again before any source
+    search.
+  - Builder item edits now trigger re-match while preserving the review action;
+    local scaffold retries replace rows for the same extraction job to avoid
+    duplicate extracted items.
+  - `npm.cmd run lint` passed.
+  - `npm.cmd run build` passed.
+
+- 2026-06-20 Codex LlamaCloud greenfield integration pass:
+  - Checked backend/UX contracts for manufacturer, supplierName, supplierSku,
+    builderApprovedCategory, careGuidanceSourceLabel, quoteReferenceStatus,
+    parentExtractedItemId, original_extracted_values, builder_edited_values,
+    source/search readiness, and documentKind=quote supporting uploads.
+  - Added Supplier SKU to the builder item edit form and action payload.
+  - Updated Supabase handover item generation/readback to preserve rich
+    homeowner package fields: manufacturer, supplier name/SKU, approved
+    category, quantity, finish, care guidance label/type, and source-version
+    references, with legacy-column fallback for older schemas.
+  - Tightened source-candidate dispatch so extraction completion sends only
+    builder-confirmed unmatched items; referenced or uploaded quote rows remain
+    blocked until quote extraction/re-match.
+  - Started a local scaffold dev server on `http://127.0.0.1:3002`.
+  - Route-level smoke returned `200` for `/builder/projects`, `/client/portal`,
+    and `/builder/handover-package`; `/client/portal` rendered homeowner
+    sections without raw `raw_extracted_data`, `sourceResults`, or
+    `searchResults` strings in the fetched page.
+  - Playwright browser smoke could not run because the local Playwright
+    Chromium binary is missing.
+  - `npm.cmd run lint` passed.
+  - `npm.cmd run build` passed.

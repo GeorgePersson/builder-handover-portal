@@ -336,11 +336,15 @@ function classifySourceEnrichmentItem(item: ExtractedItemDraft): {
 } {
   const combined = [
     item.productName,
+    item.manufacturer,
     item.brand,
     item.model,
     item.category,
+    item.supplierName,
     item.supplier,
+    item.supplierSku,
     item.location,
+    item.quoteReferenceText,
   ]
     .map((value) => cleanText(value).toLowerCase())
     .filter(Boolean)
@@ -350,6 +354,14 @@ function classifySourceEnrichmentItem(item: ExtractedItemDraft): {
     return {
       classification: "insufficient_identity",
       reason: "No product identity text was extracted.",
+    };
+  }
+
+  if (item.quoteReferenceStatus === "referenced" || item.quoteReferenceStatus === "quote_uploaded") {
+    return {
+      classification: "project_document",
+      reason:
+        "This row still depends on a referenced supplier document. Extract and review the quote or supplier schedule before source enrichment.",
     };
   }
 

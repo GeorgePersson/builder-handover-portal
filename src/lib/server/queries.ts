@@ -83,17 +83,52 @@ type WorkflowHandoverItemRow = {
   matched_product_id: string | null;
   item_type: WorkflowHandoverItem["itemType"];
   title: string;
+  manufacturer?: string | null;
   brand: string | null;
   model: string | null;
+  ai_suggested_category?: string | null;
+  builder_approved_category?: string | null;
   category: string | null;
+  supplier_id?: string | null;
+  supplier_name?: string | null;
   supplier: string | null;
+  supplier_sku?: string | null;
   location: string | null;
+  quantity?: string | null;
+  variant_or_finish?: string | null;
   warranty_text: string | null;
   maintenance_text: string | null;
+  care_guidance_source_type?: WorkflowHandoverItem["careGuidanceSourceType"] | null;
+  care_guidance_source_label?: string | null;
+  warranty_source_version_id?: string | null;
+  manual_source_version_id?: string | null;
+  care_guidance_version_id?: string | null;
   approved_by: string | null;
   approved_at: string | null;
   created_at: string;
 };
+
+type LooseDbRow = Record<string, unknown>;
+
+function getRowObject(row: LooseDbRow, key: string) {
+  const value = row[key];
+  return value && typeof value === "object" ? value as Record<string, unknown> : {};
+}
+
+function getRowString(row: LooseDbRow, key: string) {
+  const value = row[key];
+  return typeof value === "string" ? value : undefined;
+}
+
+function getRowNumber(row: LooseDbRow, key: string) {
+  const value = row[key];
+  return typeof value === "number" ? value : 0;
+}
+
+function getRowBoolean(row: LooseDbRow, key: string) {
+  const value = row[key];
+  return typeof value === "boolean" ? value : undefined;
+}
 
 export function isPackageReadyExtractedItem(item: Pick<ExtractedHandoverItem, "status">) {
   return packageReadyStatuses.has(item.status);
@@ -260,13 +295,26 @@ function mapWorkflowHandoverItemRows(data: WorkflowHandoverItemRow[]): WorkflowH
     matchedProductId: item.matched_product_id || undefined,
     itemType: item.item_type,
     title: item.title,
+    manufacturer: item.manufacturer || undefined,
     brand: item.brand || undefined,
     model: item.model || undefined,
+    aiSuggestedCategory: item.ai_suggested_category || undefined,
+    builderApprovedCategory: item.builder_approved_category || undefined,
     category: item.category || undefined,
-    supplier: item.supplier || undefined,
+    supplierId: item.supplier_id || undefined,
+    supplierName: item.supplier_name || undefined,
+    supplier: item.supplier_name || item.supplier || undefined,
+    supplierSku: item.supplier_sku || undefined,
     location: item.location || undefined,
+    quantity: item.quantity || undefined,
+    variantOrFinish: item.variant_or_finish || undefined,
     warrantyText: item.warranty_text || undefined,
     maintenanceText: item.maintenance_text || undefined,
+    careGuidanceSourceType: item.care_guidance_source_type || undefined,
+    careGuidanceSourceLabel: item.care_guidance_source_label || undefined,
+    warrantySourceVersionId: item.warranty_source_version_id || undefined,
+    manualSourceVersionId: item.manual_source_version_id || undefined,
+    careGuidanceVersionId: item.care_guidance_version_id || undefined,
     approvedBy: item.approved_by || undefined,
     approvedAt: item.approved_at || undefined,
     createdAt: item.created_at,
@@ -274,9 +322,10 @@ function mapWorkflowHandoverItemRows(data: WorkflowHandoverItemRow[]): WorkflowH
 }
 
 function workflowHandoverItemToPackageItem(item: WorkflowHandoverItem): ExtractedHandoverItem {
+  const careGuidanceLabel = formatCareGuidanceSourceType(item.careGuidanceSourceType, item.careGuidanceSourceLabel);
   const detailText = [
     item.warrantyText ? `Warranty: ${item.warrantyText}` : null,
-    item.maintenanceText ? `Maintenance: ${item.maintenanceText}` : null,
+    item.maintenanceText ? `${careGuidanceLabel}: ${item.maintenanceText}` : null,
     !item.warrantyText && !item.maintenanceText ? item.supplier || item.category || "Builder approved handover item." : null,
   ].filter(Boolean).join("\n");
 
@@ -285,7 +334,7 @@ function workflowHandoverItemToPackageItem(item: WorkflowHandoverItem): Extracte
     specificationId: item.sourceDocumentId || item.projectId,
     itemType: item.itemType,
     title: item.title,
-    category: item.category || "Approved handover item",
+    category: item.builderApprovedCategory || item.category || "Approved handover item",
     location: item.location || "",
     extractedText: detailText,
     reviewReason: "Generated from builder-approved workflow handover item.",
@@ -293,6 +342,22 @@ function workflowHandoverItemToPackageItem(item: WorkflowHandoverItem): Extracte
     confidenceScore: 100,
     status: "accepted",
   };
+}
+
+function formatCareGuidanceSourceType(sourceType?: WorkflowHandoverItem["careGuidanceSourceType"], sourceLabel?: string) {
+  if (sourceLabel) {
+    return sourceLabel;
+  }
+
+  const labels = {
+    manufacturer: "Manufacturer guidance",
+    supplier: "Supplier guidance",
+    builder_supplied: "Builder supplied guidance",
+    general_ai: "General AI care guidance",
+    unknown: "Care guidance",
+  };
+
+  return labels[sourceType || "unknown"];
 }
 
 export async function getProjects(): Promise<Project[]> {
@@ -495,32 +560,53 @@ export async function getUploadedProjectDocuments(projectId?: string): Promise<U
   }
 
   const supabase = await createSupabaseServerClient();
+  const richColumns = "id,project_id,original_filename,file_type,mime_type,storage_path,workflow_role,parent_extracted_item_id,processing_status,uploaded_by,created_at,updated_at";
+  const legacyColumns = "id,project_id,original_filename,file_type,mime_type,storage_path,processing_status,uploaded_by,created_at,updated_at";
   let query = supabase
     .from("uploaded_documents")
-    .select("id,project_id,original_filename,file_type,mime_type,storage_path,processing_status,uploaded_by,created_at,updated_at")
+    .select(richColumns)
     .order("created_at", { ascending: false });
 
   if (projectId) {
     query = query.eq("project_id", projectId);
   }
 
-  const { data, error } = await query;
+  const richResult = await query;
+  let data = richResult.data as unknown as LooseDbRow[] | null;
+  let error = richResult.error;
+
+  if (error) {
+    let legacyQuery = supabase
+      .from("uploaded_documents")
+      .select(legacyColumns)
+      .order("created_at", { ascending: false });
+
+    if (projectId) {
+      legacyQuery = legacyQuery.eq("project_id", projectId);
+    }
+
+    const legacyResult = await legacyQuery;
+    data = legacyResult.data as unknown as LooseDbRow[] | null;
+    error = legacyResult.error;
+  }
 
   if (error || !data) {
     return [];
   }
 
   return data.map((document) => ({
-    id: document.id,
-    projectId: document.project_id,
-    originalFilename: document.original_filename,
-    fileType: document.file_type || undefined,
-    mimeType: document.mime_type,
-    storagePath: document.storage_path,
-    processingStatus: document.processing_status,
-    uploadedBy: document.uploaded_by || undefined,
-    createdAt: document.created_at,
-    updatedAt: document.updated_at,
+    id: getRowString(document, "id") || "",
+    projectId: getRowString(document, "project_id") || "",
+    originalFilename: getRowString(document, "original_filename") || "",
+    fileType: getRowString(document, "file_type"),
+    mimeType: getRowString(document, "mime_type") || "",
+    storagePath: getRowString(document, "storage_path") || "",
+    workflowRole: getRowString(document, "workflow_role") as UploadedProjectDocument["workflowRole"],
+    parentExtractedItemId: getRowString(document, "parent_extracted_item_id"),
+    processingStatus: getRowString(document, "processing_status") as UploadedProjectDocument["processingStatus"],
+    uploadedBy: getRowString(document, "uploaded_by"),
+    createdAt: getRowString(document, "created_at") || "",
+    updatedAt: getRowString(document, "updated_at") || "",
   }));
 }
 
@@ -600,48 +686,97 @@ export async function getExtractedWorkflowItems(projectId?: string): Promise<Ext
   }
 
   const supabase = await createSupabaseServerClient();
+  const richColumns =
+    "id,project_id,source_document_id,extraction_job_id,raw_extracted_data,original_extracted_values,builder_edited_values,item_type,product_name,manufacturer,brand,model,category,ai_suggested_category,builder_approved_category,supplier_id,supplier_name,supplier,supplier_sku,location,quantity,variant_or_finish,warranty_text,maintenance_text,care_guidance_source_type,care_guidance_source_label,care_guidance_review_required,warranty_source_version_id,manual_source_version_id,care_guidance_version_id,identity_fingerprint,parent_extracted_item_id,source_quote_document_id,quote_reference_text,quote_reference_status,source_page,source_section,source_snippet,confidence_score,match_status,review_status,matched_product_id,approved_by,approved_at,excluded_at,exclusion_reason,created_at,updated_at";
+  const legacyColumns =
+    "id,project_id,source_document_id,extraction_job_id,raw_extracted_data,product_name,brand,model,category,supplier,location,warranty_text,maintenance_text,confidence_score,match_status,review_status,matched_product_id,approved_by,approved_at,excluded_at,exclusion_reason,created_at,updated_at";
   let query = supabase
     .from("extracted_items")
-    .select(
-      "id,project_id,source_document_id,extraction_job_id,raw_extracted_data,product_name,brand,model,category,supplier,location,warranty_text,maintenance_text,confidence_score,match_status,review_status,matched_product_id,approved_by,approved_at,excluded_at,exclusion_reason,created_at,updated_at",
-    )
+    .select(richColumns)
     .order("created_at", { ascending: false });
 
   if (projectId) {
     query = query.eq("project_id", projectId);
   }
 
-  const { data, error } = await query;
+  const richResult = await query;
+  let data = richResult.data as unknown as LooseDbRow[] | null;
+  let error = richResult.error;
+
+  if (error) {
+    let legacyQuery = supabase
+      .from("extracted_items")
+      .select(legacyColumns)
+      .order("created_at", { ascending: false });
+
+    if (projectId) {
+      legacyQuery = legacyQuery.eq("project_id", projectId);
+    }
+
+    const legacyResult = await legacyQuery;
+    data = legacyResult.data as unknown as LooseDbRow[] | null;
+    error = legacyResult.error;
+  }
 
   if (error || !data) {
     return [];
   }
 
-  return data.map((item) => ({
-    id: item.id,
-    projectId: item.project_id,
-    sourceDocumentId: item.source_document_id,
-    extractionJobId: item.extraction_job_id || undefined,
-    rawExtractedData: item.raw_extracted_data || {},
-    productName: item.product_name || undefined,
-    brand: item.brand || undefined,
-    model: item.model || undefined,
-    category: item.category || undefined,
-    supplier: item.supplier || undefined,
-    location: item.location || undefined,
-    warrantyText: item.warranty_text || undefined,
-    maintenanceText: item.maintenance_text || undefined,
-    confidenceScore: item.confidence_score,
-    matchStatus: item.match_status,
-    reviewStatus: item.review_status,
-    matchedProductId: item.matched_product_id || undefined,
-    approvedBy: item.approved_by || undefined,
-    approvedAt: item.approved_at || undefined,
-    excludedAt: item.excluded_at || undefined,
-    exclusionReason: item.exclusion_reason || undefined,
-    createdAt: item.created_at,
-    updatedAt: item.updated_at,
-  }));
+  return data.map((item) => {
+    const raw = getRowObject(item, "raw_extracted_data");
+    const identity = getRowObject(raw, "identity");
+
+    return {
+      id: getRowString(item, "id") || "",
+      projectId: getRowString(item, "project_id") || "",
+      sourceDocumentId: getRowString(item, "source_document_id") || "",
+      extractionJobId: getRowString(item, "extraction_job_id"),
+      parentExtractedItemId: getRowString(item, "parent_extracted_item_id"),
+      sourceQuoteDocumentId: getRowString(item, "source_quote_document_id"),
+      rawExtractedData: raw,
+      originalExtractedValues: getRowObject(item, "original_extracted_values"),
+      builderEditedValues: getRowObject(item, "builder_edited_values"),
+      itemType: getRowString(item, "item_type") as ExtractedWorkflowItem["itemType"],
+      productName: getRowString(item, "product_name"),
+      manufacturer: getRowString(item, "manufacturer") || getRowString(raw, "manufacturer"),
+      brand: getRowString(item, "brand"),
+      model: getRowString(item, "model"),
+      aiSuggestedCategory: getRowString(item, "ai_suggested_category") || getRowString(raw, "aiSuggestedCategory"),
+      builderApprovedCategory: getRowString(item, "builder_approved_category") || getRowString(raw, "builderApprovedCategory"),
+      category: getRowString(item, "category"),
+      supplierId: getRowString(item, "supplier_id"),
+      supplierName: getRowString(item, "supplier_name") || getRowString(raw, "supplierName"),
+      supplier: getRowString(item, "supplier"),
+      supplierSku: getRowString(item, "supplier_sku") || getRowString(raw, "supplierSku"),
+      location: getRowString(item, "location"),
+      quantity: getRowString(item, "quantity") || getRowString(raw, "quantity"),
+      variantOrFinish: getRowString(item, "variant_or_finish") || getRowString(raw, "variantOrFinish"),
+      warrantyText: getRowString(item, "warranty_text"),
+      maintenanceText: getRowString(item, "maintenance_text"),
+      careGuidanceSourceType: (getRowString(item, "care_guidance_source_type") || getRowString(raw, "careGuidanceSourceType")) as ExtractedWorkflowItem["careGuidanceSourceType"],
+      careGuidanceSourceLabel: getRowString(item, "care_guidance_source_label") || getRowString(raw, "careGuidanceSourceLabel"),
+      careGuidanceReviewRequired: getRowBoolean(item, "care_guidance_review_required"),
+      warrantySourceVersionId: getRowString(item, "warranty_source_version_id"),
+      manualSourceVersionId: getRowString(item, "manual_source_version_id"),
+      careGuidanceVersionId: getRowString(item, "care_guidance_version_id"),
+      identityFingerprint: getRowString(item, "identity_fingerprint") || getRowString(identity, "fingerprint"),
+      quoteReferenceText: getRowString(item, "quote_reference_text") || getRowString(raw, "quoteReferenceText"),
+      quoteReferenceStatus: (getRowString(item, "quote_reference_status") || getRowString(raw, "quoteReferenceStatus")) as ExtractedWorkflowItem["quoteReferenceStatus"],
+      sourcePage: getRowString(item, "source_page"),
+      sourceSection: getRowString(item, "source_section"),
+      sourceSnippet: getRowString(item, "source_snippet"),
+      confidenceScore: getRowNumber(item, "confidence_score"),
+      matchStatus: getRowString(item, "match_status") as ExtractedWorkflowItem["matchStatus"],
+      reviewStatus: getRowString(item, "review_status") as ExtractedWorkflowItem["reviewStatus"],
+      matchedProductId: getRowString(item, "matched_product_id"),
+      approvedBy: getRowString(item, "approved_by"),
+      approvedAt: getRowString(item, "approved_at"),
+      excludedAt: getRowString(item, "excluded_at"),
+      exclusionReason: getRowString(item, "exclusion_reason"),
+      createdAt: getRowString(item, "created_at") || "",
+      updatedAt: getRowString(item, "updated_at") || "",
+    };
+  });
 }
 
 export async function getProductMatches(projectId?: string): Promise<ProductMatch[]> {
@@ -682,18 +817,37 @@ export async function getWorkflowHandoverItems(projectId?: string): Promise<Work
   }
 
   const supabase = await createSupabaseServerClient();
+  const richColumns =
+    "id,project_id,source_extracted_item_id,source_document_id,matched_product_id,item_type,title,manufacturer,brand,model,ai_suggested_category,builder_approved_category,category,supplier_id,supplier_name,supplier,supplier_sku,location,quantity,variant_or_finish,warranty_text,maintenance_text,care_guidance_source_type,care_guidance_source_label,warranty_source_version_id,manual_source_version_id,care_guidance_version_id,approved_by,approved_at,created_at";
+  const legacyColumns =
+    "id,project_id,source_extracted_item_id,source_document_id,matched_product_id,item_type,title,brand,model,category,supplier,location,warranty_text,maintenance_text,approved_by,approved_at,created_at";
   let query = supabase
     .from("handover_items")
-    .select(
-      "id,project_id,source_extracted_item_id,source_document_id,matched_product_id,item_type,title,brand,model,category,supplier,location,warranty_text,maintenance_text,approved_by,approved_at,created_at",
-    )
+    .select(richColumns)
     .order("created_at", { ascending: false });
 
   if (projectId) {
     query = query.eq("project_id", projectId);
   }
 
-  const { data, error } = await query;
+  const richResult = await query;
+  let data = richResult.data as unknown as WorkflowHandoverItemRow[] | null;
+  let error = richResult.error;
+
+  if (error) {
+    let legacyQuery = supabase
+      .from("handover_items")
+      .select(legacyColumns)
+      .order("created_at", { ascending: false });
+
+    if (projectId) {
+      legacyQuery = legacyQuery.eq("project_id", projectId);
+    }
+
+    const legacyResult = await legacyQuery;
+    data = legacyResult.data as unknown as WorkflowHandoverItemRow[] | null;
+    error = legacyResult.error;
+  }
 
   if (error || !data) {
     return [];

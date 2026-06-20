@@ -3,11 +3,13 @@ import path from "node:path";
 import type {
   DocumentExtractionJob,
   ExtractedItemReviewStatus,
+  ExtractedItemValueHistory,
   ExtractedWorkflowItem,
   HandoverApprovalRecord,
   ItemReviewAction,
   ItemReviewActionType,
   ProductMatch,
+  SupplierRecord,
   UploadedDocumentProcessingStatus,
   UploadedProjectDocument,
   WorkflowHandoverItem,
@@ -19,10 +21,12 @@ type LocalUploadedDocumentStore = {
   extractionJobs: DocumentExtractionJob[];
   extractedItems: ExtractedWorkflowItem[];
   itemReviewActions: ItemReviewAction[];
+  extractedItemValueHistory: ExtractedItemValueHistory[];
   handoverItems: WorkflowHandoverItem[];
   handoverApprovals: HandoverApprovalRecord[];
   handoverOpenEvents: HandoverOpenEvent[];
   productMatches: ProductMatch[];
+  suppliers: SupplierRecord[];
 };
 
 const approvedWorkflowReviewStatuses = new Set([
@@ -55,10 +59,12 @@ async function readStore(): Promise<LocalUploadedDocumentStore> {
       extractionJobs: parsed.extractionJobs || [],
       extractedItems: parsed.extractedItems || [],
       itemReviewActions: parsed.itemReviewActions || [],
+      extractedItemValueHistory: parsed.extractedItemValueHistory || [],
       handoverItems: parsed.handoverItems || [],
       handoverApprovals: parsed.handoverApprovals || [],
       handoverOpenEvents: parsed.handoverOpenEvents || [],
       productMatches: parsed.productMatches || [],
+      suppliers: parsed.suppliers || [],
     };
   } catch {
     return {
@@ -66,10 +72,12 @@ async function readStore(): Promise<LocalUploadedDocumentStore> {
       extractionJobs: [],
       extractedItems: [],
       itemReviewActions: [],
+      extractedItemValueHistory: [],
       handoverItems: [],
       handoverApprovals: [],
       handoverOpenEvents: [],
       productMatches: [],
+      suppliers: [],
     };
   }
 }
@@ -146,13 +154,27 @@ export async function updateLocalExtractedWorkflowItemReview(
   update: Partial<Pick<
     ExtractedWorkflowItem,
     | "productName"
+    | "manufacturer"
     | "brand"
     | "model"
     | "category"
+    | "aiSuggestedCategory"
+    | "builderApprovedCategory"
+    | "supplierId"
+    | "supplierName"
     | "supplier"
+    | "supplierSku"
     | "location"
+    | "quantity"
+    | "variantOrFinish"
     | "warrantyText"
     | "maintenanceText"
+    | "careGuidanceSourceType"
+    | "careGuidanceSourceLabel"
+    | "careGuidanceReviewRequired"
+    | "identityFingerprint"
+    | "quoteReferenceText"
+    | "quoteReferenceStatus"
     | "reviewStatus"
     | "approvedBy"
     | "approvedAt"
@@ -163,23 +185,74 @@ export async function updateLocalExtractedWorkflowItemReview(
   const store = await readStore();
   const timestamp = new Date().toISOString();
   let updatedItem: ExtractedWorkflowItem | null = null;
+  let valueHistory: ExtractedItemValueHistory | null = null;
 
   const extractedItems = store.extractedItems.map((item) => {
     if (item.id !== itemId) {
       return item;
     }
 
+    const previousValues = {
+      productName: item.productName,
+      manufacturer: item.manufacturer,
+      brand: item.brand,
+      model: item.model,
+      aiSuggestedCategory: item.aiSuggestedCategory,
+      builderApprovedCategory: item.builderApprovedCategory,
+      category: item.category,
+      supplierId: item.supplierId,
+      supplierName: item.supplierName,
+      supplier: item.supplier,
+      supplierSku: item.supplierSku,
+      location: item.location,
+      quantity: item.quantity,
+      variantOrFinish: item.variantOrFinish,
+      warrantyText: item.warrantyText,
+      maintenanceText: item.maintenanceText,
+      careGuidanceSourceType: item.careGuidanceSourceType,
+      careGuidanceSourceLabel: item.careGuidanceSourceLabel,
+      careGuidanceReviewRequired: item.careGuidanceReviewRequired,
+      identityFingerprint: item.identityFingerprint,
+      quoteReferenceText: item.quoteReferenceText,
+      quoteReferenceStatus: item.quoteReferenceStatus,
+    };
+    const changedFields = Object.keys(update).filter((field) =>
+      field in previousValues &&
+      update[field as keyof typeof update] !== previousValues[field as keyof typeof previousValues],
+    );
     updatedItem = {
       ...item,
       ...update,
+      builderEditedValues: {
+        ...(item.builderEditedValues || {}),
+        ...update,
+      },
       updatedAt: timestamp,
     };
+    if (changedFields.length > 0) {
+      valueHistory = {
+        id: `local-item-value-history-${Date.now()}`,
+        projectId: item.projectId,
+        extractedItemId: item.id,
+        previousValues,
+        nextValues: {
+          ...previousValues,
+          ...update,
+        },
+        changedFields,
+        changedBy: update.approvedBy || "local-scaffold",
+        createdAt: timestamp,
+      };
+    }
     return updatedItem;
   });
 
   await writeStore({
     ...store,
     extractedItems,
+    extractedItemValueHistory: valueHistory
+      ? [valueHistory, ...store.extractedItemValueHistory]
+      : store.extractedItemValueHistory,
   });
 
   return updatedItem;
@@ -262,15 +335,28 @@ function toLocalHandoverItem(
     sourceExtractedItemId: item.id,
     sourceDocumentId: item.sourceDocumentId,
     matchedProductId: item.matchedProductId,
-    itemType: inferWorkflowItemType(item),
+    itemType: item.itemType || inferWorkflowItemType(item),
     title: item.productName || item.category || "Approved handover item",
+    manufacturer: item.manufacturer,
     brand: item.brand,
     model: item.model,
+    aiSuggestedCategory: item.aiSuggestedCategory,
+    builderApprovedCategory: item.builderApprovedCategory,
     category: item.category,
-    supplier: item.supplier,
+    supplierId: item.supplierId,
+    supplierName: item.supplierName,
+    supplier: item.supplierName || item.supplier,
+    supplierSku: item.supplierSku,
     location: item.location,
+    quantity: item.quantity,
+    variantOrFinish: item.variantOrFinish,
     warrantyText: item.warrantyText,
     maintenanceText: item.maintenanceText,
+    careGuidanceSourceType: item.careGuidanceSourceType,
+    careGuidanceSourceLabel: item.careGuidanceSourceLabel,
+    warrantySourceVersionId: item.warrantySourceVersionId,
+    manualSourceVersionId: item.manualSourceVersionId,
+    careGuidanceVersionId: item.careGuidanceVersionId,
     approvedBy: item.approvedBy,
     approvedAt: item.approvedAt,
     createdAt: timestamp,
@@ -424,10 +510,14 @@ export async function saveLocalExtractedWorkflowItems(
     createdAt: timestamp,
     updatedAt: timestamp,
   }));
+  const replacedJobIds = new Set(items.map((item) => item.extractionJobId).filter(Boolean));
 
   await writeStore({
     ...store,
-    extractedItems: [...extractedItems, ...store.extractedItems],
+    extractedItems: [
+      ...extractedItems,
+      ...store.extractedItems.filter((item) => !item.extractionJobId || !replacedJobIds.has(item.extractionJobId)),
+    ],
   });
 
   return extractedItems;
@@ -435,6 +525,7 @@ export async function saveLocalExtractedWorkflowItems(
 
 export async function applyLocalProductMatches(
   matches: Array<Omit<ProductMatch, "id" | "createdAt">>,
+  options: { preserveReviewStatus?: boolean } = {},
 ) {
   const store = await readStore();
   const timestamp = new Date().toISOString();
@@ -458,7 +549,7 @@ export async function applyLocalProductMatches(
       return {
         ...item,
         matchStatus: match.matchStatus,
-        reviewStatus: match.matchStatus,
+        reviewStatus: options.preserveReviewStatus ? item.reviewStatus : match.matchStatus,
         matchedProductId: match.matchedProductId,
         updatedAt: timestamp,
       };

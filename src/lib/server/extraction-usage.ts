@@ -65,8 +65,10 @@ function extractSkuCandidates(input: ExtractedItemDraft) {
   const source = [
     input.model,
     input.productName,
+    input.manufacturer,
     input.brand,
-    input.supplier,
+    input.supplierSku,
+    input.supplierName || input.supplier,
     displayPart((input.rawExtractedData?.item as { sku?: unknown } | undefined)?.sku),
   ].filter(Boolean).join(" ");
 
@@ -77,15 +79,18 @@ function extractSkuCandidates(input: ExtractedItemDraft) {
 export function buildIdentityEvidence(input: ExtractedItemDraft) {
   const skuCandidates = extractSkuCandidates(input);
   const brand = displayPart(input.brand);
-  const supplier = displayPart(input.supplier);
+  const manufacturer = displayPart(input.manufacturer || input.brand);
+  const supplier = displayPart(input.supplierName || input.supplier);
+  const supplierSku = displayPart(input.supplierSku);
   const model = displayPart(input.model);
   const productName = displayPart(input.productName);
   const category = displayPart(input.category);
   const location = displayPart(input.location);
 
   const normalizedParts = [
-    cleanPart(brand),
+    cleanPart(manufacturer || brand),
     cleanPart(model),
+    cleanPart(supplierSku),
     cleanPart(productName),
     cleanPart(category),
     cleanPart(supplier),
@@ -102,17 +107,19 @@ export function buildIdentityEvidence(input: ExtractedItemDraft) {
     fingerprintSource: fingerprintBase.filter(Boolean).join("|") || "empty",
     normalized: {
       brand: cleanPart(brand),
-      manufacturer: cleanPart(brand || supplier),
+      manufacturer: cleanPart(manufacturer || brand),
       model: cleanPart(model),
       productName: cleanPart(productName),
       category: cleanPart(category),
       supplier: cleanPart(supplier),
+      supplierSku: cleanPart(supplierSku),
     },
     evidence: {
       brand: brand || undefined,
-      manufacturer: brand || supplier || undefined,
+      manufacturer: manufacturer || brand || undefined,
       model: model || undefined,
       supplier: supplier || undefined,
+      supplierSku: supplierSku || undefined,
       skuCandidates,
     },
   };

@@ -8,7 +8,9 @@ import {
   Bot,
   CalendarCheck2,
   FileText,
+  FileSearch,
   HelpCircle,
+  Layers3,
   Link2,
   PackageCheck,
   Pencil,
@@ -93,6 +95,28 @@ const packageReadyStatuses = new Set(["accepted", "auto_approved", "builder_appr
 const adminReviewStatuses = new Set(["admin_review", "edited", "proposed"]);
 const unresolvedWorkflowReviewStatuses = new Set(["needs_review", "low_confidence", "unmatched"]);
 const approvedWorkflowReviewStatuses = new Set(["verified_match", "approved", "edited_by_builder", "builder_supplied"]);
+
+const handoverCategoryOptions = [
+  { label: "Kitchen", value: "Kitchen" },
+  { label: "Joinery", value: "Joinery" },
+  { label: "Flooring", value: "Flooring" },
+  { label: "Roofing", value: "Roofing" },
+  { label: "Cladding", value: "Cladding" },
+  { label: "Electrical", value: "Electrical" },
+  { label: "Plumbing", value: "Plumbing" },
+  { label: "Appliances", value: "Appliances" },
+  { label: "Fixtures", value: "Fixtures" },
+  { label: "Landscaping", value: "Landscaping" },
+  { label: "General", value: "General" },
+];
+
+const careGuidanceSourceOptions = [
+  { label: "Manufacturer", value: "manufacturer" },
+  { label: "Supplier", value: "supplier" },
+  { label: "Builder supplied", value: "builder_supplied" },
+  { label: "General AI care guidance", value: "general_ai" },
+  { label: "Unknown source", value: "unknown" },
+];
 
 type ContextSchemaMetadata = {
   itemType?: string;
@@ -541,10 +565,6 @@ function ProjectEditPanel({
   };
 }) {
   const manualItems = snapshot.awaitingAdmin.filter((item) => item.status !== "admin_review");
-  const unresolvedWorkflowItems = snapshot.workflowItems.filter((item) =>
-    unresolvedWorkflowReviewStatuses.has(item.reviewStatus),
-  );
-
   return (
     <div className="space-y-5">
       <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
@@ -590,7 +610,7 @@ function ProjectEditPanel({
             </p>
             {snapshot.firstHandoverOpenEvent ? (
               <p className="mt-1 text-xs leading-5 text-slate-500">
-                Opened {snapshot.firstHandoverOpenEvent.openCount} time{snapshot.firstHandoverOpenEvent.openCount === 1 ? "" : "s"} total.
+                Privacy-light package record only: opened {snapshot.firstHandoverOpenEvent.openCount} time{snapshot.firstHandoverOpenEvent.openCount === 1 ? "" : "s"} total. No page or item-level tracking is shown here.
               </p>
             ) : null}
             <div className="mt-4 flex flex-wrap gap-2">
@@ -682,7 +702,7 @@ function ProjectEditPanel({
       </section>
 
       <WorkflowReviewQueue
-        items={unresolvedWorkflowItems}
+        items={snapshot.workflowItems}
         matches={snapshot.workflowMatches}
       />
 
@@ -868,208 +888,346 @@ function WorkflowReviewQueue({
   items: ExtractedWorkflowItem[];
   matches: ProductMatch[];
 }) {
+  const lanes = getWorkflowReviewLanes(items, matches);
+  const unresolvedCount = lanes.readyToAccept.length + lanes.needsDetail.length + lanes.projectDocuments.length + lanes.searchResultsReady.length;
+
   return (
     <section className="rounded-lg border border-slate-200 p-5">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h3 className="font-semibold text-slate-950">Builder review queue</h3>
+          <h3 className="font-semibold text-slate-950">Builder review lanes</h3>
           <p className="mt-1 text-sm leading-6 text-slate-600">
-            Resolve uncertain AI extracted items before they can move toward homeowner handover.
+            Accept known matches, add missing detail, attach project documents, and keep non-handover rows out of the client pack.
           </p>
         </div>
         <span className="w-fit rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-900">
-          {items.length} unresolved
+          {unresolvedCount} waiting for builder
         </span>
       </div>
 
       {items.length ? (
-        <div className="mt-5 space-y-4">
-          {items.map((item) => {
-            const match = matches.find((candidate) => candidate.extractedItemId === item.id);
-            const contextSchema = getContextSchemaMetadata(item);
-
-            return (
-              <article className="rounded-lg border border-amber-200 bg-amber-50 p-4" key={item.id}>
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {match ? <WorkflowMatchStatusPill status={match.matchStatus} /> : null}
-                      <span className="rounded-md bg-white px-2.5 py-1 text-xs font-semibold text-amber-900">
-                        {item.reviewStatus.replaceAll("_", " ")}
-                      </span>
-                      <span className="text-xs text-amber-800">{item.confidenceScore}% extraction confidence</span>
-                    </div>
-                    <h4 className="mt-3 font-semibold text-amber-950">{item.productName || "Unnamed extracted item"}</h4>
-                    <p className="mt-1 text-sm text-amber-900">
-                      {[item.brand, item.model, item.category, item.location].filter(Boolean).join(" - ") || "Details need review"}
-                    </p>
-                    {match?.matchReason ? (
-                      <p className="mt-2 max-w-3xl text-xs leading-5 text-amber-900">{match.matchReason}</p>
-                    ) : null}
-                    {contextSchema.classificationReason ? (
-                      <p className="mt-2 max-w-3xl text-xs leading-5 text-amber-900">
-                        {formatContextClassification(contextSchema.contextClassification)}: {contextSchema.classificationReason}
-                      </p>
-                    ) : null}
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <form action={approveWorkflowItemAction}>
-                      <input name="itemId" type="hidden" value={item.id} />
-                      <button
-                        className="inline-flex h-9 items-center rounded-md bg-emerald-700 px-3 text-xs font-semibold text-white hover:bg-emerald-800"
-                        type="submit"
-                      >
-                        Approve
-                      </button>
-                    </form>
-                    <form action={markWorkflowItemBuilderSuppliedAction}>
-                      <input name="itemId" type="hidden" value={item.id} />
-                      <button
-                        className="inline-flex h-9 items-center rounded-md border border-emerald-200 bg-white px-3 text-xs font-semibold text-emerald-800 hover:bg-emerald-50"
-                        type="submit"
-                      >
-                        Builder supplied info
-                      </button>
-                    </form>
-                  </div>
-                </div>
-
-                {contextSchema.missingFields.length || contextSchema.builderInfoNeeded.length || contextSchema.sourceEvidenceText ? (
-                  <div className="mt-4 grid gap-3 md:grid-cols-3">
-                    {contextSchema.missingFields.length ? (
-                      <div className="rounded-md border border-amber-200 bg-white p-3">
-                        <p className="text-xs font-semibold uppercase tracking-normal text-amber-900">Missing fields</p>
-                        <ul className="mt-2 space-y-1 text-xs leading-5 text-amber-900">
-                          {contextSchema.missingFields.map((field) => (
-                            <li key={field}>{field}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : null}
-                    {contextSchema.builderInfoNeeded.length ? (
-                      <div className="rounded-md border border-cyan-200 bg-white p-3">
-                        <p className="text-xs font-semibold uppercase tracking-normal text-cyan-900">Ask builder for</p>
-                        <ul className="mt-2 space-y-1 text-xs leading-5 text-cyan-900">
-                          {contextSchema.builderInfoNeeded.map((field) => (
-                            <li key={field}>{field}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : null}
-                    {contextSchema.sourceEvidenceText ? (
-                      <div className="rounded-md border border-slate-200 bg-white p-3 md:col-span-1">
-                        <p className="text-xs font-semibold uppercase tracking-normal text-slate-600">Document evidence</p>
-                        <p className="mt-2 line-clamp-4 text-xs leading-5 text-slate-700">{contextSchema.sourceEvidenceText}</p>
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-
-                <details className="mt-4 rounded-md border border-amber-200 bg-white">
-                  <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-slate-800">
-                    Edit extracted details
-                  </summary>
-                  <form action={editWorkflowItemAction} className="grid gap-4 border-t border-amber-100 p-3 md:grid-cols-2">
-                    <input name="itemId" type="hidden" value={item.id} />
-                    <TextField label="Product or item name" name="productName" defaultValue={item.productName} required />
-                    <TextField label="Brand" name="brand" defaultValue={item.brand} />
-                    <TextField label="Model" name="model" defaultValue={item.model} />
-                    <TextField label="Category" name="category" defaultValue={item.category} />
-                    <TextField label="Supplier" name="supplier" defaultValue={item.supplier} />
-                    <TextField label="Location" name="location" defaultValue={item.location} />
-                    <label className="block md:col-span-2">
-                      <span className="text-sm font-medium text-slate-700">Warranty information</span>
-                      <textarea
-                        className="mt-2 min-h-24 w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
-                        defaultValue={item.warrantyText}
-                        name="warrantyText"
-                      />
-                    </label>
-                    <label className="block md:col-span-2">
-                      <span className="text-sm font-medium text-slate-700">Maintenance information</span>
-                      <textarea
-                        className="mt-2 min-h-24 w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
-                        defaultValue={item.maintenanceText}
-                        name="maintenanceText"
-                      />
-                    </label>
-                    <label className="block md:col-span-2">
-                      <span className="text-sm font-medium text-slate-700">Review note</span>
-                      <input
-                        className="mt-2 h-10 w-full rounded-md border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
-                        name="notes"
-                        placeholder="What changed or why this is now ready?"
-                      />
-                    </label>
-                    <div className="flex justify-end md:col-span-2">
-                      <button
-                        className="inline-flex h-9 items-center rounded-md bg-slate-950 px-3 text-xs font-semibold text-white hover:bg-slate-800"
-                        type="submit"
-                      >
-                        Save edited item
-                      </button>
-                    </div>
-                  </form>
-                </details>
-
-                <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                  <form action={uploadWorkflowItemSupportingDocumentAction} className="rounded-md border border-amber-200 bg-white p-3">
-                    <input name="itemId" type="hidden" value={item.id} />
-                    <label className="block">
-                      <span className="text-sm font-medium text-slate-700">Supporting document</span>
-                      <input
-                        className="mt-2 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-slate-700"
-                        name="documentFile"
-                        type="file"
-                        accept=".csv,.doc,.docx,.gif,.jpeg,.jpg,.pdf,.png,.webp,.xls,.xlsx,application/pdf,image/gif,image/jpeg,image/png,image/webp,text/csv,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                      />
-                    </label>
-                    <input
-                      className="mt-3 h-10 w-full rounded-md border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
-                      name="notes"
-                      placeholder="Evidence note"
-                    />
-                    <div className="mt-3 flex justify-end">
-                      <button
-                        className="inline-flex h-9 items-center rounded-md border border-slate-200 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                        type="submit"
-                      >
-                        Attach evidence
-                      </button>
-                    </div>
-                  </form>
-
-                  <form action={excludeWorkflowItemAction} className="rounded-md border border-rose-200 bg-white p-3">
-                    <input name="itemId" type="hidden" value={item.id} />
-                    <label className="block">
-                      <span className="text-sm font-medium text-slate-700">Exclude from handover</span>
-                      <input
-                        className="mt-2 h-10 w-full rounded-md border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
-                        name="exclusionReason"
-                        placeholder="Reason this should not go to the homeowner"
-                        required
-                      />
-                    </label>
-                    <div className="mt-3 flex justify-end">
-                      <button
-                        className="inline-flex h-9 items-center rounded-md border border-rose-200 px-3 text-xs font-semibold text-rose-700 hover:bg-rose-50"
-                        type="submit"
-                      >
-                        Exclude item
-                      </button>
-                    </div>
-                  </form>
-                </div>
-              </article>
-            );
-          })}
+        <div className="mt-5 grid gap-4 xl:grid-cols-2">
+          <WorkflowReviewLane
+            empty="No high-confidence matches are waiting."
+            icon={PackageCheck}
+            items={lanes.readyToAccept}
+            matches={matches}
+            tone="emerald"
+            title="Ready to accept"
+          />
+          <WorkflowReviewLane
+            empty="No rows currently need more detail."
+            icon={HelpCircle}
+            items={lanes.needsDetail}
+            matches={matches}
+            tone="amber"
+            title="Needs detail"
+          />
+          <WorkflowReviewLane
+            empty="No quote, invoice, manual, or certificate placeholders."
+            icon={FileText}
+            items={lanes.projectDocuments}
+            matches={matches}
+            tone="cyan"
+            title="Project documents/quotes"
+          />
+          <WorkflowReviewLane
+            empty="Search remains paused until source results are wired in."
+            icon={FileSearch}
+            items={lanes.searchResultsReady}
+            matches={matches}
+            tone="slate"
+            title="Search results ready"
+          />
+          <WorkflowReviewLane
+            empty="No rows have been marked outside handover scope."
+            icon={Layers3}
+            items={lanes.notHandover}
+            matches={matches}
+            tone="rose"
+            title="Not handover"
+          />
         </div>
       ) : (
         <p className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
-          No unresolved workflow items for this project.
+          No workflow items have been extracted for this project yet.
         </p>
       )}
     </section>
+  );
+}
+
+function WorkflowReviewLane({
+  empty,
+  icon: Icon,
+  items,
+  matches,
+  title,
+  tone,
+}: {
+  empty: string;
+  icon: ComponentType<{ className?: string }>;
+  items: ExtractedWorkflowItem[];
+  matches: ProductMatch[];
+  title: string;
+  tone: "emerald" | "amber" | "cyan" | "slate" | "rose";
+}) {
+  const toneStyles = {
+    emerald: "border-emerald-200 bg-emerald-50 text-emerald-900",
+    amber: "border-amber-200 bg-amber-50 text-amber-900",
+    cyan: "border-cyan-200 bg-cyan-50 text-cyan-900",
+    slate: "border-slate-200 bg-slate-50 text-slate-800",
+    rose: "border-rose-200 bg-rose-50 text-rose-900",
+  };
+
+  return (
+    <section className={`rounded-lg border p-4 ${toneStyles[tone]}`}>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Icon className="size-4" />
+          <h4 className="font-semibold">{title}</h4>
+        </div>
+        <span className="rounded-md bg-white/80 px-2.5 py-1 text-xs font-semibold">{items.length}</span>
+      </div>
+      <div className="mt-4 space-y-3">
+        {items.length === 0 ? <p className="text-sm opacity-80">{empty}</p> : null}
+        {items.map((item) => (
+          <WorkflowReviewCard item={item} key={item.id} match={matches.find((candidate) => candidate.extractedItemId === item.id)} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function WorkflowReviewCard({
+  item,
+  match,
+}: {
+  item: ExtractedWorkflowItem;
+  match?: ProductMatch;
+}) {
+  const contextSchema = getContextSchemaMetadata(item);
+  const variation = getWorkflowVariationMetadata(item);
+  const aiCategory = getAiSuggestedCategory(item);
+  const quoteLike = isQuoteLikeWorkflowItem(item, contextSchema);
+  const careGuidanceSource = getCareGuidanceSource(item);
+  const comparisonRows = getWorkflowComparisonRows(item, variation, careGuidanceSource);
+
+  return (
+    <article className="rounded-md border border-white/70 bg-white p-3 text-slate-900">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            {match ? <WorkflowMatchStatusPill status={match.matchStatus} /> : null}
+            <span className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700">
+              {item.reviewStatus.replaceAll("_", " ")}
+            </span>
+            <span className="text-xs text-slate-500">{item.confidenceScore}% extraction confidence</span>
+          </div>
+          <h5 className="mt-3 font-semibold text-slate-950">{item.productName || "Unnamed extracted item"}</h5>
+          <p className="mt-1 text-sm text-slate-600">
+            {[item.manufacturer || item.brand, item.model, item.supplierName || item.supplier, item.location].filter(Boolean).join(" - ") || "Details need review"}
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-600">
+            <span className="rounded-md bg-slate-100 px-2 py-1">AI category: {aiCategory || item.category || "Uncategorised"}</span>
+            <span className="rounded-md bg-slate-100 px-2 py-1">Approved category: {item.builderApprovedCategory || item.category || "Not set"}</span>
+            <span className="rounded-md bg-slate-100 px-2 py-1">{formatCareGuidanceSource(careGuidanceSource)}</span>
+          </div>
+          {match?.matchReason ? (
+            <p className="mt-2 max-w-3xl text-xs leading-5 text-slate-600">{match.matchReason}</p>
+          ) : null}
+          {contextSchema.classificationReason ? (
+            <p className="mt-2 max-w-3xl text-xs leading-5 text-slate-600">
+              {formatContextClassification(contextSchema.contextClassification)}: {contextSchema.classificationReason}
+            </p>
+          ) : null}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <form action={approveWorkflowItemAction}>
+            <input name="itemId" type="hidden" value={item.id} />
+            <button
+              className="inline-flex h-9 items-center rounded-md bg-emerald-700 px-3 text-xs font-semibold text-white hover:bg-emerald-800"
+              type="submit"
+            >
+              Approve
+            </button>
+          </form>
+          <form action={markWorkflowItemBuilderSuppliedAction}>
+            <input name="itemId" type="hidden" value={item.id} />
+            <button
+              className="inline-flex h-9 items-center rounded-md border border-emerald-200 bg-white px-3 text-xs font-semibold text-emerald-800 hover:bg-emerald-50"
+              type="submit"
+            >
+              Builder supplied
+            </button>
+          </form>
+        </div>
+      </div>
+
+      {contextSchema.missingFields.length || contextSchema.builderInfoNeeded.length || contextSchema.sourceEvidenceText ? (
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          {contextSchema.missingFields.length ? (
+            <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
+              <p className="text-xs font-semibold uppercase tracking-normal text-amber-900">Missing fields</p>
+              <ul className="mt-2 space-y-1 text-xs leading-5 text-amber-900">
+                {contextSchema.missingFields.map((field) => (
+                  <li key={field}>{field}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {contextSchema.builderInfoNeeded.length ? (
+            <div className="rounded-md border border-cyan-200 bg-cyan-50 p-3">
+              <p className="text-xs font-semibold uppercase tracking-normal text-cyan-900">Ask builder for</p>
+              <ul className="mt-2 space-y-1 text-xs leading-5 text-cyan-900">
+                {contextSchema.builderInfoNeeded.map((field) => (
+                  <li key={field}>{field}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {contextSchema.sourceEvidenceText ? (
+            <div className="rounded-md border border-slate-200 bg-slate-50 p-3 md:col-span-1">
+              <p className="text-xs font-semibold uppercase tracking-normal text-slate-600">Document evidence</p>
+              <p className="mt-2 line-clamp-4 text-xs leading-5 text-slate-700">{contextSchema.sourceEvidenceText}</p>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      <details className="mt-4 rounded-md border border-slate-200 bg-white">
+        <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-slate-800">
+          Edit item, category, and variation
+        </summary>
+        <div className="border-t border-slate-100 p-3">
+          <div className="rounded-md border border-slate-200 bg-slate-50">
+            <div className="grid border-b border-slate-200 px-3 py-2 text-xs font-semibold uppercase tracking-normal text-slate-500 sm:grid-cols-[0.8fr_1fr_1fr]">
+              <span>Field</span>
+              <span>Original extracted</span>
+              <span>Current edited</span>
+            </div>
+            <div className="divide-y divide-slate-200">
+              {comparisonRows.map((row) => (
+                <div className="grid gap-2 px-3 py-2 text-xs sm:grid-cols-[0.8fr_1fr_1fr]" key={row.label}>
+                  <span className="font-semibold text-slate-700">{row.label}</span>
+                  <span className="text-slate-500">{row.original}</span>
+                  <span className={row.changed ? "font-semibold text-slate-950" : "text-slate-600"}>{row.current}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <p className="mt-2 text-xs leading-5 text-slate-500">
+            Original values come from the uploaded document where available. Older records may show fields as not captured until they are reprocessed or edited.
+          </p>
+        </div>
+        <form action={editWorkflowItemAction} className="grid gap-4 border-t border-slate-100 p-3 md:grid-cols-2">
+          <input name="itemId" type="hidden" value={item.id} />
+          <TextField label="Product or item name" name="productName" defaultValue={item.productName} required />
+          <TextField label="Manufacturer" name="manufacturer" defaultValue={item.manufacturer || item.brand} />
+          <TextField label="Model" name="model" defaultValue={item.model || variation.model} />
+          <SelectField
+            label="Approved homeowner category"
+            name="category"
+            defaultValue={item.builderApprovedCategory || item.category || "General"}
+            options={getCategoryOptions(item.builderApprovedCategory || item.category)}
+          />
+          <TextField label="Supplier" name="supplier" defaultValue={item.supplierName || item.supplier} />
+          <TextField label="Supplier SKU" name="supplierSku" defaultValue={item.supplierSku} />
+          <TextField label="Quantity" name="quantity" defaultValue={item.quantity || variation.quantity} />
+          <TextField label="Finish" name="variantOrFinish" defaultValue={item.variantOrFinish || variation.finish} />
+          <TextField label="Colour" name="colour" defaultValue={variation.colour} />
+          <TextField label="Location" name="location" defaultValue={item.location} />
+          <SelectField label="Care guidance label" name="careGuidanceSourceType" defaultValue={careGuidanceSource} options={careGuidanceSourceOptions} />
+          <label className="block md:col-span-2">
+            <span className="text-sm font-medium text-slate-700">Warranty information</span>
+            <textarea
+              className="mt-2 min-h-24 w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
+              defaultValue={item.warrantyText}
+              name="warrantyText"
+            />
+          </label>
+          <label className="block md:col-span-2">
+            <span className="text-sm font-medium text-slate-700">Care or maintenance information</span>
+            <textarea
+              className="mt-2 min-h-24 w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
+              defaultValue={item.maintenanceText}
+              name="maintenanceText"
+            />
+          </label>
+          <label className="block md:col-span-2">
+            <span className="text-sm font-medium text-slate-700">Review note</span>
+            <input
+              className="mt-2 h-10 w-full rounded-md border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
+              name="notes"
+              placeholder="What changed or why this is now ready?"
+            />
+          </label>
+          <p className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs leading-5 text-slate-600 md:col-span-2">
+            Colour and quote details are saved with the review note so they remain visible during builder approval.
+          </p>
+          <div className="flex justify-end md:col-span-2">
+            <button
+              className="inline-flex h-9 items-center rounded-md bg-slate-950 px-3 text-xs font-semibold text-white hover:bg-slate-800"
+              type="submit"
+            >
+              Save edited item
+            </button>
+          </div>
+        </form>
+      </details>
+
+      <div className="mt-3 grid gap-3 lg:grid-cols-2">
+        <form action={uploadWorkflowItemSupportingDocumentAction} className="rounded-md border border-slate-200 bg-white p-3">
+          <input name="itemId" type="hidden" value={item.id} />
+          <input name="documentKind" type="hidden" value={quoteLike ? "quote" : "supporting_document"} />
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">
+              {quoteLike ? "Upload quote for this item" : "Supporting document"}
+            </span>
+            <input
+              className="mt-2 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-slate-700"
+              name="documentFile"
+              type="file"
+              accept=".csv,.doc,.docx,.gif,.jpeg,.jpg,.pdf,.png,.webp,.xls,.xlsx,application/pdf,image/gif,image/jpeg,image/png,image/webp,text/csv,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            />
+          </label>
+          <input
+            className="mt-3 h-10 w-full rounded-md border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
+            name="notes"
+            placeholder={quoteLike ? "Quote supplier, quote number, or what it should resolve" : "Evidence note"}
+          />
+          <div className="mt-3 flex justify-end">
+            <button
+              className="inline-flex h-9 items-center rounded-md border border-slate-200 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              type="submit"
+            >
+              {quoteLike ? "Attach quote" : "Attach evidence"}
+            </button>
+          </div>
+        </form>
+
+        <form action={excludeWorkflowItemAction} className="rounded-md border border-rose-200 bg-white p-3">
+          <input name="itemId" type="hidden" value={item.id} />
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">Exclude from handover</span>
+            <input
+              className="mt-2 h-10 w-full rounded-md border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
+              name="exclusionReason"
+              placeholder="Reason this should not go to the homeowner"
+              required
+            />
+          </label>
+          <div className="mt-3 flex justify-end">
+            <button
+              className="inline-flex h-9 items-center rounded-md border border-rose-200 px-3 text-xs font-semibold text-rose-700 hover:bg-rose-50"
+              type="submit"
+            >
+              Exclude item
+            </button>
+          </div>
+        </form>
+      </div>
+    </article>
   );
 }
 
@@ -1387,12 +1545,16 @@ function WorkflowStatusPill({ status }: { status: UploadedProjectDocument["proce
   const styles = {
     uploaded: "border-cyan-200 bg-cyan-50 text-cyan-800",
     processing: "border-amber-200 bg-amber-50 text-amber-800",
+    needs_review: "border-amber-200 bg-amber-50 text-amber-800",
+    package_ready: "border-emerald-200 bg-emerald-50 text-emerald-800",
     completed: "border-emerald-200 bg-emerald-50 text-emerald-800",
     failed: "border-rose-200 bg-rose-50 text-rose-800",
   };
   const labels = {
     uploaded: "Uploaded",
     processing: "Processing",
+    needs_review: "Needs review",
+    package_ready: "Package ready",
     completed: "Completed",
     failed: "Failed",
   };
@@ -1406,8 +1568,12 @@ function WorkflowStatusPill({ status }: { status: UploadedProjectDocument["proce
 
 function WorkflowJobStatusPill({ status }: { status: DocumentExtractionJob["status"] }) {
   const styles = {
+    uploaded: "border-cyan-200 bg-cyan-50 text-cyan-800",
     queued: "border-slate-200 bg-white text-slate-700",
     processing: "border-amber-200 bg-amber-50 text-amber-800",
+    needs_review: "border-amber-200 bg-amber-50 text-amber-800",
+    partially_reviewed: "border-indigo-200 bg-indigo-50 text-indigo-800",
+    package_ready: "border-emerald-200 bg-emerald-50 text-emerald-800",
     completed: "border-emerald-200 bg-emerald-50 text-emerald-800",
     failed: "border-rose-200 bg-rose-50 text-rose-800",
   };
@@ -1518,6 +1684,225 @@ function getContextSchemaMetadata(item: ExtractedWorkflowItem): ContextSchemaMet
     contextClassification: getString(contextSchema.contextClassification) || getString(itemPayload.contextClassification),
     classificationReason: getString(contextSchema.classificationReason) || getString(itemPayload.classificationReason),
   };
+}
+
+function getWorkflowReviewLanes(items: ExtractedWorkflowItem[], matches: ProductMatch[]) {
+  const assigned = new Set<string>();
+  const take = (predicate: (item: ExtractedWorkflowItem) => boolean) =>
+    items.filter((item) => {
+      if (assigned.has(item.id) || !predicate(item)) {
+        return false;
+      }
+
+      assigned.add(item.id);
+      return true;
+    });
+
+  const readyToAccept = take((item) => {
+    const match = matches.find((candidate) => candidate.extractedItemId === item.id);
+    return item.reviewStatus === "verified_match" || match?.matchStatus === "verified_match";
+  });
+  const projectDocuments = take((item) => {
+    const metadata = getContextSchemaMetadata(item);
+    return metadata.contextClassification === "project_document" || isQuoteLikeWorkflowItem(item, metadata);
+  });
+  const searchResultsReady = take((item) => {
+    const raw = item.rawExtractedData || {};
+    return Boolean(raw.sourceResults || raw.searchResults || raw.sourceReviewReady);
+  });
+  const notHandover = take((item) => {
+    const metadata = getContextSchemaMetadata(item);
+    return item.reviewStatus === "excluded"
+      || metadata.contextClassification === "not_handover_relevant"
+      || metadata.contextClassification === "admin_or_contract"
+      || metadata.contextClassification === "generic_allowance";
+  });
+  const needsDetail = take((item) => {
+    const metadata = getContextSchemaMetadata(item);
+    return unresolvedWorkflowReviewStatuses.has(item.reviewStatus)
+      || metadata.contextClassification === "builder_input_needed"
+      || metadata.builderInfoNeeded.length > 0
+      || metadata.missingFields.length > 0;
+  });
+
+  return {
+    readyToAccept,
+    needsDetail,
+    projectDocuments,
+    searchResultsReady,
+    notHandover,
+  };
+}
+
+function getNestedRecord(record: Record<string, unknown>, key: string) {
+  const value = record[key];
+  return value && typeof value === "object" ? value as Record<string, unknown> : {};
+}
+
+function getWorkflowVariationMetadata(item: ExtractedWorkflowItem) {
+  const raw = item.rawExtractedData || {};
+  const itemPayload = getNestedRecord(raw, "item");
+  const variation = getNestedRecord(raw, "variation");
+  const reviewMetadata = getNestedRecord(raw, "reviewMetadata");
+
+  return {
+    finish: getString(raw.finish) || getString(raw.variantOrFinish) || getString(itemPayload.finish) || getString(itemPayload.variantOrFinish) || getString(variation.finish) || getString(reviewMetadata.finish),
+    colour: getString(raw.colour) || getString(raw.color) || getString(itemPayload.colour) || getString(itemPayload.color) || getString(variation.colour) || getString(reviewMetadata.colour),
+    model: getString(raw.model) || getString(itemPayload.model) || getString(variation.model),
+    quantity: getString(raw.quantity) || getString(itemPayload.quantity) || getString(variation.quantity) || getString(reviewMetadata.quantity),
+  };
+}
+
+function getWorkflowComparisonRows(
+  item: ExtractedWorkflowItem,
+  variation: ReturnType<typeof getWorkflowVariationMetadata>,
+  careGuidanceSource: string,
+) {
+  const originalValues = item.originalExtractedValues || {};
+  const currentCategory = item.builderApprovedCategory || item.category || "";
+  const rows = [
+    {
+      label: "Item",
+      original: getOriginalValue(item, "productName") || item.productName,
+      current: item.productName,
+    },
+    {
+      label: "Manufacturer",
+      original: getOriginalValue(item, "manufacturer") || getOriginalValue(item, "brand"),
+      current: item.manufacturer || item.brand,
+    },
+    {
+      label: "Model",
+      original: getOriginalValue(item, "model") || variation.model,
+      current: item.model || variation.model,
+    },
+    {
+      label: "Supplier",
+      original: getOriginalValue(item, "supplierName") || getOriginalValue(item, "supplier"),
+      current: item.supplierName || item.supplier,
+    },
+    {
+      label: "Quantity",
+      original: getOriginalValue(item, "quantity") || variation.quantity,
+      current: item.quantity || variation.quantity,
+    },
+    {
+      label: "Finish",
+      original: getOriginalValue(item, "variantOrFinish") || variation.finish,
+      current: item.variantOrFinish || variation.finish,
+    },
+    {
+      label: "Colour",
+      original: getOriginalValue(item, "colour") || getOriginalValue(item, "color") || variation.colour,
+      current: variation.colour,
+    },
+    {
+      label: "Location",
+      original: getOriginalValue(item, "location"),
+      current: item.location,
+    },
+    {
+      label: "Category",
+      original: getOriginalValue(item, "aiSuggestedCategory") || getOriginalValue(item, "category") || item.aiSuggestedCategory || item.category,
+      current: currentCategory,
+    },
+    {
+      label: "Care label",
+      original: formatCareGuidanceSource(getString(originalValues.careGuidanceSourceType) || careGuidanceSource),
+      current: formatCareGuidanceSource(careGuidanceSource),
+    },
+  ];
+
+  return rows.map((row) => {
+    const original = formatComparisonValue(row.original);
+    const current = formatComparisonValue(row.current);
+
+    return {
+      ...row,
+      original,
+      current,
+      changed: original !== current,
+    };
+  });
+}
+
+function getOriginalValue(item: ExtractedWorkflowItem, key: string) {
+  const originalValues = item.originalExtractedValues || {};
+  const raw = item.rawExtractedData || {};
+  const rawOriginalValues = getNestedRecord(raw, "originalExtractedValues");
+  const itemPayload = getNestedRecord(raw, "item");
+
+  return getString(originalValues[key])
+    || getString(rawOriginalValues[key])
+    || getString(itemPayload[key]);
+}
+
+function formatComparisonValue(value: unknown) {
+  const text = getString(value);
+  return text || "Not captured";
+}
+
+function getAiSuggestedCategory(item: ExtractedWorkflowItem) {
+  const raw = item.rawExtractedData || {};
+  const contextSchema = getNestedRecord(raw, "contextSchema");
+  const itemPayload = getNestedRecord(raw, "item");
+
+  return item.aiSuggestedCategory
+    || getString(raw.aiCategory)
+    || getString(raw.originalCategory)
+    || getString(contextSchema.category)
+    || getString(itemPayload.category);
+}
+
+function getCareGuidanceSource(item: ExtractedWorkflowItem) {
+  const raw = item.rawExtractedData || {};
+  const reviewMetadata = getNestedRecord(raw, "reviewMetadata");
+  const value = item.careGuidanceSourceType || getString(raw.careGuidanceSource) || getString(reviewMetadata.careGuidanceSource);
+  const allowed = new Set(careGuidanceSourceOptions.map((option) => option.value));
+
+  if (allowed.has(value)) {
+    return value;
+  }
+
+  if (item.maintenanceText && item.supplier) {
+    return "supplier";
+  }
+
+  return item.maintenanceText ? "general_ai" : "manufacturer";
+}
+
+function formatCareGuidanceSource(value: string) {
+  const option = careGuidanceSourceOptions.find((candidate) => candidate.value === value);
+  return option?.label || "General AI care guidance";
+}
+
+function getCategoryOptions(current?: string) {
+  if (!current || handoverCategoryOptions.some((option) => option.value === current)) {
+    return handoverCategoryOptions;
+  }
+
+  return [{ label: current, value: current }, ...handoverCategoryOptions];
+}
+
+function isQuoteLikeWorkflowItem(item: ExtractedWorkflowItem, metadata = getContextSchemaMetadata(item)) {
+  const haystack = [
+    item.productName,
+    item.category,
+    item.supplier,
+    item.quoteReferenceText,
+    item.location,
+    metadata.contextClassification,
+    metadata.classificationReason,
+    metadata.sourceEvidenceText,
+    ...metadata.builderInfoNeeded,
+    ...metadata.missingFields,
+  ].filter(Boolean).join(" ").toLowerCase();
+
+  return haystack.includes("quote")
+    || haystack.includes("invoice")
+    || haystack.includes("supplier schedule")
+    || haystack.includes("as per")
+    || haystack.includes("tbc by supplier");
 }
 
 function getString(value: unknown) {

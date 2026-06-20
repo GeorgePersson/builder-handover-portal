@@ -50,9 +50,10 @@ fallback. The first backend slice added the outline-spec schema contract at
 to use LlamaCloud when configured while preserving the existing builder UI flow.
 See `docs/llamacloud-greenfield-implementation.md`.
 
-Workflow anchor: the LlamaCloud flow is now the preferred product workflow.
-Builders upload specs/supporting documents, processing can happen asynchronously,
-builders can return later to approve/edit/reject/add context, known database
+Workflow anchor: the LlamaCloud-backed flow is the preferred current path when
+configured, while the document-context provider boundary still allows local or
+future Azure processing. Builders upload specs/supporting documents, processing
+can happen asynchronously, builders can return later to approve/edit/reject/add context, known database
 matches are handled before search, unclear rows ask for builder context before
 search, clarified rows are matched again, and only builder-confirmed
 source-ready unknowns go to web/source search. Privacy, durable review state,
@@ -72,6 +73,33 @@ homeowner views, and care/maintenance documentation. These are placed before
 live source search where they affect item identity: collect all spec/quote/
 supplier information first, database-match, builder clarify/edit, re-match,
 then search only confirmed source-ready unknowns.
+
+Backend data-model slice update: the LlamaCloud/backend workflow now has
+schema/type scaffolding for multi-unit replication, supplier records distinct
+from manufacturers, quote-linked uploaded documents and extracted items,
+original extracted values vs builder-edited values, AI category vs builder
+approved category, care guidance source labels, and versioned source/warranty/
+manual/care references. The Supabase full schema and
+`docs/supabase-add-document-workflow-phase1.sql` include the upgrade path; the
+runtime insert path writes rich columns when present and falls back to the
+legacy columns plus `raw_extracted_data` when older Supabase schemas are still
+in use. Local scaffold mode carries the richer fields and records edit-history
+snapshots in `.local-data/uploaded-documents.json`.
+
+Async extraction workflow update: upload/extraction jobs now use durable states
+for `uploaded`, `processing`, `needs_review`, `partially_reviewed`,
+`package_ready`, and `failed` in both Supabase and local scaffold mode. OpenAI
+schema extraction now uses the repo-owned outline-spec JSON schema and
+normalizes `Items[]` into durable workflow rows with source page/section/snippet
+evidence, original extracted values, quote-reference status, supplier fields,
+and AI/builder category fields. PDF processing goes through the document context
+adapter so LlamaCloud can provide context when configured and local PDF/OCR
+remains the fallback. Quote/invoice/supplier-schedule uploads are linked to the
+parent extracted item, recorded as supplier documents where the schema exists,
+extracted into child rows, and database-matched again before any source search.
+Builder edits now trigger a re-match while preserving the builder's review
+decision, and local retry/reprocess replaces rows for the same extraction job so
+duplicates are not created.
 
 ## Working Local URLs
 
@@ -898,23 +926,60 @@ Both passed after the latest changes.
 - Next real-PDF test should run a 5-10 item source batch against the all-page
   source-ready list with `startAtUniqueItem=10`, then compare quality and cost
   before spending on larger source enrichment batches.
+- Builder/client UI slice update: `/builder/projects` now shows workflow review
+  lanes for Ready to accept, Needs detail, Project documents, Search results
+  ready, and Not handover. The item edit form now exposes manufacturer,
+  approved homeowner category, supplier, quantity, finish, colour, location,
+  warranty text, care text, and care guidance source labels. Quote-like rows
+  show an explicit quote upload action. Colour and quote document kind are
+  review metadata only until first-class fields are added; manufacturer,
+  approved category, supplier, quantity, finish, and care source map to the
+  current workflow item fields. `/client/portal` groups published items by
+  approved category and labels care text as manufacturer, supplier,
+  builder-supplied, general AI, or unknown guidance. Builder project client
+  access still shows only privacy-light package-level first-open details.
+- Builder/client comparison UI update: the workflow item edit drawer now shows
+  original extracted values beside the current edited values for item,
+  manufacturer, model, supplier, quantity, finish, colour, location, approved
+  category, and care guidance label. Older rows gracefully show `Not captured`
+  when original extraction history is missing. The project document lane is now
+  labelled `Project documents/quotes` and the care label control uses the
+  simpler builder-facing labels Manufacturer, Supplier, Builder supplied, and
+  General AI care guidance. `npm.cmd run lint` and `npm.cmd run build` passed.
+- LlamaCloud greenfield integration pass update: backend/UX field contracts were
+  checked for manufacturer, supplierName, supplierSku, builderApprovedCategory,
+  careGuidanceSourceLabel, quoteReferenceStatus, parentExtractedItemId, original
+  extracted values, builder edited values, source readiness, and quote uploads.
+  The builder edit form now submits supplier SKU. Supabase handover item
+  generation/readback now preserves manufacturer, supplier, approved category,
+  quantity/finish, care guidance labels, and source-version references while
+  falling back to legacy handover columns when older schemas are still in use.
+  Source candidate dispatch is now gated to builder-confirmed unmatched items
+  only; referenced or uploaded-but-unextracted quote rows remain project
+  document/builder-detail work and do not queue source candidates. Local scaffold
+  route smoke passed for `/builder/projects`, `/client/portal`, and
+  `/builder/handover-package`; Playwright browser rendering could not be run
+  because the local Playwright browser binary is not installed. `npm.cmd run
+  lint` and `npm.cmd run build` passed after the integration fixes.
 
 ## Next Best Work
 
-1. Run a context-first upload smoke with a vague/custom/supplier-quote item and
-   confirm the project review queue shows missing fields and builder info
-   prompts instead of sending the row straight to source enrichment.
-2. Plan the Azure context-processing spike from
+1. Run a real browser desktop smoke for `/builder/projects`: open a project,
+   confirm the hydrated lanes render, expand a quote-like item, verify `Not
+   captured` original values on older rows, submit category/supplier/SKU/care
+   edits, upload a quote, and confirm the quote extraction/re-match path runs
+   before any source search.
+2. Run a context-first upload smoke with a vague/custom/supplier-quote item and
+   confirm the project review lanes show missing fields, builder info prompts,
+   project document/quote upload, category override, and care-source labels
+   instead of sending the row straight to source enrichment.
+3. Plan the Azure context-processing spike from
    `docs/azure-cloudflare-context-processing-architecture.md`: test direct PDF,
    scanned PDF, image-only PDF, and table-heavy schedules; confirm whether
    Azure can consume the files directly or needs local conversion/OCR first.
-3. Design the Cloudflare D1 pipeline tables for jobs, source candidates, source
+4. Design the Cloudflare D1 pipeline tables for jobs, source candidates, source
    cache indexes, idempotency keys, and cost events without moving product
    auth/review/homeowner truth out of Supabase.
-4. Implement the database-first builder clarification gate: high-confidence
-   database matches go to accept/edit/reject, low-confidence rows request
-   builder context, clarified rows are database-matched again, and only
-   builder-confirmed source-ready unknowns are queued for search.
 5. Manually run the remaining Phase 11 `/builder/projects` upload smoke with
    the local Worker running and `CLOUDFLARE_PIPELINE_URL=http://127.0.0.1:8787`
    in `.env.local`; confirm the app-created extraction job shows source-ready

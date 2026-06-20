@@ -8,6 +8,7 @@ export type VerifiedProductCandidate = {
   productId: string;
   productName: string;
   brand?: string;
+  manufacturer?: string;
   category?: string;
   confidenceScore?: number;
   status?: string;
@@ -107,8 +108,15 @@ export function matchExtractedItemToVerifiedProduct(
   item: ExtractedWorkflowItem,
   candidates: VerifiedProductCandidate[],
 ): ProductMatchResult {
-  const itemName = normalize(item.productName);
-  const itemBrand = normalize(item.brand);
+  const itemName = normalize([
+    item.identityFingerprint,
+    item.productName,
+    item.model,
+    item.supplierSku,
+    item.variantOrFinish,
+  ].filter(Boolean).join(" "));
+  const itemBrand = normalize(item.brand || item.manufacturer);
+  const itemSupplier = normalize(item.supplierName || item.supplier);
 
   let bestCandidate: VerifiedProductCandidate | undefined;
   let bestScore = 0;
@@ -116,15 +124,16 @@ export function matchExtractedItemToVerifiedProduct(
 
   for (const candidate of candidates.filter(isVerifiedCandidate)) {
     const candidateName = normalize(candidate.productName);
-    const candidateBrand = normalize(candidate.brand);
+    const candidateBrand = normalize(candidate.brand || candidate.manufacturer);
     const nameScore = tokenSimilarity(itemName, candidateName);
     const brandMatches = Boolean(itemBrand && candidateBrand && itemBrand === candidateBrand);
+    const supplierHintMatches = Boolean(itemSupplier && candidateName && tokenSimilarity(itemSupplier, candidateName) >= 40);
     const exactName = Boolean(itemName && candidateName && itemName === candidateName);
     const score = exactName
       ? brandMatches || !itemBrand
         ? 96
         : 88
-      : Math.min(89, nameScore + (brandMatches ? 10 : 0));
+      : Math.min(89, nameScore + (brandMatches ? 10 : 0) + (supplierHintMatches ? 4 : 0));
 
     if (score > bestScore) {
       bestCandidate = candidate;

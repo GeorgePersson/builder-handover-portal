@@ -13,6 +13,7 @@ import {
   runDocumentExtraction,
 } from "@/lib/server/document-extraction";
 import { dispatchDryRunSourceEnrichmentJob } from "@/lib/server/cloudflare-pipeline";
+import { extractDocumentContext } from "@/lib/server/document-context";
 import { buildExtractionUsageMetrics } from "@/lib/server/extraction-usage";
 import {
   matchExtractedItemsToVerifiedProducts,
@@ -66,9 +67,11 @@ import { getLocalGlobalProducts, upsertLocalGlobalProductFromExtractedItem } fro
 import { enrichExtractedProduct } from "@/lib/ai/source-enrichment";
 import type { ExtractedHandoverItem } from "@/lib/types";
 import type {
+  DocumentExtractionJobStatus,
   ExtractedItemReviewStatus,
   ExtractedWorkflowItem,
   ItemReviewActionType,
+  UploadedDocumentWorkflowRole,
 } from "@/lib/document-workflow";
 
 function getRequired(formData: FormData, key: string) {
@@ -893,7 +896,41 @@ type WorkflowDocumentForExtraction = {
   fileType?: string;
   mimeType: string;
   storagePath?: string;
+  workflowRole?: UploadedDocumentWorkflowRole;
+  parentExtractedItemId?: string;
 };
+
+async function prepareWorkflowDocumentContext(input: {
+  bytes: Buffer;
+  document: WorkflowDocumentForExtraction;
+}) {
+  const lowerName = input.document.originalFilename.toLowerCase();
+  const lowerType = input.document.fileType?.toLowerCase() || "";
+
+  if (input.document.mimeType === "application/pdf" || lowerName.endsWith(".pdf") || lowerType === "pdf") {
+    const context = await extractDocumentContext({
+      bytes: input.bytes,
+      fileName: input.document.originalFilename,
+      mimeType: input.document.mimeType,
+    });
+
+    return {
+      text: context.text,
+      metadata: {
+        textExtractor: context.provider,
+        diagnostics: context.diagnostics,
+        markdownAvailable: Boolean(context.markdown),
+      },
+    };
+  }
+
+  return extractDocumentText({
+    bytes: input.bytes,
+    fileName: input.document.originalFilename,
+    fileType: input.document.fileType,
+    mimeType: input.document.mimeType,
+  });
+}
 
 const approvedWorkflowReviewStatuses = [
   "verified_match",
@@ -901,6 +938,44 @@ const approvedWorkflowReviewStatuses = [
   "edited_by_builder",
   "builder_supplied",
 ] as const;
+const unresolvedWorkflowReviewStatuses = new Set<ExtractedItemReviewStatus>([
+  "needs_review",
+  "low_confidence",
+  "unmatched",
+]);
+const packageReadyWorkflowReviewStatuses = new Set<ExtractedItemReviewStatus>(approvedWorkflowReviewStatuses);
+
+function getWorkflowJobStatusForItems(
+  items: Array<Pick<ExtractedWorkflowItem, "reviewStatus">>,
+): DocumentExtractionJobStatus {
+  if (items.length === 0) {
+    return "needs_review";
+  }
+
+  const unresolvedCount = items.filter((item) => unresolvedWorkflowReviewStatuses.has(item.reviewStatus)).length;
+  const packageReadyCount = items.filter((item) => packageReadyWorkflowReviewStatuses.has(item.reviewStatus)).length;
+
+  if (unresolvedCount === 0 && packageReadyCount > 0) {
+    return "package_ready";
+  }
+
+  if (unresolvedCount > 0 && packageReadyCount > 0) {
+    return "partially_reviewed";
+  }
+
+  return "needs_review";
+}
+
+function isConfirmedUnknownForSourceSearch(item: ExtractedWorkflowItem) {
+  return (
+    (item.reviewStatus === "approved" ||
+      item.reviewStatus === "edited_by_builder" ||
+      item.reviewStatus === "builder_supplied") &&
+    item.matchStatus === "unmatched" &&
+    item.quoteReferenceStatus !== "referenced" &&
+    item.quoteReferenceStatus !== "quote_uploaded"
+  );
+}
 
 async function insertWorkflowAuditLog(
   context: BuilderActionContext,
@@ -923,6 +998,7 @@ async function insertWorkflowAuditLog(
 type WorkflowReviewItem = {
   id: string;
   projectId: string;
+  extractionJobId?: string;
   reviewStatus: ExtractedItemReviewStatus;
 };
 
@@ -933,13 +1009,27 @@ type WorkflowReviewMutation = {
   metadata?: Record<string, unknown>;
   itemUpdate?: Partial<{
     productName: string | null;
+    manufacturer: string | null;
     brand: string | null;
     model: string | null;
     category: string | null;
+    aiSuggestedCategory: string | null;
+    builderApprovedCategory: string | null;
+    supplierId: string | null;
+    supplierName: string | null;
     supplier: string | null;
+    supplierSku: string | null;
     location: string | null;
+    quantity: string | null;
+    variantOrFinish: string | null;
     warrantyText: string | null;
     maintenanceText: string | null;
+    careGuidanceSourceType: ExtractedWorkflowItem["careGuidanceSourceType"] | null;
+    careGuidanceSourceLabel: string | null;
+    careGuidanceReviewRequired: boolean | null;
+    identityFingerprint: string | null;
+    quoteReferenceText: string | null;
+    quoteReferenceStatus: ExtractedWorkflowItem["quoteReferenceStatus"] | null;
     reviewStatus: ExtractedItemReviewStatus;
     approvedBy: string | null;
     approvedAt: string | null;
@@ -962,7 +1052,7 @@ async function getSupabaseWorkflowReviewItem(
 ): Promise<WorkflowReviewItem> {
   const { data: item, error: itemError } = await context.supabase
     .from("extracted_items")
-    .select("id,project_id,review_status")
+    .select("id,project_id,extraction_job_id,review_status")
     .eq("id", itemId)
     .single();
 
@@ -984,8 +1074,54 @@ async function getSupabaseWorkflowReviewItem(
   return {
     id: item.id,
     projectId: item.project_id,
+    extractionJobId: item.extraction_job_id || undefined,
     reviewStatus: item.review_status,
   };
+}
+
+async function updateSupabaseExtractionJobReviewStatus(
+  context: BuilderActionContext,
+  projectId: string,
+  extractionJobId?: string,
+) {
+  if (!extractionJobId) {
+    return;
+  }
+
+  const { data: items, error } = await context.supabase
+    .from("extracted_items")
+    .select("review_status")
+    .eq("project_id", projectId)
+    .eq("extraction_job_id", extractionJobId);
+
+  if (error || !items) {
+    return;
+  }
+
+  const status = getWorkflowJobStatusForItems(items.map((item) => ({
+    reviewStatus: item.review_status,
+  })));
+
+  await context.supabase
+    .from("document_extraction_jobs")
+    .update({ status, updated_at: new Date().toISOString() })
+    .eq("id", extractionJobId);
+}
+
+async function updateLocalExtractionJobReviewStatus(
+  projectId: string,
+  extractionJobId?: string,
+) {
+  if (!extractionJobId) {
+    return;
+  }
+
+  const items = (await getLocalExtractedWorkflowItems(projectId)).filter(
+    (item) => item.extractionJobId === extractionJobId,
+  );
+  await updateLocalDocumentExtractionJob(extractionJobId, {
+    status: getWorkflowJobStatusForItems(items),
+  });
 }
 
 async function recordSupabaseWorkflowReview(
@@ -1002,13 +1138,27 @@ async function recordSupabaseWorkflowReview(
     };
 
     if ("productName" in update) updatePayload.product_name = update.productName;
+    if ("manufacturer" in update) updatePayload.manufacturer = update.manufacturer;
     if ("brand" in update) updatePayload.brand = update.brand;
     if ("model" in update) updatePayload.model = update.model;
     if ("category" in update) updatePayload.category = update.category;
+    if ("aiSuggestedCategory" in update) updatePayload.ai_suggested_category = update.aiSuggestedCategory;
+    if ("builderApprovedCategory" in update) updatePayload.builder_approved_category = update.builderApprovedCategory;
+    if ("supplierId" in update) updatePayload.supplier_id = update.supplierId;
+    if ("supplierName" in update) updatePayload.supplier_name = update.supplierName;
     if ("supplier" in update) updatePayload.supplier = update.supplier;
+    if ("supplierSku" in update) updatePayload.supplier_sku = update.supplierSku;
     if ("location" in update) updatePayload.location = update.location;
+    if ("quantity" in update) updatePayload.quantity = update.quantity;
+    if ("variantOrFinish" in update) updatePayload.variant_or_finish = update.variantOrFinish;
     if ("warrantyText" in update) updatePayload.warranty_text = update.warrantyText;
     if ("maintenanceText" in update) updatePayload.maintenance_text = update.maintenanceText;
+    if ("careGuidanceSourceType" in update) updatePayload.care_guidance_source_type = update.careGuidanceSourceType;
+    if ("careGuidanceSourceLabel" in update) updatePayload.care_guidance_source_label = update.careGuidanceSourceLabel;
+    if ("careGuidanceReviewRequired" in update) updatePayload.care_guidance_review_required = update.careGuidanceReviewRequired;
+    if ("identityFingerprint" in update) updatePayload.identity_fingerprint = update.identityFingerprint;
+    if ("quoteReferenceText" in update) updatePayload.quote_reference_text = update.quoteReferenceText;
+    if ("quoteReferenceStatus" in update) updatePayload.quote_reference_status = update.quoteReferenceStatus;
     if ("reviewStatus" in update) updatePayload.review_status = update.reviewStatus;
     if ("approvedBy" in update) {
       updatePayload.approved_by = update.approvedBy === "__current_user__" ? context.userId : update.approvedBy;
@@ -1017,13 +1167,36 @@ async function recordSupabaseWorkflowReview(
     if ("excludedAt" in update) updatePayload.excluded_at = update.excludedAt;
     if ("exclusionReason" in update) updatePayload.exclusion_reason = update.exclusionReason;
 
-    const { error: updateError } = await context.supabase
+    const updateResult = await context.supabase
       .from("extracted_items")
       .update(updatePayload)
       .eq("id", item.id);
 
-    if (updateError) {
-      redirectWorkflowReviewError("workflow-review-update-failed");
+    if (updateResult.error) {
+      const fallbackPayload = {
+        product_name: updatePayload.product_name,
+        brand: updatePayload.brand,
+        model: updatePayload.model,
+        category: updatePayload.builder_approved_category || updatePayload.category,
+        supplier: updatePayload.supplier_name || updatePayload.supplier,
+        location: updatePayload.location,
+        warranty_text: updatePayload.warranty_text,
+        maintenance_text: updatePayload.maintenance_text,
+        review_status: updatePayload.review_status,
+        approved_by: updatePayload.approved_by,
+        approved_at: updatePayload.approved_at,
+        excluded_at: updatePayload.excluded_at,
+        exclusion_reason: updatePayload.exclusion_reason,
+        updated_at: updatePayload.updated_at,
+      };
+      const { error: fallbackError } = await context.supabase
+        .from("extracted_items")
+        .update(fallbackPayload)
+        .eq("id", item.id);
+
+      if (fallbackError) {
+        redirectWorkflowReviewError("workflow-review-update-failed");
+      }
     }
   }
 
@@ -1069,13 +1242,45 @@ async function recordLocalWorkflowReview(itemId: string, mutation: WorkflowRevie
     const localUpdate: Parameters<typeof updateLocalExtractedWorkflowItemReview>[1] = {};
 
     if ("productName" in update) localUpdate.productName = update.productName === null ? undefined : update.productName;
+    if ("manufacturer" in update) localUpdate.manufacturer = update.manufacturer === null ? undefined : update.manufacturer;
     if ("brand" in update) localUpdate.brand = update.brand === null ? undefined : update.brand;
     if ("model" in update) localUpdate.model = update.model === null ? undefined : update.model;
     if ("category" in update) localUpdate.category = update.category === null ? undefined : update.category;
+    if ("aiSuggestedCategory" in update) localUpdate.aiSuggestedCategory = update.aiSuggestedCategory === null ? undefined : update.aiSuggestedCategory;
+    if ("builderApprovedCategory" in update) {
+      localUpdate.builderApprovedCategory = update.builderApprovedCategory === null ? undefined : update.builderApprovedCategory;
+    }
+    if ("supplierId" in update) localUpdate.supplierId = update.supplierId === null ? undefined : update.supplierId;
+    if ("supplierName" in update) localUpdate.supplierName = update.supplierName === null ? undefined : update.supplierName;
     if ("supplier" in update) localUpdate.supplier = update.supplier === null ? undefined : update.supplier;
+    if ("supplierSku" in update) localUpdate.supplierSku = update.supplierSku === null ? undefined : update.supplierSku;
     if ("location" in update) localUpdate.location = update.location === null ? undefined : update.location;
+    if ("quantity" in update) localUpdate.quantity = update.quantity === null ? undefined : update.quantity;
+    if ("variantOrFinish" in update) {
+      localUpdate.variantOrFinish = update.variantOrFinish === null ? undefined : update.variantOrFinish;
+    }
     if ("warrantyText" in update) localUpdate.warrantyText = update.warrantyText === null ? undefined : update.warrantyText;
     if ("maintenanceText" in update) localUpdate.maintenanceText = update.maintenanceText === null ? undefined : update.maintenanceText;
+    if ("careGuidanceSourceType" in update) {
+      localUpdate.careGuidanceSourceType = update.careGuidanceSourceType === null ? undefined : update.careGuidanceSourceType;
+    }
+    if ("careGuidanceSourceLabel" in update) {
+      localUpdate.careGuidanceSourceLabel = update.careGuidanceSourceLabel === null ? undefined : update.careGuidanceSourceLabel;
+    }
+    if ("careGuidanceReviewRequired" in update) {
+      localUpdate.careGuidanceReviewRequired = update.careGuidanceReviewRequired === null
+        ? undefined
+        : update.careGuidanceReviewRequired;
+    }
+    if ("identityFingerprint" in update) {
+      localUpdate.identityFingerprint = update.identityFingerprint === null ? undefined : update.identityFingerprint;
+    }
+    if ("quoteReferenceText" in update) {
+      localUpdate.quoteReferenceText = update.quoteReferenceText === null ? undefined : update.quoteReferenceText;
+    }
+    if ("quoteReferenceStatus" in update) {
+      localUpdate.quoteReferenceStatus = update.quoteReferenceStatus === null ? undefined : update.quoteReferenceStatus;
+    }
     if ("reviewStatus" in update) localUpdate.reviewStatus = update.reviewStatus;
     if ("approvedBy" in update) {
       localUpdate.approvedBy = update.approvedBy === null
@@ -1113,12 +1318,22 @@ async function reviewWorkflowItem(itemId: string, mutation: WorkflowReviewMutati
   if (context) {
     const item = await getSupabaseWorkflowReviewItem(context, itemId);
     await recordSupabaseWorkflowReview(context, item, mutation);
+    if (mutation.actionType === "edited") {
+      await rematchSupabaseWorkflowItems(context, [item.id], { preserveReviewStatus: true });
+    } else {
+      await updateSupabaseExtractionJobReviewStatus(context, item.projectId, item.extractionJobId);
+    }
 
     if (!(await isSupabaseProjectPublished(context, item.projectId))) {
       await generateSupabaseWorkflowHandoverItems(context, item.projectId);
     }
   } else {
     const item = await recordLocalWorkflowReview(itemId, mutation);
+    if (mutation.actionType === "edited") {
+      await rematchLocalWorkflowItems([item.id], { preserveReviewStatus: true });
+    } else {
+      await updateLocalExtractionJobReviewStatus(item.projectId, item.extractionJobId);
+    }
 
     if (!(await isLocalProjectPublished(item.projectId))) {
       await generateLocalWorkflowHandoverItems(item.projectId);
@@ -1190,13 +1405,27 @@ async function generateSupabaseWorkflowHandoverItems(
     redirect("/builder/projects?error=project-not-found");
   }
 
-  const { data: extractedItems, error: itemError } = await context.supabase
+  const richExtractedItemSelect =
+    "id,project_id,source_document_id,product_name,manufacturer,brand,model,category,ai_suggested_category,builder_approved_category,supplier_id,supplier_name,supplier,supplier_sku,location,quantity,variant_or_finish,warranty_text,maintenance_text,care_guidance_source_type,care_guidance_source_label,warranty_source_version_id,manual_source_version_id,care_guidance_version_id,review_status,matched_product_id,approved_by,approved_at";
+  const legacyExtractedItemSelect =
+    "id,project_id,source_document_id,product_name,brand,model,category,supplier,location,warranty_text,maintenance_text,review_status,matched_product_id,approved_by,approved_at";
+  const richResult = await context.supabase
     .from("extracted_items")
-    .select(
-      "id,project_id,source_document_id,product_name,brand,model,category,supplier,location,warranty_text,maintenance_text,review_status,matched_product_id,approved_by,approved_at",
-    )
+    .select(richExtractedItemSelect)
     .eq("project_id", projectId)
     .in("review_status", [...approvedWorkflowReviewStatuses]);
+  let extractedItems = richResult.data as LooseDbRow[] | null;
+  let itemError = richResult.error;
+
+  if (itemError) {
+    const legacyResult = await context.supabase
+      .from("extracted_items")
+      .select(legacyExtractedItemSelect)
+      .eq("project_id", projectId)
+      .in("review_status", [...approvedWorkflowReviewStatuses]);
+    extractedItems = legacyResult.data as LooseDbRow[] | null;
+    itemError = legacyResult.error;
+  }
 
   if (itemError || !extractedItems) {
     redirect("/builder/projects?error=publish-package-failed");
@@ -1216,47 +1445,87 @@ async function generateSupabaseWorkflowHandoverItems(
   }
 
   const now = new Date().toISOString();
-  const { data: insertedItems, error: insertError } = await context.supabase
+  const handoverRows = extractedItems.map((item) => {
+    const category = getRowString(item, "builder_approved_category") || getRowString(item, "category");
+    const supplierName = getRowString(item, "supplier_name") || getRowString(item, "supplier");
+
+    return {
+      project_id: projectId,
+      source_extracted_item_id: getRowString(item, "id"),
+      source_document_id: getRowString(item, "source_document_id"),
+      matched_product_id: getRowString(item, "matched_product_id") || null,
+      item_type: inferWorkflowHandoverItemType({
+        productName: getRowString(item, "product_name"),
+        category,
+      }),
+      title: getRowString(item, "product_name") || category || "Approved handover item",
+      manufacturer: getRowString(item, "manufacturer") || getRowString(item, "brand") || null,
+      brand: getRowString(item, "brand") || null,
+      model: getRowString(item, "model") || null,
+      ai_suggested_category: getRowString(item, "ai_suggested_category") || getRowString(item, "category") || null,
+      builder_approved_category: getRowString(item, "builder_approved_category") || category || null,
+      category: category || null,
+      supplier_id: getRowString(item, "supplier_id") || null,
+      supplier_name: supplierName || null,
+      supplier: supplierName || null,
+      supplier_sku: getRowString(item, "supplier_sku") || null,
+      location: getRowString(item, "location") || null,
+      quantity: getRowString(item, "quantity") || null,
+      variant_or_finish: getRowString(item, "variant_or_finish") || null,
+      warranty_text: getRowString(item, "warranty_text") || null,
+      maintenance_text: getRowString(item, "maintenance_text") || null,
+      care_guidance_source_type: getRowString(item, "care_guidance_source_type") || "unknown",
+      care_guidance_source_label: getRowString(item, "care_guidance_source_label") || null,
+      warranty_source_version_id: getRowString(item, "warranty_source_version_id") || null,
+      manual_source_version_id: getRowString(item, "manual_source_version_id") || null,
+      care_guidance_version_id: getRowString(item, "care_guidance_version_id") || null,
+      approved_by: getRowString(item, "approved_by") || context.userId,
+      approved_at: getRowString(item, "approved_at") || now,
+    };
+  });
+  let insertResult = await context.supabase
     .from("handover_items")
-    .insert(
-      extractedItems.map((item) => ({
-        project_id: projectId,
-        source_extracted_item_id: item.id,
-        source_document_id: item.source_document_id,
-        matched_product_id: item.matched_product_id || null,
-        item_type: inferWorkflowHandoverItemType({
-          productName: item.product_name,
-          category: item.category,
-        }),
-        title: item.product_name || item.category || "Approved handover item",
-        brand: item.brand || null,
-        model: item.model || null,
-        category: item.category || null,
-        supplier: item.supplier || null,
-        location: item.location || null,
-        warranty_text: item.warranty_text || null,
-        maintenance_text: item.maintenance_text || null,
-        approved_by: item.approved_by || context.userId,
-        approved_at: item.approved_at || now,
-      })),
-    )
+    .insert(handoverRows)
     .select("id");
 
-  if (insertError) {
+  if (insertResult.error) {
+    insertResult = await context.supabase
+      .from("handover_items")
+      .insert(handoverRows.map((item) => ({
+        project_id: item.project_id,
+        source_extracted_item_id: item.source_extracted_item_id,
+        source_document_id: item.source_document_id,
+        matched_product_id: item.matched_product_id,
+        item_type: item.item_type,
+        title: item.title,
+        brand: item.brand,
+        model: item.model,
+        category: item.builder_approved_category || item.category,
+        supplier: item.supplier_name || item.supplier,
+        location: item.location,
+        warranty_text: item.warranty_text,
+        maintenance_text: item.maintenance_text,
+        approved_by: item.approved_by,
+        approved_at: item.approved_at,
+      })))
+      .select("id");
+  }
+
+  if (insertResult.error) {
     redirect("/builder/projects?error=publish-package-failed");
   }
 
   await insertWorkflowAuditLog(context, {
     projectId,
     eventType: "handover_items_generated",
-    detail: `Generated ${insertedItems?.length || 0} approved workflow handover items.`,
+    detail: `Generated ${insertResult.data?.length || 0} approved workflow handover items.`,
     metadata: {
-      included_extracted_item_ids: extractedItems.map((item) => item.id),
+      included_extracted_item_ids: extractedItems.map((item) => getRowString(item, "id")),
       excluded_statuses: ["needs_review", "low_confidence", "unmatched", "excluded"],
     },
   });
 
-  return insertedItems || [];
+  return insertResult.data || [];
 }
 
 async function getSupabaseWorkflowPublishReadiness(
@@ -1450,7 +1719,7 @@ async function recordLocalHandoverApproval(input: {
 async function getSupabaseVerifiedProductCandidates(context: BuilderActionContext): Promise<VerifiedProductCandidate[]> {
   const { data, error } = await context.supabase
     .from("product_versions")
-    .select("product_id,status,confidence_score,products(canonical_name,brand,category)")
+    .select("product_id,status,confidence_score,products(canonical_name,brand,manufacturer,category)")
     .eq("status", "approved");
 
   if (error || !data) {
@@ -1464,6 +1733,7 @@ async function getSupabaseVerifiedProductCandidates(context: BuilderActionContex
       productId: version.product_id,
       productName: product?.canonical_name || "",
       brand: product?.brand || undefined,
+      manufacturer: product?.manufacturer || undefined,
       category: product?.category || undefined,
       confidenceScore: version.confidence_score,
       status: version.status,
@@ -1488,15 +1758,21 @@ async function getLocalVerifiedProductCandidates(): Promise<VerifiedProductCandi
 async function applySupabaseProductMatches(
   context: BuilderActionContext,
   matches: ProductMatchResult[],
+  options: { preserveReviewStatus?: boolean } = {},
 ) {
   for (const match of matches) {
+    const updatePayload: Record<string, unknown> = {
+      match_status: match.matchStatus,
+      matched_product_id: match.matchedProductId || null,
+    };
+
+    if (!options.preserveReviewStatus) {
+      updatePayload.review_status = match.reviewStatus;
+    }
+
     const { error } = await context.supabase
       .from("extracted_items")
-      .update({
-        match_status: match.matchStatus,
-        review_status: match.reviewStatus,
-        matched_product_id: match.matchedProductId || null,
-      })
+      .update(updatePayload)
       .eq("id", match.extractedItemId);
 
     if (error) {
@@ -1532,6 +1808,164 @@ async function applySupabaseProductMatches(
   }
 }
 
+type LooseDbRow = Record<string, unknown>;
+
+function getRowObject(row: LooseDbRow, key: string) {
+  const value = row[key];
+  return value && typeof value === "object" ? value as Record<string, unknown> : {};
+}
+
+function getRowString(row: LooseDbRow, key: string) {
+  const value = row[key];
+  return typeof value === "string" ? value : undefined;
+}
+
+function getRowNumber(row: LooseDbRow, key: string) {
+  const value = row[key];
+  return typeof value === "number" ? value : 0;
+}
+
+function getRowBoolean(row: LooseDbRow, key: string) {
+  const value = row[key];
+  return typeof value === "boolean" ? value : undefined;
+}
+
+function mapWorkflowItemRow(row: LooseDbRow): ExtractedWorkflowItem {
+  const raw = getRowObject(row, "raw_extracted_data");
+  const rawIdentity = getRowObject(raw, "identity");
+
+  return {
+    id: getRowString(row, "id") || "",
+    projectId: getRowString(row, "project_id") || "",
+    sourceDocumentId: getRowString(row, "source_document_id") || "",
+    extractionJobId: getRowString(row, "extraction_job_id"),
+    parentExtractedItemId: getRowString(row, "parent_extracted_item_id"),
+    sourceQuoteDocumentId: getRowString(row, "source_quote_document_id"),
+    rawExtractedData: raw,
+    originalExtractedValues: getRowObject(row, "original_extracted_values"),
+    builderEditedValues: getRowObject(row, "builder_edited_values"),
+    itemType: getRowString(row, "item_type") as ExtractedWorkflowItem["itemType"],
+    productName: getRowString(row, "product_name"),
+    manufacturer: getRowString(row, "manufacturer") || getRowString(raw, "manufacturer"),
+    brand: getRowString(row, "brand"),
+    model: getRowString(row, "model"),
+    aiSuggestedCategory: getRowString(row, "ai_suggested_category") || getRowString(raw, "aiSuggestedCategory"),
+    builderApprovedCategory: getRowString(row, "builder_approved_category") || getRowString(raw, "builderApprovedCategory"),
+    category: getRowString(row, "category"),
+    supplierId: getRowString(row, "supplier_id"),
+    supplierName: getRowString(row, "supplier_name") || getRowString(raw, "supplierName"),
+    supplier: getRowString(row, "supplier"),
+    supplierSku: getRowString(row, "supplier_sku") || getRowString(raw, "supplierSku"),
+    location: getRowString(row, "location"),
+    quantity: getRowString(row, "quantity") || getRowString(raw, "quantity"),
+    variantOrFinish: getRowString(row, "variant_or_finish") || getRowString(raw, "variantOrFinish"),
+    warrantyText: getRowString(row, "warranty_text"),
+    maintenanceText: getRowString(row, "maintenance_text"),
+    careGuidanceSourceType: (getRowString(row, "care_guidance_source_type") || getRowString(raw, "careGuidanceSourceType")) as ExtractedWorkflowItem["careGuidanceSourceType"],
+    careGuidanceSourceLabel: getRowString(row, "care_guidance_source_label") || getRowString(raw, "careGuidanceSourceLabel"),
+    careGuidanceReviewRequired: getRowBoolean(row, "care_guidance_review_required"),
+    warrantySourceVersionId: getRowString(row, "warranty_source_version_id"),
+    manualSourceVersionId: getRowString(row, "manual_source_version_id"),
+    careGuidanceVersionId: getRowString(row, "care_guidance_version_id"),
+    identityFingerprint: getRowString(row, "identity_fingerprint") || getRowString(rawIdentity, "fingerprint"),
+    quoteReferenceText: getRowString(row, "quote_reference_text") || getRowString(raw, "quoteReferenceText"),
+    quoteReferenceStatus: (getRowString(row, "quote_reference_status") || getRowString(raw, "quoteReferenceStatus")) as ExtractedWorkflowItem["quoteReferenceStatus"],
+    sourcePage: getRowString(row, "source_page"),
+    sourceSection: getRowString(row, "source_section"),
+    sourceSnippet: getRowString(row, "source_snippet"),
+    confidenceScore: getRowNumber(row, "confidence_score"),
+    matchStatus: getRowString(row, "match_status") as ExtractedWorkflowItem["matchStatus"],
+    reviewStatus: getRowString(row, "review_status") as ExtractedWorkflowItem["reviewStatus"],
+    matchedProductId: getRowString(row, "matched_product_id"),
+    approvedBy: getRowString(row, "approved_by"),
+    approvedAt: getRowString(row, "approved_at"),
+    excludedAt: getRowString(row, "excluded_at"),
+    exclusionReason: getRowString(row, "exclusion_reason"),
+    createdAt: getRowString(row, "created_at") || "",
+    updatedAt: getRowString(row, "updated_at") || "",
+  };
+}
+
+const richWorkflowItemSelect =
+  "id,project_id,source_document_id,extraction_job_id,raw_extracted_data,original_extracted_values,builder_edited_values,item_type,product_name,manufacturer,brand,model,category,ai_suggested_category,builder_approved_category,supplier_id,supplier_name,supplier,supplier_sku,location,quantity,variant_or_finish,warranty_text,maintenance_text,care_guidance_source_type,care_guidance_source_label,care_guidance_review_required,warranty_source_version_id,manual_source_version_id,care_guidance_version_id,identity_fingerprint,parent_extracted_item_id,source_quote_document_id,quote_reference_text,quote_reference_status,source_page,source_section,source_snippet,confidence_score,match_status,review_status,matched_product_id,approved_by,approved_at,excluded_at,exclusion_reason,created_at,updated_at";
+const legacyWorkflowItemSelect =
+  "id,project_id,source_document_id,extraction_job_id,raw_extracted_data,product_name,brand,model,category,supplier,location,warranty_text,maintenance_text,confidence_score,match_status,review_status,matched_product_id,approved_by,approved_at,excluded_at,exclusion_reason,created_at,updated_at";
+
+async function getSupabaseWorkflowItemsForRematch(
+  context: BuilderActionContext,
+  itemIds: string[],
+) {
+  if (itemIds.length === 0) {
+    return [];
+  }
+
+  const richResult = await context.supabase
+    .from("extracted_items")
+    .select(richWorkflowItemSelect)
+    .in("id", itemIds);
+  let data = richResult.data as LooseDbRow[] | null;
+  let error = richResult.error;
+
+  if (error) {
+    const legacyResult = await context.supabase
+      .from("extracted_items")
+      .select(legacyWorkflowItemSelect)
+      .in("id", itemIds);
+    data = legacyResult.data as LooseDbRow[] | null;
+    error = legacyResult.error;
+  }
+
+  if (error || !data) {
+    return [];
+  }
+
+  return data.map(mapWorkflowItemRow);
+}
+
+async function rematchSupabaseWorkflowItems(
+  context: BuilderActionContext,
+  itemIds: string[],
+  options: { preserveReviewStatus?: boolean } = {},
+) {
+  const items = await getSupabaseWorkflowItemsForRematch(context, itemIds);
+
+  if (items.length === 0) {
+    return;
+  }
+
+  const candidates = await getSupabaseVerifiedProductCandidates(context);
+  const matches = matchExtractedItemsToVerifiedProducts(items, candidates);
+  await applySupabaseProductMatches(context, matches, options);
+  for (const item of items) {
+    await updateSupabaseExtractionJobReviewStatus(context, item.projectId, item.extractionJobId);
+  }
+}
+
+async function rematchLocalWorkflowItems(
+  itemIds: string[],
+  options: { preserveReviewStatus?: boolean } = {},
+) {
+  const allItems = await getLocalExtractedWorkflowItems();
+  const items = allItems.filter((item) => itemIds.includes(item.id));
+
+  if (items.length === 0) {
+    return;
+  }
+
+  const candidates = await getLocalVerifiedProductCandidates();
+  const matches = matchExtractedItemsToVerifiedProducts(items, candidates);
+  await applyLocalProductMatches(matches.map((match) => ({
+    extractedItemId: match.extractedItemId,
+    matchedProductId: match.matchedProductId,
+    matchStatus: match.matchStatus,
+    matchConfidenceScore: match.matchConfidenceScore,
+    matchReason: match.matchReason,
+  })), options);
+  for (const item of items) {
+    await updateLocalExtractionJobReviewStatus(item.projectId, item.extractionJobId);
+  }
+}
+
 async function processSupabaseDocumentExtractionJob(
   context: BuilderActionContext,
   input: {
@@ -1546,21 +1980,33 @@ async function processSupabaseDocumentExtractionJob(
   const startedAt = new Date().toISOString();
 
   if (!jobId) {
-    const { data: job, error: jobError } = await context.supabase
+    let jobResult = await context.supabase
       .from("document_extraction_jobs")
       .insert({
         project_id: input.document.projectId,
         uploaded_document_id: input.document.id,
-        status: "queued",
+        status: "uploaded",
       })
       .select("id")
       .single();
 
-    if (jobError || !job) {
+    if (jobResult.error) {
+      jobResult = await context.supabase
+        .from("document_extraction_jobs")
+        .insert({
+          project_id: input.document.projectId,
+          uploaded_document_id: input.document.id,
+          status: "queued",
+        })
+        .select("id")
+        .single();
+    }
+
+    if (jobResult.error || !jobResult.data) {
       redirect("/builder/projects?error=create-extraction-job-failed");
     }
 
-    jobId = job.id;
+    jobId = jobResult.data.id;
   }
   if (!jobId) {
     redirect("/builder/projects?error=create-extraction-job-failed");
@@ -1597,11 +2043,9 @@ async function processSupabaseDocumentExtractionJob(
     let documentTextMetadata: Record<string, unknown> = {};
 
     if (input.bytes) {
-      const extractedText = await extractDocumentText({
+      const extractedText = await prepareWorkflowDocumentContext({
         bytes: input.bytes,
-        fileName: input.document.originalFilename,
-        fileType: input.document.fileType,
-        mimeType: input.document.mimeType,
+        document: input.document,
       });
       documentText = extractedText.text;
       documentTextMetadata = extractedText.metadata;
@@ -1611,6 +2055,7 @@ async function processSupabaseDocumentExtractionJob(
       jobId: activeJobId,
       document: input.document,
       documentText,
+      documentContextMetadata: documentTextMetadata,
     });
     const initialUsageMetrics = buildExtractionUsageMetrics({
       items: extraction.items,
@@ -1636,46 +2081,134 @@ async function processSupabaseDocumentExtractionJob(
     let insertedItems: ExtractedWorkflowItem[] = [];
 
     if (extractedItems.length > 0) {
-      const { data: insertedRows, error: itemError } = await context.supabase.from("extracted_items").insert(
-        extractedItems.map((item) => ({
+      const richRows = extractedItems.map((item) => ({
           project_id: item.projectId,
           source_document_id: item.sourceDocumentId,
           extraction_job_id: item.extractionJobId,
           raw_extracted_data: item.rawExtractedData,
+          original_extracted_values: item.originalExtractedValues || {},
+          builder_edited_values: item.builderEditedValues || {},
+          item_type: item.itemType || "product",
           product_name: item.productName || null,
+          manufacturer: item.manufacturer || item.brand || null,
           brand: item.brand || null,
           model: item.model || null,
           category: item.category || null,
+          ai_suggested_category: item.aiSuggestedCategory || item.category || null,
+          builder_approved_category: item.builderApprovedCategory || item.category || null,
+          supplier_id: item.supplierId || null,
+          supplier_name: item.supplierName || item.supplier || null,
           supplier: item.supplier || null,
+          supplier_sku: item.supplierSku || null,
           location: item.location || null,
+          quantity: item.quantity || null,
+          variant_or_finish: item.variantOrFinish || null,
           warranty_text: item.warrantyText || null,
           maintenance_text: item.maintenanceText || null,
+          care_guidance_source_type: item.careGuidanceSourceType || "unknown",
+          care_guidance_source_label: item.careGuidanceSourceLabel || null,
+          care_guidance_review_required: item.careGuidanceReviewRequired || false,
+          warranty_source_version_id: item.warrantySourceVersionId || null,
+          manual_source_version_id: item.manualSourceVersionId || null,
+          care_guidance_version_id: item.careGuidanceVersionId || null,
+          identity_fingerprint: item.identityFingerprint || null,
+          parent_extracted_item_id: item.parentExtractedItemId || null,
+          source_quote_document_id: item.sourceQuoteDocumentId || null,
+          quote_reference_text: item.quoteReferenceText || null,
+          quote_reference_status: item.quoteReferenceStatus || "not_applicable",
+          source_page: item.sourcePage || null,
+          source_section: item.sourceSection || null,
+          source_snippet: item.sourceSnippet || null,
           confidence_score: item.confidenceScore,
           match_status: item.matchStatus,
           review_status: item.reviewStatus,
-        })),
-      ).select(
-        "id,project_id,source_document_id,extraction_job_id,raw_extracted_data,product_name,brand,model,category,supplier,location,warranty_text,maintenance_text,confidence_score,match_status,review_status,matched_product_id,approved_by,approved_at,excluded_at,exclusion_reason,created_at,updated_at",
-      );
+      }));
+      const richSelect =
+        richWorkflowItemSelect;
+      let insertResult = await context.supabase.from("extracted_items").insert(richRows).select(richSelect);
 
-      if (itemError) {
-        throw new Error(itemError.message);
+      if (insertResult.error) {
+        insertResult = await context.supabase.from("extracted_items").insert(
+          richRows.map((item) => ({
+            project_id: item.project_id,
+            source_document_id: item.source_document_id,
+            extraction_job_id: item.extraction_job_id,
+            raw_extracted_data: {
+              ...item.raw_extracted_data,
+              originalExtractedValues: item.original_extracted_values,
+              builderEditedValues: item.builder_edited_values,
+              manufacturer: item.manufacturer,
+              aiSuggestedCategory: item.ai_suggested_category,
+              builderApprovedCategory: item.builder_approved_category,
+              supplierName: item.supplier_name,
+              supplierSku: item.supplier_sku,
+              quantity: item.quantity,
+              variantOrFinish: item.variant_or_finish,
+              careGuidanceSourceType: item.care_guidance_source_type,
+              careGuidanceSourceLabel: item.care_guidance_source_label,
+              quoteReferenceText: item.quote_reference_text,
+              quoteReferenceStatus: item.quote_reference_status,
+            },
+            product_name: item.product_name,
+            brand: item.brand,
+            model: item.model,
+            category: item.builder_approved_category || item.category,
+            supplier: item.supplier_name || item.supplier,
+            location: item.location,
+            warranty_text: item.warranty_text,
+            maintenance_text: item.maintenance_text,
+            confidence_score: item.confidence_score,
+            match_status: item.match_status,
+            review_status: item.review_status,
+          })),
+        ).select(
+          "id,project_id,source_document_id,extraction_job_id,raw_extracted_data,product_name,brand,model,category,supplier,location,warranty_text,maintenance_text,confidence_score,match_status,review_status,matched_product_id,approved_by,approved_at,excluded_at,exclusion_reason,created_at,updated_at",
+        );
       }
 
-      insertedItems = (insertedRows || []).map((item) => ({
+      if (insertResult.error) {
+        throw new Error(insertResult.error.message);
+      }
+
+      insertedItems = (insertResult.data || []).map((item) => ({
         id: item.id,
         projectId: item.project_id,
         sourceDocumentId: item.source_document_id,
         extractionJobId: item.extraction_job_id || undefined,
         rawExtractedData: item.raw_extracted_data || {},
+        originalExtractedValues: item.original_extracted_values || item.raw_extracted_data?.originalExtractedValues || {},
+        builderEditedValues: item.builder_edited_values || item.raw_extracted_data?.builderEditedValues || {},
+        itemType: item.item_type || item.raw_extracted_data?.itemType || undefined,
         productName: item.product_name || undefined,
+        manufacturer: item.manufacturer || item.raw_extracted_data?.manufacturer || undefined,
         brand: item.brand || undefined,
         model: item.model || undefined,
+        aiSuggestedCategory: item.ai_suggested_category || item.raw_extracted_data?.aiSuggestedCategory || undefined,
+        builderApprovedCategory: item.builder_approved_category || item.raw_extracted_data?.builderApprovedCategory || undefined,
         category: item.category || undefined,
+        supplierId: item.supplier_id || undefined,
+        supplierName: item.supplier_name || item.raw_extracted_data?.supplierName || undefined,
         supplier: item.supplier || undefined,
+        supplierSku: item.supplier_sku || item.raw_extracted_data?.supplierSku || undefined,
         location: item.location || undefined,
+        quantity: item.quantity || item.raw_extracted_data?.quantity || undefined,
+        variantOrFinish: item.variant_or_finish || item.raw_extracted_data?.variantOrFinish || undefined,
         warrantyText: item.warranty_text || undefined,
         maintenanceText: item.maintenance_text || undefined,
+        careGuidanceSourceType: item.care_guidance_source_type || item.raw_extracted_data?.careGuidanceSourceType || undefined,
+        careGuidanceSourceLabel: item.care_guidance_source_label || item.raw_extracted_data?.careGuidanceSourceLabel || undefined,
+        careGuidanceReviewRequired: item.care_guidance_review_required || undefined,
+        warrantySourceVersionId: item.warranty_source_version_id || undefined,
+        manualSourceVersionId: item.manual_source_version_id || undefined,
+        careGuidanceVersionId: item.care_guidance_version_id || undefined,
+        identityFingerprint: item.identity_fingerprint || undefined,
+        parentExtractedItemId: item.parent_extracted_item_id || undefined,
+        sourceQuoteDocumentId: item.source_quote_document_id || undefined,
+        quoteReferenceText: item.quote_reference_text || item.raw_extracted_data?.quoteReferenceText || undefined,
+        quoteReferenceStatus: item.quote_reference_status || item.raw_extracted_data?.quoteReferenceStatus || undefined,
+        sourcePage: item.source_page || undefined,
+        sourceSection: item.source_section || undefined,
+        sourceSnippet: item.source_snippet || undefined,
         confidenceScore: item.confidence_score,
         matchStatus: item.match_status,
         reviewStatus: item.review_status,
@@ -1690,12 +2223,25 @@ async function processSupabaseDocumentExtractionJob(
     }
 
     let matchedItemCount = 0;
+    let matchedItems = insertedItems;
 
     if (insertedItems.length > 0) {
       const candidates = await getSupabaseVerifiedProductCandidates(context);
       const matches = matchExtractedItemsToVerifiedProducts(insertedItems, candidates);
       matchedItemCount = matches.filter((match) => match.matchedProductId).length;
       await applySupabaseProductMatches(context, matches);
+      const matchByItemId = new Map(matches.map((match) => [match.extractedItemId, match]));
+      matchedItems = insertedItems.map((item) => {
+        const match = matchByItemId.get(item.id);
+        return match
+          ? {
+              ...item,
+              matchStatus: match.matchStatus,
+              reviewStatus: match.reviewStatus,
+              matchedProductId: match.matchedProductId,
+            }
+          : item;
+      });
     }
 
     const completedAt = new Date().toISOString();
@@ -1712,7 +2258,9 @@ async function processSupabaseDocumentExtractionJob(
       redaction: extraction.redaction,
       cacheHitCount: matchedItemCount,
     });
-    const sourceCandidateBreakdown = getSourceEnrichmentCandidateBreakdown(insertedItems);
+    const sourceCandidateBreakdown = getSourceEnrichmentCandidateBreakdown(
+      insertedItems.filter(isConfirmedUnknownForSourceSearch),
+    );
     const cloudflarePipeline = await dispatchDryRunSourceEnrichmentJob({
       projectId: input.document.projectId,
       extractionJobId: activeJobId,
@@ -1727,8 +2275,10 @@ async function processSupabaseDocumentExtractionJob(
       },
       cloudflarePipeline,
     };
+    const nextJobStatus = getWorkflowJobStatusForItems(matchedItems);
+    const nextDocumentStatus = nextJobStatus === "package_ready" ? "package_ready" : "needs_review";
     const completionUpdate = {
-      status: "completed",
+      status: nextJobStatus,
       completed_at: completedAt,
       usage_metrics: usageMetricsWithPipeline,
       redaction_summary: usageMetrics.redaction || {},
@@ -1746,7 +2296,7 @@ async function processSupabaseDocumentExtractionJob(
     }
     await context.supabase
       .from("uploaded_documents")
-      .update({ processing_status: "completed" })
+      .update({ processing_status: nextDocumentStatus })
       .eq("id", input.document.id);
     await insertWorkflowAuditLog(context, {
       projectId: input.document.projectId,
@@ -1757,6 +2307,7 @@ async function processSupabaseDocumentExtractionJob(
         uploaded_document_id: input.document.id,
         extracted_item_count: extractedItems.length,
         matched_item_count: matchedItemCount,
+        next_job_status: nextJobStatus,
         extractor: extraction.extractor,
         usage: usageMetricsWithPipeline,
         document_text: documentTextMetadata,
@@ -1802,7 +2353,7 @@ async function processLocalDocumentExtractionJob(input: {
     const job = await saveLocalDocumentExtractionJob({
       projectId: input.document.projectId,
       uploadedDocumentId: input.document.id,
-      status: "queued",
+      status: "uploaded",
     });
     jobId = job.id;
   }
@@ -1825,11 +2376,9 @@ async function processLocalDocumentExtractionJob(input: {
     let documentTextMetadata: Record<string, unknown> = {};
 
     if (input.bytes) {
-      const extractedText = await extractDocumentText({
+      const extractedText = await prepareWorkflowDocumentContext({
         bytes: input.bytes,
-        fileName: input.document.originalFilename,
-        fileType: input.document.fileType,
-        mimeType: input.document.mimeType,
+        document: input.document,
       });
       documentText = extractedText.text;
       documentTextMetadata = extractedText.metadata;
@@ -1839,6 +2388,7 @@ async function processLocalDocumentExtractionJob(input: {
       jobId: activeJobId,
       document: input.document,
       documentText,
+      documentContextMetadata: documentTextMetadata,
     });
     const initialUsageMetrics = buildExtractionUsageMetrics({
       items: extraction.items,
@@ -1871,6 +2421,18 @@ async function processLocalDocumentExtractionJob(input: {
       matchConfidenceScore: match.matchConfidenceScore,
       matchReason: match.matchReason,
     })));
+    const matchByItemId = new Map(matches.map((match) => [match.extractedItemId, match]));
+    const matchedItems = insertedItems.map((item) => {
+      const match = matchByItemId.get(item.id);
+      return match
+        ? {
+            ...item,
+            matchStatus: match.matchStatus,
+            reviewStatus: match.reviewStatus,
+            matchedProductId: match.matchedProductId,
+          }
+        : item;
+    });
     const completedAt = new Date().toISOString();
     const usageMetrics = buildExtractionUsageMetrics({
       items: extractedItems,
@@ -1885,14 +2447,17 @@ async function processLocalDocumentExtractionJob(input: {
       redaction: extraction.redaction,
       cacheHitCount: matchedItemCount,
     });
-    const sourceCandidateBreakdown = getSourceEnrichmentCandidateBreakdown(insertedItems);
+    const sourceCandidateBreakdown = getSourceEnrichmentCandidateBreakdown(
+      insertedItems.filter(isConfirmedUnknownForSourceSearch),
+    );
     const cloudflarePipeline = await dispatchDryRunSourceEnrichmentJob({
       projectId: input.document.projectId,
       extractionJobId: activeJobId,
       sourceCandidates: sourceCandidateBreakdown.candidates,
     });
+    const nextJobStatus = getWorkflowJobStatusForItems(matchedItems);
     await updateLocalDocumentExtractionJob(activeJobId, {
-      status: "completed",
+      status: nextJobStatus,
       completedAt,
       usageMetrics: {
         ...usageMetrics,
@@ -1904,7 +2469,10 @@ async function processLocalDocumentExtractionJob(input: {
         cloudflarePipeline,
       },
     });
-    await updateLocalUploadedDocumentStatus(input.document.id, "completed");
+    await updateLocalUploadedDocumentStatus(
+      input.document.id,
+      nextJobStatus === "package_ready" ? "package_ready" : "needs_review",
+    );
   } catch (error) {
     await updateLocalDocumentExtractionJob(activeJobId, {
       status: "failed",
@@ -1967,6 +2535,7 @@ export async function createDocumentAction(formData: FormData) {
           file_type: upload.fileType,
           mime_type: upload.type,
           storage_path: storagePath,
+          workflow_role: "specification",
           processing_status: "uploaded",
           uploaded_by: context.userId,
         })
@@ -2032,6 +2601,7 @@ export async function createDocumentAction(formData: FormData) {
             fileType: upload.fileType,
             mimeType: upload.type,
             storagePath,
+            workflowRole: "specification",
           },
         });
       }
@@ -2044,6 +2614,7 @@ export async function createDocumentAction(formData: FormData) {
       fileType: upload.fileType,
       mimeType: upload.type,
       storagePath,
+      workflowRole: "specification",
       processingStatus: "uploaded",
       uploadedBy: "local-scaffold",
     });
@@ -2056,6 +2627,7 @@ export async function createDocumentAction(formData: FormData) {
         fileType: uploadedDocument.fileType,
         mimeType: uploadedDocument.mimeType,
         storagePath: uploadedDocument.storagePath,
+        workflowRole: uploadedDocument.workflowRole,
       },
     });
   }
@@ -2095,7 +2667,7 @@ export async function retryDocumentExtractionJobAction(formData: FormData) {
 
     const { data: document, error: documentError } = await context.supabase
       .from("uploaded_documents")
-      .select("id,project_id,original_filename,file_type,mime_type,storage_path")
+      .select("id,project_id,original_filename,file_type,mime_type,storage_path,workflow_role,parent_extracted_item_id")
       .eq("id", job.uploaded_document_id)
       .single();
 
@@ -2124,6 +2696,8 @@ export async function retryDocumentExtractionJobAction(formData: FormData) {
         fileType: document.file_type || undefined,
         mimeType: document.mime_type,
         storagePath: document.storage_path,
+        workflowRole: document.workflow_role || "specification",
+        parentExtractedItemId: document.parent_extracted_item_id || undefined,
       },
     });
   } else {
@@ -2160,6 +2734,8 @@ export async function retryDocumentExtractionJobAction(formData: FormData) {
         fileType: document.fileType,
         mimeType: document.mimeType,
         storagePath: document.storagePath,
+        workflowRole: document.workflowRole,
+        parentExtractedItemId: document.parentExtractedItemId,
       },
     });
   }
@@ -2185,10 +2761,36 @@ export async function approveWorkflowItemAction(formData: FormData) {
   });
 }
 
+function formatCareGuidanceSourceLabel(sourceType?: string | null) {
+  const labels: Record<string, string> = {
+    manufacturer: "Manufacturer guidance",
+    supplier: "Supplier guidance",
+    builder_supplied: "Builder supplied guidance",
+    general_ai: "General AI care guidance",
+    unknown: "Care guidance",
+  };
+
+  return labels[sourceType || "unknown"] || "Care guidance";
+}
+
+function getWorkflowRoleForSupportingDocument(documentKind: string): UploadedDocumentWorkflowRole {
+  const normalized = documentKind.toLowerCase().replace(/[^a-z0-9]+/g, "_");
+
+  if (normalized.includes("quote")) return "quote";
+  if (normalized.includes("invoice")) return "invoice";
+  if (normalized.includes("schedule")) return "supplier_schedule";
+  if (normalized.includes("manual")) return "manual";
+  if (normalized.includes("warranty")) return "warranty";
+  if (normalized.includes("photo") || normalized.includes("image")) return "photo";
+  return "other";
+}
+
 export async function editWorkflowItemAction(formData: FormData) {
   const itemId = getRequired(formData, "itemId");
   const productName = getRequired(formData, "productName");
   const category = getOptional(formData, "category");
+  const supplier = getOptional(formData, "supplier");
+  const careGuidanceSourceType = getOptional(formData, "careGuidanceSourceType") as ExtractedWorkflowItem["careGuidanceSourceType"] | null;
 
   await reviewWorkflowItem(itemId, {
     actionType: "edited",
@@ -2197,24 +2799,48 @@ export async function editWorkflowItemAction(formData: FormData) {
     metadata: {
       edited_fields: [
         "product_name",
+        "manufacturer",
         "brand",
         "model",
-        "category",
+        "builder_approved_category",
         "supplier",
+        "supplier_sku",
+        "quantity",
+        "variant_or_finish",
+        "colour",
         "location",
+        "care_guidance_source_type",
         "warranty_text",
         "maintenance_text",
       ],
+      variation: {
+        quantity: getOptional(formData, "quantity"),
+        variant_or_finish: getOptional(formData, "variantOrFinish"),
+        colour: getOptional(formData, "colour"),
+      },
+      care_guidance_source_type: getOptional(formData, "careGuidanceSourceType"),
+      category_override: {
+        approved_category: category,
+      },
     },
     itemUpdate: {
       productName,
+      manufacturer: getOptional(formData, "manufacturer") || getOptional(formData, "brand"),
       brand: getOptional(formData, "brand"),
       model: getOptional(formData, "model"),
       category,
-      supplier: getOptional(formData, "supplier"),
-      location: getOptional(formData, "location"),
+      builderApprovedCategory: category,
+        supplierName: supplier,
+        supplier,
+        supplierSku: getOptional(formData, "supplierSku"),
+        location: getOptional(formData, "location"),
+      quantity: getOptional(formData, "quantity"),
+      variantOrFinish: getOptional(formData, "variantOrFinish"),
       warrantyText: getOptional(formData, "warrantyText"),
       maintenanceText: getOptional(formData, "maintenanceText"),
+      careGuidanceSourceType,
+      careGuidanceSourceLabel: getOptional(formData, "careGuidanceSourceLabel") || formatCareGuidanceSourceLabel(careGuidanceSourceType),
+      careGuidanceReviewRequired: careGuidanceSourceType === "general_ai",
       reviewStatus: "edited_by_builder",
       approvedAt: new Date().toISOString(),
       approvedBy: "__current_user__",
@@ -2267,6 +2893,8 @@ export async function markWorkflowItemBuilderSuppliedAction(formData: FormData) 
 
 export async function uploadWorkflowItemSupportingDocumentAction(formData: FormData) {
   const itemId = getRequired(formData, "itemId");
+  const documentKind = getOptional(formData, "documentKind") || "supporting_document";
+  const workflowRole = getWorkflowRoleForSupportingDocument(documentKind);
   const notes = getOptional(formData, "notes") || "Builder uploaded supporting evidence for review.";
   const context = await getBuilderContext();
   let upload: Awaited<ReturnType<typeof prepareProjectDocument>>;
@@ -2298,12 +2926,63 @@ export async function uploadWorkflowItemSupportingDocumentAction(formData: FormD
       actionType: "supporting_document_uploaded",
       nextReviewStatus: item.reviewStatus,
       notes,
+      itemUpdate: workflowRole === "quote" || workflowRole === "invoice" || workflowRole === "supplier_schedule"
+        ? {
+            quoteReferenceStatus: "quote_uploaded",
+          }
+        : undefined,
       metadata: {
+        document_kind: documentKind,
+        workflow_role: workflowRole,
         file_name: upload.fileName,
         file_type: upload.fileType,
         mime_type: upload.type,
         size_bytes: upload.size,
         storage_path: upload.storagePath,
+      },
+    });
+
+    const { data: uploadedDocument, error: uploadedDocumentError } = await context.supabase
+      .from("uploaded_documents")
+      .insert({
+        project_id: item.projectId,
+        original_filename: upload.fileName,
+        file_type: upload.fileType,
+        mime_type: upload.type,
+        storage_path: upload.storagePath,
+        workflow_role: workflowRole,
+        parent_extracted_item_id: item.id,
+        processing_status: "uploaded",
+        uploaded_by: context.userId,
+      })
+      .select("id")
+      .single();
+
+    if (uploadedDocumentError || !uploadedDocument) {
+      redirectWorkflowReviewError("create-uploaded-document-failed");
+    }
+
+    if (workflowRole === "quote" || workflowRole === "invoice" || workflowRole === "supplier_schedule") {
+      await context.supabase.from("supplier_documents").insert({
+        project_id: item.projectId,
+        uploaded_document_id: uploadedDocument.id,
+        source_extracted_item_id: item.id,
+        document_role: workflowRole,
+        client_visible: false,
+      });
+    }
+
+    await processSupabaseDocumentExtractionJob(context, {
+      bytes: upload.bytes,
+      document: {
+        id: uploadedDocument.id,
+        projectId: item.projectId,
+        originalFilename: upload.fileName,
+        fileType: upload.fileType,
+        mimeType: upload.type,
+        storagePath: upload.storagePath,
+        workflowRole,
+        parentExtractedItemId: item.id,
       },
     });
   } else {
@@ -2318,12 +2997,44 @@ export async function uploadWorkflowItemSupportingDocumentAction(formData: FormD
       actionType: "supporting_document_uploaded",
       nextReviewStatus: item.reviewStatus,
       notes,
+      itemUpdate: workflowRole === "quote" || workflowRole === "invoice" || workflowRole === "supplier_schedule"
+        ? {
+            quoteReferenceStatus: "quote_uploaded",
+          }
+        : undefined,
       metadata: {
+        document_kind: documentKind,
+        workflow_role: workflowRole,
         file_name: upload.fileName,
         file_type: upload.fileType,
         mime_type: upload.type,
         size_bytes: upload.size,
         storage_path: upload.storagePath,
+      },
+    });
+
+    const uploadedDocument = await saveLocalUploadedDocument({
+      projectId: item.projectId,
+      originalFilename: upload.fileName,
+      fileType: upload.fileType,
+      mimeType: upload.type,
+      storagePath: upload.storagePath,
+      workflowRole,
+      parentExtractedItemId: item.id,
+      processingStatus: "uploaded",
+      uploadedBy: "local-scaffold",
+    });
+    await processLocalDocumentExtractionJob({
+      bytes: upload.bytes,
+      document: {
+        id: uploadedDocument.id,
+        projectId: uploadedDocument.projectId,
+        originalFilename: uploadedDocument.originalFilename,
+        fileType: uploadedDocument.fileType,
+        mimeType: uploadedDocument.mimeType,
+        storagePath: uploadedDocument.storagePath,
+        workflowRole,
+        parentExtractedItemId: item.id,
       },
     });
   }

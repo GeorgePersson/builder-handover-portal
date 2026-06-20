@@ -1,51 +1,32 @@
 import type { ExtractedWorkflowItem, UploadedProjectDocument } from "@/lib/document-workflow";
+import { normalizeOutlineSpecExtractionToWorkflowItems } from "@/lib/ai/outline-spec-normalize";
+import {
+  outlineSpecItemsJsonSchema,
+  type OutlineSpecExtraction,
+} from "@/lib/extraction/outline-spec-schema";
 import { redactDocumentText, type DocumentRedactionSummary } from "@/lib/server/document-redaction";
 import { attachIdentityEvidence, type OpenAiTokenUsage } from "@/lib/server/extraction-usage";
 import { extractPdfText } from "@/lib/server/pdf-extract";
 
 type MockExtractionInput = {
   jobId: string;
-  document: Pick<UploadedProjectDocument, "id" | "projectId" | "originalFilename" | "fileType" | "mimeType">;
+  document: Pick<UploadedProjectDocument, "id" | "projectId" | "originalFilename" | "fileType" | "mimeType"> & {
+    parentExtractedItemId?: string;
+    workflowRole?: UploadedProjectDocument["workflowRole"];
+  };
   documentText?: string;
+  documentContextMetadata?: Record<string, unknown>;
 };
 
 type MockExtractedItem = Omit<ExtractedWorkflowItem, "id" | "createdAt" | "updatedAt">;
-type AiExtractedItem = {
-  itemType?: "product" | "document" | "maintenance";
-  productName?: string;
-  brand?: string;
-  model?: string;
-  category?: string;
-  supplier?: string;
-  location?: string;
-  warrantyText?: string;
-  maintenanceText?: string;
-  sourceEvidenceText?: string;
-  missingFields?: string[];
-  builderInfoNeeded?: string[];
-  contextClassification?:
-    | "source_ready"
-    | "builder_input_needed"
-    | "project_document"
-    | "generic_allowance"
-    | "admin_or_contract"
-    | "not_handover_relevant";
-  classificationReason?: string;
-  confidenceScore?: number;
-};
 type OpenAiExtractionCallResult = {
-  items: AiExtractedItem[];
+  extraction: OutlineSpecExtraction;
   tokenUsage: OpenAiTokenUsage;
 };
 
 const maxAiInputCharacters = 24000;
 const maxAiChunkRows = 25;
 const defaultOpenAiExtractionModel = "gpt-5.1-mini";
-
-function clampConfidence(value: unknown) {
-  const score = typeof value === "number" && Number.isFinite(value) ? Math.round(value) : 35;
-  return Math.min(100, Math.max(0, score));
-}
 
 function getTextFromResponse(response: Record<string, unknown>) {
   if (typeof response.output_text === "string") {
@@ -136,7 +117,8 @@ function buildPrompt(input: MockExtractionInput, sourceText: string, chunkIndex:
     "Use `project_document` for certificates, manuals, warranties, producer statements, selections, or rows that ask the builder to upload another document or quote.",
     "Use `generic_allowance`, `admin_or_contract`, or `not_handover_relevant` rather than forcing non-product text into source lookup.",
     "Every item must be builder-reviewable. Do not invent warranty or maintenance details.",
-    "If details are missing, leave fields empty, list missingFields and builderInfoNeeded, and use a lower confidence score.",
+    "If details are missing, leave fields empty, list MissingFields and BuilderQuestions, and use a lower confidence score.",
+    "When the row references a quote, invoice, supplier schedule, or selection schedule, classify it as `builder_input_needed` or `project_document`, set NeedsBuilderContext true, and do not mark it search-ready.",
     "",
     `Filename: ${input.document.originalFilename}`,
     `MIME type: ${input.document.mimeType}`,
@@ -170,80 +152,11 @@ async function callOpenAiExtraction(input: {
         },
       ],
       text: {
-        format: {
-          type: "json_schema",
-          name: "builder_handover_extraction",
+          format: {
+            type: "json_schema",
+          name: "outline_spec_extraction",
           strict: true,
-          schema: {
-            type: "object",
-            additionalProperties: false,
-            properties: {
-              items: {
-                type: "array",
-                maxItems: 30,
-                items: {
-                  type: "object",
-                  additionalProperties: false,
-                  properties: {
-                    itemType: {
-                      type: "string",
-                      enum: ["product", "document", "maintenance"],
-                    },
-                    productName: { type: "string" },
-                    brand: { type: "string" },
-                    model: { type: "string" },
-                    category: { type: "string" },
-                    supplier: { type: "string" },
-                    location: { type: "string" },
-                    warrantyText: { type: "string" },
-                    maintenanceText: { type: "string" },
-                    sourceEvidenceText: { type: "string" },
-                    missingFields: {
-                      type: "array",
-                      maxItems: 8,
-                      items: { type: "string" },
-                    },
-                    builderInfoNeeded: {
-                      type: "array",
-                      maxItems: 8,
-                      items: { type: "string" },
-                    },
-                    contextClassification: {
-                      type: "string",
-                      enum: [
-                        "source_ready",
-                        "builder_input_needed",
-                        "project_document",
-                        "generic_allowance",
-                        "admin_or_contract",
-                        "not_handover_relevant",
-                      ],
-                    },
-                    classificationReason: { type: "string" },
-                    confidenceScore: { type: "number" },
-                  },
-                  required: [
-                    "itemType",
-                    "productName",
-                    "brand",
-                    "model",
-                    "category",
-                    "supplier",
-                    "location",
-                    "warrantyText",
-                    "maintenanceText",
-                    "sourceEvidenceText",
-                    "missingFields",
-                    "builderInfoNeeded",
-                    "contextClassification",
-                    "classificationReason",
-                    "confidenceScore",
-                  ],
-                },
-              },
-            },
-            required: ["items"],
-          },
+          schema: outlineSpecItemsJsonSchema,
         },
       },
     }),
@@ -261,69 +174,21 @@ async function callOpenAiExtraction(input: {
     throw new Error("OpenAI extraction returned no structured text.");
   }
 
-  let parsed: { items?: AiExtractedItem[] };
+  let parsed: OutlineSpecExtraction;
   try {
-    parsed = JSON.parse(text) as { items?: AiExtractedItem[] };
+    parsed = JSON.parse(text) as OutlineSpecExtraction;
   } catch {
     throw new Error("OpenAI extraction returned malformed JSON.");
   }
 
   return {
-    items: Array.isArray(parsed.items) ? parsed.items : [],
-    tokenUsage,
-  };
-}
-
-function cleanList(value: unknown): string[] {
-  return Array.isArray(value)
-    ? value
-        .map((item) => (typeof item === "string" ? item.trim() : ""))
-        .filter(Boolean)
-        .slice(0, 8)
-    : [];
-}
-
-function mapAiItemToWorkflowItem(
-  item: AiExtractedItem,
-  input: MockExtractionInput,
-): MockExtractedItem {
-  const confidenceScore = clampConfidence(item.confidenceScore);
-  const productName = item.productName?.trim() || "AI extracted item for builder review";
-  const missingFields = cleanList(item.missingFields);
-  const builderInfoNeeded = cleanList(item.builderInfoNeeded);
-  const contextClassification = item.contextClassification || "builder_input_needed";
-  const classificationReason = item.classificationReason?.trim()
-    || "Document context needs builder/admin review before homeowner use.";
-
-  return {
-    projectId: input.document.projectId,
-    sourceDocumentId: input.document.id,
-    extractionJobId: input.jobId,
-    rawExtractedData: {
-      extractor: "openai_phase_4",
-      sourceFilename: input.document.originalFilename,
-      sourceMimeType: input.document.mimeType,
-      item,
-      contextSchema: {
-        itemType: item.itemType || "product",
-        sourceEvidenceText: item.sourceEvidenceText?.trim() || undefined,
-        missingFields,
-        builderInfoNeeded,
-        contextClassification,
-        classificationReason,
-      },
+    extraction: {
+      SpecificationNumber: parsed.SpecificationNumber || "",
+      Address: parsed.Address || "",
+      Date: parsed.Date || "",
+      Items: Array.isArray(parsed.Items) ? parsed.Items : [],
     },
-    productName,
-    brand: item.brand?.trim() || undefined,
-    model: item.model?.trim() || undefined,
-    category: item.category?.trim() || "Product",
-    supplier: item.supplier?.trim() || undefined,
-    location: item.location?.trim() || undefined,
-    warrantyText: item.warrantyText?.trim() || undefined,
-    maintenanceText: item.maintenanceText?.trim() || undefined,
-    confidenceScore,
-    matchStatus: confidenceScore >= 80 ? "needs_review" : confidenceScore >= 55 ? "low_confidence" : "unmatched",
-    reviewStatus: confidenceScore >= 80 ? "needs_review" : confidenceScore >= 55 ? "low_confidence" : "unmatched",
+    tokenUsage,
   };
 }
 
@@ -358,28 +223,61 @@ export function runMockDocumentExtraction(input: MockExtractionInput): MockExtra
   const category = getDocumentCategory(input.document);
   const baseRawData = {
     extractor: "mock_phase_3",
+    extractorSchema: "outline_spec_v1",
     sourceFilename: input.document.originalFilename,
     sourceMimeType: input.document.mimeType,
+    sourceWorkflowRole: input.document.workflowRole || "specification",
     note: "Placeholder extraction output for workflow scaffolding only.",
   };
+  const isQuote = input.document.workflowRole === "quote" ||
+    input.document.workflowRole === "invoice" ||
+    input.document.workflowRole === "supplier_schedule" ||
+    /\b(quote|invoice|supplier|schedule)\b/i.test(input.document.originalFilename);
 
   return [
     {
       projectId: input.document.projectId,
       sourceDocumentId: input.document.id,
       extractionJobId: input.jobId,
+      parentExtractedItemId: input.document.parentExtractedItemId,
+      sourceQuoteDocumentId: isQuote ? input.document.id : undefined,
       rawExtractedData: {
         ...baseRawData,
         field: "document_summary",
+        contextSchema: {
+          itemType: "document",
+          missingFields: isQuote ? ["Exact products from quote"] : ["Builder review"],
+          builderInfoNeeded: isQuote ? ["Confirm products, warranty, and care details from this quote."] : [],
+          contextClassification: isQuote ? "builder_input_needed" : "project_document",
+          classificationReason: isQuote
+            ? "Supplier quote uploaded for extraction and builder clarification."
+            : "Project document requires builder review before homeowner use.",
+        },
       },
+      originalExtractedValues: {
+        itemType: "document",
+        productName: `${category} from ${input.document.originalFilename}`,
+        aiSuggestedCategory: category,
+        builderApprovedCategory: category,
+        careGuidanceSourceType: "builder_supplied",
+        quoteReferenceStatus: isQuote ? "quote_extracted" : "not_applicable",
+      },
+      builderEditedValues: {},
+      itemType: "document",
       productName: `${category} from ${input.document.originalFilename}`,
       brand: undefined,
       model: undefined,
+      aiSuggestedCategory: category,
+      builderApprovedCategory: category,
       category,
       supplier: undefined,
       location: "To confirm",
       warrantyText: category === "Warranty" ? "Warranty terms detected for builder review." : undefined,
       maintenanceText: "Maintenance or handover relevance requires builder review.",
+      careGuidanceSourceType: "builder_supplied",
+      careGuidanceSourceLabel: "Builder supplied project document",
+      quoteReferenceText: isQuote ? input.document.originalFilename : undefined,
+      quoteReferenceStatus: isQuote ? "quote_extracted" : "not_applicable",
       confidenceScore: 45,
       matchStatus: "unmatched",
       reviewStatus: "needs_review",
@@ -455,8 +353,16 @@ export async function runDocumentExtraction(input: MockExtractionInput): Promise
   const model = process.env.OPENAI_EXTRACTION_MODEL || defaultOpenAiExtractionModel;
   const redacted = redactDocumentText(input.documentText || "");
   const chunks = getDocumentTextChunks(redacted.text);
+  const isQuoteLikeDocument = input.document.workflowRole === "quote" ||
+    input.document.workflowRole === "invoice" ||
+    input.document.workflowRole === "supplier_schedule";
   let tokenUsage: OpenAiTokenUsage = {};
-  const parsedItems: AiExtractedItem[] = [];
+  const mergedExtraction: OutlineSpecExtraction = {
+    SpecificationNumber: "",
+    Address: "",
+    Date: "",
+    Items: [],
+  };
 
   for (let index = 0; index < chunks.length; index += 1) {
     const result = await callOpenAiExtraction({
@@ -466,10 +372,32 @@ export async function runDocumentExtraction(input: MockExtractionInput): Promise
     });
 
     tokenUsage = addTokenUsage(tokenUsage, result.tokenUsage);
-    parsedItems.push(...result.items);
+    mergedExtraction.SpecificationNumber ||= result.extraction.SpecificationNumber;
+    mergedExtraction.Address ||= result.extraction.Address;
+    mergedExtraction.Date ||= result.extraction.Date;
+    mergedExtraction.Items.push(...result.extraction.Items);
   }
 
-  const items = attachIdentityEvidence(parsedItems.map((item) => mapAiItemToWorkflowItem(item, input)));
+  const items = attachIdentityEvidence(normalizeOutlineSpecExtractionToWorkflowItems({
+    extraction: mergedExtraction,
+    projectId: input.document.projectId,
+    sourceDocumentId: input.document.id,
+    extractionJobId: input.jobId,
+    sourceFilename: input.document.originalFilename,
+    sourceMimeType: input.document.mimeType,
+    parentExtractedItemId: input.document.parentExtractedItemId,
+    sourceQuoteDocumentId: isQuoteLikeDocument ? input.document.id : undefined,
+  }).map((item) => ({
+    ...item,
+    rawExtractedData: {
+      ...item.rawExtractedData,
+      extractor: "openai_phase_4",
+      documentContext: input.documentContextMetadata || {},
+    },
+    quoteReferenceStatus: isQuoteLikeDocument
+      ? "quote_extracted"
+      : item.quoteReferenceStatus,
+  })));
 
   return {
     items,
