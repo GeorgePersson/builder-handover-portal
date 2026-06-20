@@ -53,6 +53,7 @@ import {
 import type {
   DocumentDownloadEvent,
   ExtractedHandoverItem,
+  HandoverOpenEvent,
   HandoverDocument,
   MaintenanceTask,
   ProductVersion,
@@ -73,6 +74,7 @@ type ProjectsWorkspaceProps = {
     projectCost: number;
   };
   downloadEvents: DocumentDownloadEvent[];
+  handoverOpenEvents: HandoverOpenEvent[];
   documents: HandoverDocument[];
   projects: Project[];
   specifications: SpecificationUpload[];
@@ -92,6 +94,15 @@ const adminReviewStatuses = new Set(["admin_review", "edited", "proposed"]);
 const unresolvedWorkflowReviewStatuses = new Set(["needs_review", "low_confidence", "unmatched"]);
 const approvedWorkflowReviewStatuses = new Set(["verified_match", "approved", "edited_by_builder", "builder_supplied"]);
 
+type ContextSchemaMetadata = {
+  itemType?: string;
+  sourceEvidenceText?: string;
+  missingFields: string[];
+  builderInfoNeeded: string[];
+  contextClassification?: string;
+  classificationReason?: string;
+};
+
 const projectTypeOptions = [
   { label: "New residential build", value: "New residential build" },
   { label: "Full renovation", value: "Full renovation" },
@@ -108,6 +119,7 @@ export function ProjectsWorkspace({
   inviteToken,
   creditStatus,
   downloadEvents,
+  handoverOpenEvents,
   documents,
   projects,
   specifications,
@@ -139,6 +151,10 @@ export function ProjectsWorkspace({
         const tasks = maintenanceTasks.filter((task) => task.projectId === project.id);
         const projectDocuments = documents.filter((document) => document.projectId === project.id);
         const projectDownloadEvents = downloadEvents.filter((event) => event.projectId === project.id);
+        const projectHandoverOpenEvents = handoverOpenEvents.filter((event) => event.projectId === project.id);
+        const firstHandoverOpenEvent = [...projectHandoverOpenEvents].sort((left, right) =>
+          left.firstOpenedAt.localeCompare(right.firstOpenedAt),
+        )[0];
         const workflowDocuments = uploadedDocuments.filter((document) => document.projectId === project.id);
         const workflowJobs = extractionJobs.filter((job) => job.projectId === project.id);
         const workflowItems = extractedWorkflowItems.filter((item) => item.projectId === project.id);
@@ -149,6 +165,8 @@ export function ProjectsWorkspace({
           project,
           awaitingAdmin,
           downloadEvents: projectDownloadEvents,
+          firstHandoverOpenEvent,
+          handoverOpenEvents: projectHandoverOpenEvents,
           documents: projectDocuments,
           readyItems,
           specifications: specifications.filter((specification) => specification.projectId === project.id),
@@ -162,6 +180,7 @@ export function ProjectsWorkspace({
     [
       documents,
       downloadEvents,
+      handoverOpenEvents,
       extractedItems,
       extractedWorkflowItems,
       extractionJobs,
@@ -317,7 +336,7 @@ export function ProjectsWorkspace({
           </div>
 
           <div className="divide-y divide-slate-100">
-            {projectSnapshots.map(({ project, awaitingAdmin, readyItems, specifications: projectSpecs, tasks }) => (
+            {projectSnapshots.map(({ project, awaitingAdmin, firstHandoverOpenEvent, readyItems, specifications: projectSpecs, tasks }) => (
               <article className="grid gap-4 p-5 xl:grid-cols-[1fr_auto]" key={project.id}>
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -337,6 +356,9 @@ export function ProjectsWorkspace({
                     <span className="rounded-md bg-slate-100 px-2.5 py-1">{readyItems.length} package-ready</span>
                     <span className="rounded-md bg-slate-100 px-2.5 py-1">{tasks.length ? `${tasks.length} maintenance tasks` : "No maintenance tasks"}</span>
                     <span className="rounded-md bg-slate-100 px-2.5 py-1">Invite: {formatInviteStatus(project.clientInviteStatus, project.clientInvitedAt)}</span>
+                    <span className="rounded-md bg-slate-100 px-2.5 py-1">
+                      {project.publishedAt ? firstOpenLabel(firstHandoverOpenEvent) : "Not published yet"}
+                    </span>
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2 xl:justify-end">
@@ -506,6 +528,8 @@ function ProjectEditPanel({
   snapshot: {
     awaitingAdmin: ExtractedHandoverItem[];
     downloadEvents: DocumentDownloadEvent[];
+    firstHandoverOpenEvent?: HandoverOpenEvent;
+    handoverOpenEvents: HandoverOpenEvent[];
     documents: HandoverDocument[];
     readyItems: ExtractedHandoverItem[];
     specifications: SpecificationUpload[];
@@ -561,6 +585,14 @@ function ProjectEditPanel({
             <p className="mt-2 text-sm leading-6 text-slate-600">
               Invite status: {formatInviteStatus(project.clientInviteStatus, project.clientInvitedAt)}
             </p>
+            <p className="mt-1 text-sm leading-6 text-slate-600">
+              Handover first opened: {project.publishedAt ? firstOpenDate(snapshot.firstHandoverOpenEvent) : "Not published yet"}
+            </p>
+            {snapshot.firstHandoverOpenEvent ? (
+              <p className="mt-1 text-xs leading-5 text-slate-500">
+                Opened {snapshot.firstHandoverOpenEvent.openCount} time{snapshot.firstHandoverOpenEvent.openCount === 1 ? "" : "s"} total.
+              </p>
+            ) : null}
             <div className="mt-4 flex flex-wrap gap-2">
               {project.clientInviteStatus === "accepted" ? null : (
                 <>
@@ -693,6 +725,43 @@ function ProjectEditPanel({
                       {latestJob.errorMessage ? (
                         <p className="mt-2 text-xs leading-5 text-rose-700">{latestJob.errorMessage}</p>
                       ) : null}
+                      {(() => {
+                        const usage = getWorkflowUsageMetrics(latestJob, items);
+
+                        return usage ? (
+                          <div className="mt-3 grid gap-2 border-t border-slate-200 pt-3 text-xs text-slate-600 sm:grid-cols-2">
+                            <span>{formatUsageNumber(usage.extractedRowCount)} rows extracted</span>
+                            <span>{formatUsageNumber(usage.uniqueIdentityCount)} unique identities</span>
+                            <span>{formatUsageNumber(usage.duplicateIdentityCount)} duplicates</span>
+                            <span>
+                              {formatUsageNumber(usage.cacheHitCount)} cache hits / {formatUsageNumber(usage.cacheMissCount)} misses
+                            </span>
+                            {usage.openAiTotalTokens !== undefined ? (
+                              <span>{formatUsageNumber(usage.openAiTotalTokens)} AI tokens</span>
+                            ) : null}
+                            {usage.openAiRequestCount !== undefined ? (
+                              <span>{formatUsageNumber(usage.openAiRequestCount)} AI calls</span>
+                            ) : null}
+                            {usage.redactionReplacementCount !== undefined ? (
+                              <span>{formatUsageNumber(usage.redactionReplacementCount)} redactions</span>
+                            ) : null}
+                            {usage.estimatedOpenAiCostUsd !== undefined ? (
+                              <span>${usage.estimatedOpenAiCostUsd.toFixed(4)} estimated AI cost</span>
+                            ) : null}
+                            {usage.estimatedCostPerUniqueIdentityUsd !== undefined ? (
+                              <span>${usage.estimatedCostPerUniqueIdentityUsd.toFixed(4)} / unique item</span>
+                            ) : null}
+                            {usage.sourceEnrichableUniqueIdentityCount !== undefined ? (
+                              <span>{formatUsageNumber(usage.sourceEnrichableUniqueIdentityCount)} source-ready identities</span>
+                            ) : null}
+                            {usage.cloudflarePipeline ? (
+                              <span className="sm:col-span-2">
+                                Cloudflare dry-run: {formatCloudflarePipelineStatus(usage.cloudflarePipeline)}
+                              </span>
+                            ) : null}
+                          </div>
+                        ) : null;
+                      })()}
                       {latestJob.status === "failed" ? (
                         <form action={retryDocumentExtractionJobAction} className="mt-3">
                           <input name="jobId" type="hidden" value={latestJob.id} />
@@ -817,6 +886,7 @@ function WorkflowReviewQueue({
         <div className="mt-5 space-y-4">
           {items.map((item) => {
             const match = matches.find((candidate) => candidate.extractedItemId === item.id);
+            const contextSchema = getContextSchemaMetadata(item);
 
             return (
               <article className="rounded-lg border border-amber-200 bg-amber-50 p-4" key={item.id}>
@@ -836,6 +906,11 @@ function WorkflowReviewQueue({
                     {match?.matchReason ? (
                       <p className="mt-2 max-w-3xl text-xs leading-5 text-amber-900">{match.matchReason}</p>
                     ) : null}
+                    {contextSchema.classificationReason ? (
+                      <p className="mt-2 max-w-3xl text-xs leading-5 text-amber-900">
+                        {formatContextClassification(contextSchema.contextClassification)}: {contextSchema.classificationReason}
+                      </p>
+                    ) : null}
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <form action={approveWorkflowItemAction}>
@@ -853,11 +928,42 @@ function WorkflowReviewQueue({
                         className="inline-flex h-9 items-center rounded-md border border-emerald-200 bg-white px-3 text-xs font-semibold text-emerald-800 hover:bg-emerald-50"
                         type="submit"
                       >
-                        Builder supplied
+                        Builder supplied info
                       </button>
                     </form>
                   </div>
                 </div>
+
+                {contextSchema.missingFields.length || contextSchema.builderInfoNeeded.length || contextSchema.sourceEvidenceText ? (
+                  <div className="mt-4 grid gap-3 md:grid-cols-3">
+                    {contextSchema.missingFields.length ? (
+                      <div className="rounded-md border border-amber-200 bg-white p-3">
+                        <p className="text-xs font-semibold uppercase tracking-normal text-amber-900">Missing fields</p>
+                        <ul className="mt-2 space-y-1 text-xs leading-5 text-amber-900">
+                          {contextSchema.missingFields.map((field) => (
+                            <li key={field}>{field}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                    {contextSchema.builderInfoNeeded.length ? (
+                      <div className="rounded-md border border-cyan-200 bg-white p-3">
+                        <p className="text-xs font-semibold uppercase tracking-normal text-cyan-900">Ask builder for</p>
+                        <ul className="mt-2 space-y-1 text-xs leading-5 text-cyan-900">
+                          {contextSchema.builderInfoNeeded.map((field) => (
+                            <li key={field}>{field}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                    {contextSchema.sourceEvidenceText ? (
+                      <div className="rounded-md border border-slate-200 bg-white p-3 md:col-span-1">
+                        <p className="text-xs font-semibold uppercase tracking-normal text-slate-600">Document evidence</p>
+                        <p className="mt-2 line-clamp-4 text-xs leading-5 text-slate-700">{contextSchema.sourceEvidenceText}</p>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
 
                 <details className="mt-4 rounded-md border border-amber-200 bg-white">
                   <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-slate-800">
@@ -1313,6 +1419,130 @@ function WorkflowJobStatusPill({ status }: { status: DocumentExtractionJob["stat
   );
 }
 
+type WorkflowUsageMetrics = {
+  extractedRowCount?: number;
+  uniqueIdentityCount?: number;
+  duplicateIdentityCount?: number;
+  cacheHitCount?: number;
+  cacheMissCount?: number;
+  openAiTotalTokens?: number;
+  openAiRequestCount?: number;
+  redactionReplacementCount?: number;
+  estimatedOpenAiCostUsd?: number;
+  estimatedCostPerUniqueIdentityUsd?: number;
+  sourceEnrichableUniqueIdentityCount?: number;
+  cloudflarePipeline?: {
+    status?: string;
+    reason?: string;
+    jobId?: string;
+    candidateCount?: number;
+    batchCount?: number;
+    error?: string;
+  };
+};
+
+function getNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function getWorkflowUsageMetrics(
+  job: DocumentExtractionJob,
+  items: ExtractedWorkflowItem[],
+): WorkflowUsageMetrics | null {
+  const rawUsage = job.usageMetrics || items.find((item) => {
+    const usage = item.rawExtractedData?.usage;
+    return Boolean(usage && typeof usage === "object");
+  })?.rawExtractedData.usage;
+
+  if (!rawUsage || typeof rawUsage !== "object") {
+    return null;
+  }
+
+  const usage = rawUsage as Record<string, unknown>;
+  const sourceCandidateBreakdown = usage.sourceCandidateBreakdown && typeof usage.sourceCandidateBreakdown === "object"
+    ? usage.sourceCandidateBreakdown as Record<string, unknown>
+    : {};
+  const cloudflarePipeline = usage.cloudflarePipeline && typeof usage.cloudflarePipeline === "object"
+    ? usage.cloudflarePipeline as WorkflowUsageMetrics["cloudflarePipeline"]
+    : undefined;
+
+  return {
+    extractedRowCount: getNumber(usage.extractedRowCount),
+    uniqueIdentityCount: getNumber(usage.uniqueIdentityCount),
+    duplicateIdentityCount: getNumber(usage.duplicateIdentityCount),
+    cacheHitCount: getNumber(usage.cacheHitCount),
+    cacheMissCount: getNumber(usage.cacheMissCount),
+    openAiTotalTokens: getNumber(usage.openAiTotalTokens),
+    openAiRequestCount: getNumber(usage.openAiRequestCount),
+    redactionReplacementCount: getNumber((usage.redaction as Record<string, unknown> | undefined)?.totalReplacementCount),
+    estimatedOpenAiCostUsd: getNumber(usage.estimatedOpenAiCostUsd),
+    estimatedCostPerUniqueIdentityUsd: getNumber(usage.estimatedCostPerUniqueIdentityUsd),
+    sourceEnrichableUniqueIdentityCount: getNumber(sourceCandidateBreakdown.sourceEnrichableUniqueIdentityCount),
+    cloudflarePipeline,
+  };
+}
+
+function formatUsageNumber(value: number | undefined) {
+  return typeof value === "number" ? value.toLocaleString() : "0";
+}
+
+function formatCloudflarePipelineStatus(pipeline: NonNullable<WorkflowUsageMetrics["cloudflarePipeline"]>) {
+  if (pipeline.status === "queued") {
+    return `${pipeline.candidateCount || 0} candidates queued${pipeline.batchCount ? ` in ${pipeline.batchCount} batches` : ""}`;
+  }
+
+  if (pipeline.status === "skipped") {
+    return pipeline.reason === "not_configured" ? "not configured" : "no source-ready candidates";
+  }
+
+  if (pipeline.status === "failed") {
+    return `dispatch failed${pipeline.error ? ` (${pipeline.error})` : ""}`;
+  }
+
+  return pipeline.status || "unknown";
+}
+
+function getContextSchemaMetadata(item: ExtractedWorkflowItem): ContextSchemaMetadata {
+  const contextSchema = item.rawExtractedData?.contextSchema && typeof item.rawExtractedData.contextSchema === "object"
+    ? item.rawExtractedData.contextSchema as Record<string, unknown>
+    : {};
+  const itemPayload = item.rawExtractedData?.item && typeof item.rawExtractedData.item === "object"
+    ? item.rawExtractedData.item as Record<string, unknown>
+    : {};
+
+  return {
+    itemType: getString(contextSchema.itemType) || getString(itemPayload.itemType),
+    sourceEvidenceText: getString(contextSchema.sourceEvidenceText) || getString(itemPayload.sourceEvidenceText),
+    missingFields: getStringList(contextSchema.missingFields ?? itemPayload.missingFields),
+    builderInfoNeeded: getStringList(contextSchema.builderInfoNeeded ?? itemPayload.builderInfoNeeded),
+    contextClassification: getString(contextSchema.contextClassification) || getString(itemPayload.contextClassification),
+    classificationReason: getString(contextSchema.classificationReason) || getString(itemPayload.classificationReason),
+  };
+}
+
+function getString(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function getStringList(value: unknown) {
+  return Array.isArray(value)
+    ? value.map((item) => getString(item)).filter(Boolean).slice(0, 8)
+    : [];
+}
+
+function formatContextClassification(value?: string) {
+  const labels: Record<string, string> = {
+    source_ready: "Source-ready",
+    builder_input_needed: "Builder input needed",
+    project_document: "Project document",
+    generic_allowance: "Generic allowance",
+    admin_or_contract: "Admin or contract",
+    not_handover_relevant: "Not handover-relevant",
+  };
+
+  return value ? labels[value] || value.replaceAll("_", " ") : "Document context";
+}
+
 function WorkflowMatchStatusPill({ status }: { status: ProductMatch["matchStatus"] }) {
   const styles = {
     verified_match: "border-emerald-200 bg-emerald-50 text-emerald-800",
@@ -1382,4 +1612,12 @@ function formatInviteStatus(status?: string, invitedAt?: string) {
   }
 
   return "Not invited";
+}
+
+function firstOpenDate(event?: HandoverOpenEvent) {
+  return event ? formatDate(event.firstOpenedAt) : "Not opened yet";
+}
+
+function firstOpenLabel(event?: HandoverOpenEvent) {
+  return `First opened: ${firstOpenDate(event)}`;
 }

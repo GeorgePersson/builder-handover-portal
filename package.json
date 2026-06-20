@@ -5,6 +5,9 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "demo:generate-100-item-spec": "node scripts/generate-100-item-spec.mjs",
+    "cloudflare:dev": "npx.cmd wrangler dev --config cloudflare/handover-pipeline/wrangler.jsonc",
+    "cloudflare:deploy": "npx.cmd wrangler deploy --config cloudflare/handover-pipeline/wrangler.jsonc",
     "start": "next start",
     "lint": "eslint"
   },

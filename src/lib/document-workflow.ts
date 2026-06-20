@@ -71,6 +71,7 @@ export type DocumentExtractionJob = {
   uploadedDocumentId: string;
   status: DocumentExtractionJobStatus;
   errorMessage?: string;
+  usageMetrics?: Record<string, unknown>;
   startedAt?: string;
   completedAt?: string;
   retryCount: number;

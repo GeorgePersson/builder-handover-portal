@@ -1,7 +1,8 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { CalendarCheck2, FileText, FolderOpen, Home, PackageCheck, Send } from "lucide-react";
 import { completeMaintenanceTaskAction } from "@/lib/server/actions";
-import { getClientPortalData } from "@/lib/server/queries";
+import { getClientPortalData, recordHandoverOpen } from "@/lib/server/queries";
 import { cn, formatDate } from "@/lib/utils";
 
 export default async function ClientPortalPage({
@@ -38,6 +39,11 @@ export default async function ClientPortalPage({
   const selectedSummary =
     projectSummaries.find((summary) => summary.project.id === params.projectId) || projectSummaries[0];
   const selectedProject = selectedSummary.project;
+  const headerList = await headers();
+
+  if (selectedSummary.publishedPackage.publishedAt) {
+    await recordHandoverOpen(selectedProject.id, headerList.get("user-agent") || undefined);
+  }
 
   return (
     <main className="min-h-screen bg-slate-50 px-5 py-8 text-slate-950 sm:px-8">

@@ -12,6 +12,7 @@ import type {
   UploadedProjectDocument,
   WorkflowHandoverItem,
 } from "@/lib/document-workflow";
+import type { HandoverOpenEvent } from "@/lib/types";
 
 type LocalUploadedDocumentStore = {
   documents: UploadedProjectDocument[];
@@ -20,6 +21,7 @@ type LocalUploadedDocumentStore = {
   itemReviewActions: ItemReviewAction[];
   handoverItems: WorkflowHandoverItem[];
   handoverApprovals: HandoverApprovalRecord[];
+  handoverOpenEvents: HandoverOpenEvent[];
   productMatches: ProductMatch[];
 };
 
@@ -55,6 +57,7 @@ async function readStore(): Promise<LocalUploadedDocumentStore> {
       itemReviewActions: parsed.itemReviewActions || [],
       handoverItems: parsed.handoverItems || [],
       handoverApprovals: parsed.handoverApprovals || [],
+      handoverOpenEvents: parsed.handoverOpenEvents || [],
       productMatches: parsed.productMatches || [],
     };
   } catch {
@@ -65,6 +68,7 @@ async function readStore(): Promise<LocalUploadedDocumentStore> {
       itemReviewActions: [],
       handoverItems: [],
       handoverApprovals: [],
+      handoverOpenEvents: [],
       productMatches: [],
     };
   }
@@ -297,6 +301,47 @@ export async function getLocalWorkflowHandoverItems(projectId?: string) {
   return projectId
     ? store.handoverItems.filter((item) => item.projectId === projectId)
     : store.handoverItems;
+}
+
+export async function getLocalHandoverOpenEvents(projectId?: string) {
+  const store = await readStore();
+  const events = projectId
+    ? store.handoverOpenEvents.filter((event) => event.projectId === projectId)
+    : store.handoverOpenEvents;
+
+  return [...events].sort((left, right) =>
+    right.firstOpenedAt.localeCompare(left.firstOpenedAt),
+  );
+}
+
+export async function recordLocalHandoverOpen(projectId: string, userAgent?: string) {
+  const store = await readStore();
+  const timestamp = new Date().toISOString();
+  const existing = store.handoverOpenEvents.find((event) => event.projectId === projectId);
+  const event: HandoverOpenEvent = existing
+    ? {
+        ...existing,
+        lastOpenedAt: timestamp,
+        openCount: existing.openCount + 1,
+        userAgent: userAgent || existing.userAgent,
+      }
+    : {
+        id: `local-handover-open-${Date.now()}`,
+        projectId,
+        firstOpenedAt: timestamp,
+        lastOpenedAt: timestamp,
+        openCount: 1,
+        userAgent,
+      };
+
+  await writeStore({
+    ...store,
+    handoverOpenEvents: existing
+      ? store.handoverOpenEvents.map((candidate) => candidate.id === event.id ? event : candidate)
+      : [event, ...store.handoverOpenEvents],
+  });
+
+  return event;
 }
 
 export async function saveLocalHandoverApprovalRecord(

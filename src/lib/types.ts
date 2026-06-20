@@ -52,6 +52,16 @@ export type DocumentDownloadEvent = {
   userAgent?: string;
 };
 
+export type HandoverOpenEvent = {
+  id: string;
+  projectId: string;
+  openedBy?: string;
+  firstOpenedAt: string;
+  lastOpenedAt: string;
+  openCount: number;
+  userAgent?: string;
+};
+
 export type Source = {
   title: string;
   url: string;

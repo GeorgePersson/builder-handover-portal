@@ -7,6 +7,7 @@ import {
   getDocuments,
   getExtractedHandoverItems,
   getExtractedWorkflowItems,
+  getHandoverOpenEvents,
   getMaintenanceTasks,
   getProductVersions,
   getProjects,
@@ -44,6 +45,7 @@ export default async function ProjectsPage({
     extractionJobs,
     extractedWorkflowItems,
     productMatches,
+    handoverOpenEvents,
     creditStatus,
   ] =
     await Promise.all([
@@ -58,6 +60,7 @@ export default async function ProjectsPage({
       getDocumentExtractionJobs(),
       getExtractedWorkflowItems(),
       getProductMatches(),
+      getHandoverOpenEvents(),
       getBuilderCreditStatus(),
     ]);
 
@@ -76,6 +79,7 @@ export default async function ProjectsPage({
       productVersions={productVersions}
       productMatches={productMatches}
       projects={projects}
+      handoverOpenEvents={handoverOpenEvents}
       specifications={specifications}
       storage={params.storage}
       uploadedDocuments={uploadedDocuments}

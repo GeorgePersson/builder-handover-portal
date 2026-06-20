@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { buildSpecificationProposals } from "@/lib/ai/spec-extract";
-import { extractPdfText } from "@/lib/server/pdf-extract";
+import { extractDocumentContext } from "@/lib/server/document-context";
 import { buildSpecificationExtractionResponse } from "@/lib/server/specification-response";
 
 export const runtime = "nodejs";
@@ -24,7 +24,11 @@ export async function POST(request: Request) {
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  const parsed = await extractPdfText(buffer);
+  const parsed = await extractDocumentContext({
+    bytes: buffer,
+    fileName: file.name,
+    mimeType: file.type || "application/pdf",
+  });
   const proposedItems = buildSpecificationProposals(parsed.text);
 
   return NextResponse.json(

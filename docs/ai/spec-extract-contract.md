@@ -10,9 +10,12 @@ This is the point-of-difference workflow:
    - products/materials
    - documents/certificates/manuals/warranties
    - maintenance tasks
-4. System matches extracted items to existing product library records where safe.
-5. Builder reviews proposed additions.
-6. Accepted items are attached to the handover package.
+4. AI records the document evidence, missing fields, and builder information
+   needed for each item.
+5. System matches extracted items to existing product library records where safe.
+6. Builder resolves missing or unfindable items by editing, attaching evidence,
+   marking builder-supplied, or excluding.
+7. Accepted items are attached to the handover package.
 
 ## Request
 
@@ -48,6 +51,11 @@ This is the point-of-difference workflow:
       "category": "",
       "location": "",
       "extracted_text": "",
+      "source_evidence_text": "",
+      "missing_fields": [],
+      "builder_info_needed": [],
+      "context_classification": "builder_input_needed",
+      "classification_reason": "",
       "matched_existing_record": null,
       "confidence_score": 0,
       "recommended_action": "review_new_product"
@@ -62,6 +70,9 @@ This is the point-of-difference workflow:
 - Chunk long specifications by section.
 - Extract product schedules, finish schedules, appliance schedules, document
   checklist items, and maintenance notes.
+- Prefer context-first schema extraction before any live internet/source lookup.
 - Match against the product library using brand/model/category/location.
+- Ask the builder for missing information before running paid search for
+  incomplete or unfindable rows.
 - Create `extracted_handover_items` rows for review.
 - On accept, create or attach product versions, documents, and maintenance tasks.

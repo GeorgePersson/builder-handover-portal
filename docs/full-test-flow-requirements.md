@@ -106,6 +106,17 @@ Expected result:
 - Without `OPENAI_API_KEY`, the app still exercises the upload/job/review UI
   through the mock extractor.
 
+For cost testing rather than a quick demo, use:
+
+```txt
+docs/demo-assets/100-item-cost-test-spec.csv
+```
+
+See `docs/openai-100-item-cost-test-runbook.md` for the exact measurement
+steps and numbers to record. The runbook includes a quick guarded debug route
+for JSON-only measurement and a full project upload test for UI/runtime
+verification.
+
 ### Pre-Demo Checklist
 
 Run this before the person is watching:
@@ -221,6 +232,7 @@ already been applied:
 - `docs/supabase-add-client-invite-acceptance.sql`
 - `docs/supabase-add-document-download-events.sql`
 - `docs/supabase-add-document-workflow-phase1.sql`
+- `docs/supabase-add-extraction-usage-metrics.sql`
 - `docs/supabase-add-extracted-item-review-reason.sql`
 - `docs/supabase-add-handover-approvals.sql`
 - `docs/supabase-add-maintenance-completion-policies.sql`
@@ -425,6 +437,7 @@ The app is a builder/homeowner handover portal with:
 - Supabase schema: docs/supabase-schema.sql
 - Supabase bootstrap: docs/supabase-bootstrap.sql
 - Document workflow migration: docs/supabase-add-document-workflow-phase1.sql
+- Extraction usage migration: docs/supabase-add-extraction-usage-metrics.sql
 - Final approval migration: docs/supabase-add-handover-approvals.sql
 - Stripe details, if needed later: docs/stripe-billing-runbook.md
 

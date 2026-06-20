@@ -32,6 +32,47 @@ Current approval model:
 The app currently runs with seed data plus local scaffold persistence when
 Supabase is not configured.
 
+Clean-start planning update: `docs/greenfield-build-plan.md` is now the first
+document to read before beginning the rebuild. It locks the concrete stack and
+build sequence: Next.js 16/Vercel product app, Supabase product database/auth/
+storage/RLS, LlamaCloud document context/schema processing, OpenAI structured reasoning,
+Cloudflare Workers/Queues/Durable Objects/D1/R2 for pipeline work, Stripe,
+Resend, and optional Azure DevOps planning/delivery. The core workflow is
+database match first, builder clarification second, source search last.
+
+LlamaCloud rebuild branch update: active rebuild branch is
+`codex/llamacloud-greenfield`. The clean-start plan now uses LlamaCloud Parse
+and LlamaExtract as the document context/schema layer, with local PDF/OCR as
+fallback. The first backend slice added the outline-spec schema contract at
+`src/lib/extraction/outline-spec-schema.ts`, a LlamaCloud REST parse client at
+`src/lib/server/llamacloud.ts`, a provider selector at
+`src/lib/server/document-context.ts`, and rewired PDF preview/process endpoints
+to use LlamaCloud when configured while preserving the existing builder UI flow.
+See `docs/llamacloud-greenfield-implementation.md`.
+
+Workflow anchor: the LlamaCloud flow is now the preferred product workflow.
+Builders upload specs/supporting documents, processing can happen asynchronously,
+builders can return later to approve/edit/reject/add context, known database
+matches are handled before search, unclear rows ask for builder context before
+search, clarified rows are matched again, and only builder-confirmed
+source-ready unknowns go to web/source search. Privacy, durable review state,
+correct item storage, and versioned warranty/manual/source records are part of
+the baseline requirements, not later polish.
+
+Builder records update: client portal opens now create a lightweight
+`handover_open_events` record for published packages. Builders can see the first
+open date and total open count in the project workspace, separate from
+file-specific document downloads. Existing Supabase projects should run
+`docs/supabase-add-handover-open-events.sql`.
+
+Feature backlog update: the anchored workflow now includes multi-unit project
+replication, editable product variations, separate manufacturer/supplier
+storage, supplier management, quote-based extraction, category override/grouped
+homeowner views, and care/maintenance documentation. These are placed before
+live source search where they affect item identity: collect all spec/quote/
+supplier information first, database-match, builder clarify/edit, re-match,
+then search only confirmed source-ready unknowns.
+
 ## Working Local URLs
 
 - Dashboard: `http://127.0.0.1:3000`
@@ -380,6 +421,42 @@ Supabase is not configured.
   reasons, and show those match reasons in the builder project modal. Unmatched,
   low-confidence, and probable matches remain builder-review states. No web
   search/source discovery is implemented in this phase.
+- Cost instrumentation groundwork is now in place for stack decisions: extracted
+  workflow items receive normalized identity evidence and deterministic
+  fingerprints in `rawExtractedData.identity`; extraction runs produce usage
+  metrics for row count, unique identity count, duplicate count, cache
+  hit/miss counts, OpenAI request/token usage, and optional rate-configured cost
+  estimates; CSV-style/line-heavy specs chunk into multiple OpenAI extraction
+  calls; the builder project workspace shows those metrics on each extraction
+  job where available. Obvious emails, phone numbers, likely street addresses,
+  and labelled client/homeowner references are redacted before OpenAI calls and
+  counted in the same usage metrics.
+- Future AI/source-enrichment architecture should keep Supabase as the app
+  system of record for organisations, projects, users, review state, credits,
+  audit logs, and published handover data, while moving long AI/search work into
+  a durable serverless pipeline. The preferred direction is Cloudflare
+  Workflows for multi-step extraction/enrichment, Queues for batches of about 15
+  items, Durable Objects for per-upload/job coordination and progress, and R2
+  for temporary raw file storage. The workflow should dedupe items before
+  search, look up cached/common products first, and only do deeper web
+  enrichment for unknown, low-confidence, package-critical, or globally promoted
+  items. See `docs/technical-architecture-source-of-truth.md` and
+  `docs/implementation-phases.md` before changing this architecture.
+- Pricing/billing direction: sell a project-level processing credit rather than
+  per-upload or visible AI token units. A $150 project credit should allow
+  multiple specification uploads for the same project, with metering based on
+  extracted rows, unique enriched items, web searches, and deep enrichment
+  attempts. Re-uploads and repeated items across specs should not consume the
+  same enrichment allowance twice after dedupe. The UI should eventually expose
+  a simple usage meter such as specs uploaded, rows extracted, unique items,
+  enriched items, review-needed items, and included searches used.
+- Cost guardrail direction: assume normal projects stay profitable when dedupe
+  and cache hits work, but a 650-item unknown spec can cost materially more if
+  every item needs multiple searches. Start with one search per unique unknown
+  item, stop early on high-confidence matches, mark medium confidence as
+  review-needed, and reserve two-to-three-search enrichment for selected
+  critical/global items. This keeps the builder experience fair while protecting
+  the project credit margin.
 - Phase 10 hardening now prevents old or accidental publish paths from
   bypassing the final project Send package modal. The legacy
   `/builder/handover-package` route links back to `/builder/projects` for final
@@ -392,6 +469,77 @@ Supabase is not configured.
 - A predictable one-go local demo upload file lives at
   `docs/demo-assets/bayview-demo-spec.csv`. Use it when testing the project
   document upload/extraction/review flow with a potential user.
+- A controlled 100-item cost-test upload file lives at
+  `docs/demo-assets/100-item-cost-test-spec.csv`, generated by
+  `npm.cmd run demo:generate-100-item-spec`. Use
+  `docs/openai-100-item-cost-test-runbook.md` when measuring real OpenAI
+  extraction cost with `OPENAI_API_KEY`. A guarded local debug route at
+  `POST /api/debug/extraction-cost-test` can run the fixture directly when
+  `ENABLE_DEBUG_COST_TESTS=true`; it returns metrics, sample items, review/failed
+  counts, and a `testingLogTemplate` block for copying into `TESTING_LOG.txt`.
+- Source PDF inspection is scaffolded in `src/lib/server/source-pdf.ts`.
+  `POST /api/debug/source-pdf` can fetch and inspect a direct warranty/manual
+  PDF URL locally when `ENABLE_DEBUG_COST_TESTS=true`. It rejects private/local
+  URLs before and after redirects, can check optional product identity hints
+  against extracted PDF text, and returns source hashes/metadata for review; see
+  `docs/source-pdf-inspection-runbook.md`.
+- Source enrichment cost testing is scaffolded at
+  `POST /api/debug/source-enrichment-cost-test`. It reruns the controlled
+  100-item extraction, dedupes to unique identities, performs one OpenAI
+  `web_search` enrichment call per selected unique item, asks for official
+  source URLs plus warranty/maintenance findings, optionally inspects one direct
+  source PDF per item, and returns enrichment/search/PDF metrics plus a
+  `testingLogTemplate`. Use `maxUniqueItems` to sample before running the full
+  unique set; the route caps the request at 40 unique items.
+- Initial source-enrichment cost measurements on 2026-06-20:
+  - Full web-search-only run (`maxUniqueItems=40`, `inspectPdfSources=false`)
+    completed with 81 extracted rows, 34 unique identities, 34 enriched
+    identities, 122 web-search calls, 596,807 enrichment input tokens, 21,136
+    output tokens, 617,943 total tokens, and ~302 seconds runtime.
+  - At current checked `gpt-5.4-mini` Standard token rates ($0.75/M input,
+    $4.50/M output), the model portion is about $0.543 before web-search call
+    charges. If web search is $10/1K calls, the 122 calls add about $1.22, for
+    roughly $1.76 total for the 100-item fixture's unique source search.
+  - A 10-unique-item run with `inspectPdfSources=true` inspected 9 source PDFs,
+    failed 5 PDF inspections, used 154,457 input tokens and 5,826 output tokens,
+    and took ~111 seconds. Direct PDF inspection is useful but too slow/flaky
+    for a request-time production flow; queue it in the durable pipeline.
+  - PDF summarisation is now supported behind the same debug route with
+    `summarizePdfSources=true`. A 3-item sample produced 2 PDF summaries and
+    used 5,608 PDF-summary input tokens plus 443 output tokens.
+  - A chunked PDF-summarisation run over 32 selected/enriched identities
+    produced 97 web-search calls, 26 PDF inspections, 13 PDF failures, 13 PDF
+    summaries, 42,271 PDF-summary input tokens, 2,560 PDF-summary output tokens,
+    552,397 total enrichment input tokens, 20,797 total output tokens, and
+    573,194 total tokens over ~433 seconds summed route time. Using Hunter's
+    observed token rates (7,700 input tokens = $0.002, 11,391 output tokens =
+    $0.023), model-token cost is about $0.19; at an assumed $10/1K web-search
+    calls, web search adds about $0.97, for about $1.16 over 32 enriched
+    identities. Scaling to the normal 34-36 unique identities in the fixture
+    gives a practical estimate of about $1.25-$1.35 before Cloudflare/background
+    infrastructure costs.
+- Real-world scanned spec benchmark on 2026-06-20:
+  - `C:\Users\hunte\Downloads\2074 legal signed outline spec.pdf.pdf` is a
+    strong large-spec fixture: 34 pages, 11.4 MB, and only 14 selectable text
+    characters via pdfplumber, so it requires OCR.
+  - Added guarded `POST /api/debug/local-document-cost-test` for local files in
+    Downloads/workspace. It accepts `filePath`, `ocrMaxPages`,
+    `runSourceEnrichment`, `maxUniqueItems`, `startAtUniqueItem`,
+    `inspectPdfSources`, and `summarizePdfSources`.
+  - With `ocrMaxPages=20`, extraction recovered 23,743 OCR characters,
+    extracted 153 rows / 146 unique identities, used 16,868 input tokens and
+    8,009 output tokens, and took ~233 seconds.
+  - A top-10 source-search sample without PDF summaries used 38 web-search
+    calls, 157,379 source input tokens, 6,079 source output tokens, and ~81
+    seconds source runtime.
+  - A top-10 source-search + PDF-summary sample used 32 web-search calls,
+    inspected 6 PDFs, failed 1 PDF inspection, produced 5 PDF summaries, used
+    157,285 source input tokens and 5,668 source output tokens, and took ~85
+    seconds source runtime.
+  - Important product finding: the current scanned-spec extraction over-extracts
+    legal/spec/admin/site-service lines as source-enrichment identities. Add a
+    product-vs-admin/service classifier or stricter extraction schema before
+    running full enrichment over all 150-ish identities from this real spec.
 - Magic-link login scaffold at `/login`.
 
 ## Tested Demo Flow
@@ -588,6 +736,18 @@ Supabase is not configured.
   product identity fields, and notes field render. Full form-fill smoke was
   blocked by the in-app browser clipboard/type limitation, but the endpoint
   response consumed by the panel was verified directly.
+- Fresh-chat automated local smoke on 2026-06-20: `npm.cmd run lint` and
+  `npm.cmd run build` passed; the dev server returned `200` for `/`;
+  unauthenticated admin/builder/client routes returned expected `307` login
+  redirects with `next` preserved; `POST /api/ai/product-draft` returned the
+  James Hardie/Linea source-backed scaffold for valid JSON; debug cost/source
+  PDF routes returned `404` while `ENABLE_DEBUG_COST_TESTS` was disabled.
+- Debug scaffold smoke on 2026-06-20: with a temporary debug-enabled dev server
+  and no `OPENAI_API_KEY`, `POST /api/debug/extraction-cost-test` returned
+  mock-mode metrics plus `testingLogTemplate`; `POST /api/debug/source-pdf`
+  rejected a localhost URL, inspected a small public PDF, and returned hashes,
+  extracted text/page counts, warnings, and identity-check output. `npm.cmd run
+  lint` and `npm.cmd run build` passed after the scaffold hardening.
 
 Both passed after the latest changes.
 
@@ -617,6 +777,8 @@ Both passed after the latest changes.
   `docs/supabase-add-builder-workspace-bootstrap.sql`.
 - If the schema was applied before document download history was added, also run
   `docs/supabase-add-document-download-events.sql`.
+- If the schema was applied before handover first-open tracking was added, also
+  run `docs/supabase-add-handover-open-events.sql`.
 - If the schema was applied before client maintenance completion was wired, also
   run `docs/supabase-add-maintenance-completion-policies.sql`.
 - If the schema was applied before editable organisation settings were added,
@@ -625,6 +787,8 @@ Both passed after the latest changes.
   also run `docs/supabase-add-document-workflow-phase1.sql`.
 - If the schema was applied before final approval records were added, also run
   `docs/supabase-add-handover-approvals.sql`.
+- If the schema was applied before extraction usage/cost telemetry was added,
+  also run `docs/supabase-add-extraction-usage-metrics.sql`.
 - Add `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and
   `SUPABASE_SERVICE_ROLE_KEY` to
   `.env.local`.
@@ -650,40 +814,155 @@ Both passed after the latest changes.
 - Current AI routes are contracts/scaffolds. Real model calls still need
   `OPENAI_API_KEY`.
 
+## Real Spec Extraction Workflow
+
+- `docs/real-spec-extraction-workflow.md` documents the intended scanned-spec
+  pipeline: source-quality inspection, full extraction, classification gate,
+  dedupe/cache lookup, batched source enrichment, review, and publish.
+- The guarded local benchmark route
+  `POST /api/debug/local-document-cost-test` now reports both all extracted
+  unique identities and source-enrichable unique identities, plus classification
+  counts and candidate/rejected samples.
+- Real PDF benchmark file:
+  `C:\Users\hunte\Downloads\2074 legal signed outline spec.pdf.pdf`.
+- All-page OCR extraction/classification pass produced 321 rows, 291 extracted
+  unique identities, 181 source-enrichable unique identities, 45,877 extraction
+  tokens, and ~211 seconds extraction runtime.
+- Previous 20-page OCR extraction/classification pass produced 156 rows, 149
+  extracted unique identities, 118 source-enrichable unique identities, 24,831
+  extraction tokens, and ~112 seconds extraction runtime.
+- Latest 5-source-item sample with PDF inspection and summarisation produced 18
+  web-search calls, 4 PDFs inspected, 1 PDF failure, 3 PDF summaries, 94,624
+  source-enrichment tokens, and ~42 seconds source runtime.
+- Latest 10-source-item all-page batch with PDF inspection and summarisation
+  produced 37 web-search calls, 7 PDFs inspected, 2 PDF failures, 5 PDF summary
+  calls, 176,365 source-enrichment tokens, and ~88 seconds source runtime after
+  the ~210 second all-page OCR/extraction pass.
+- Linear projection from that 10-item batch to the 185 source-ready identities
+  is about 685 web searches, 130 PDF inspections, 93 PDF summaries, 3.15M source
+  input tokens, and 108.7K source output tokens. Using the earlier rough
+  `gpt-5.4-mini` Standard token rates plus an assumed $10/1K web-search price,
+  that is roughly $9.70 before retries, persistence, and background
+  infrastructure.
+- Source-enrichment classification now treats external supplier quote references
+  such as "as per kitchen quote" or "as per Superior Kitchens quote" as
+  `project_document`, not automatic source-enrichment candidates. These rows
+  should ask the builder to upload the quote or provide exact homeowner-safe
+  product/material identities, warranty details, and care requirements.
+- Cloudflare pipeline scaffold has started in
+  `cloudflare/handover-pipeline/`. It defines a dry-run Worker, Queue producer
+  and consumer, SQLite-backed Durable Object job status store, and R2 binding
+  for future source PDF caching. Use `docs/cloudflare-pipeline-runbook.md` for
+  login, queue/bucket creation, local dev, and deployment commands. The current
+  Worker intentionally does not call OpenAI or web search.
+- Phase planning has been reset in `docs/implementation-phases.md`: completed
+  work is compressed into a baseline, and active Cloudflare work now starts at
+  Phase 11. The app dispatches source-ready identities to the dry-run Worker
+  after extraction/matching when `CLOUDFLARE_PIPELINE_URL` is configured, stores
+  the Cloudflare status in extraction job usage metrics, and shows it in the
+  builder project workspace. If the URL is absent, the job records
+  `skipped/not_configured`.
+- Phase 11 local dry-run smoke: Wrangler local `/health` worked, `POST /jobs`
+  accepted a dry-run job, the queue consumer completed after the local
+  `max_batch_timeout`, and the builder project modal displayed a local scaffold
+  smoke job with 2 rows, 2 source-ready identities, 0 AI calls, and
+  `Cloudflare dry-run: 2 candidates queued in 1 batches`. Codex browser
+  automation could not attach a file to the upload input, so a real desktop
+  upload from `/builder/projects` remains the manual confirmation before
+  calling Phase 11 fully closed.
+- Product direction update: prefer context-first extraction and builder
+  source-gap capture before internet/source enrichment. The uploaded PDF/spec is
+  parsed into a strict handover schema with document evidence, missing fields,
+  builder info needed, and context classification. Unfindable/custom/trade-only
+  or supplier-quote-based items should ask the builder for exact identity,
+  warranty, care, quote/manual/invoice, or evidence; they can be project-safe
+  `builder_supplied` items after review/final approval, but global reuse remains
+  admin-reviewed. See `docs/context-first-extraction-and-source-gap-strategy.md`.
+- Rework architecture added in
+  `docs/azure-cloudflare-context-processing-architecture.md`: use Azure AI
+  Content Understanding or Azure AI Document Intelligence behind a document
+  context adapter, match extracted rows against the approved database before
+  search, ask the builder for missing context on low-confidence rows, re-run
+  database matching after clarification, and queue only builder-confirmed
+  source-ready unknown items for internet/source search. Cloudflare D1 is now
+  positioned for pipeline SQL metadata/cache indexes/idempotency/cost events,
+  while raw files stay in R2 and product auth/review/homeowner truth stays in
+  Supabase unless a separate full database migration is approved.
+- Final stack decision is now documented in
+  `docs/final-tech-stack-decision.md`: Next.js 16 on Vercel for the product app,
+  Supabase as the system of record, Cloudflare Workers/Queues/Durable Objects/R2
+  for the background source pipeline and cache, OpenAI Responses API for
+  context-first schema extraction plus selective enrichment, Stripe for project
+  credits, and Resend for transactional email. Do not reopen Cloudflare D1 as
+  the primary app database unless a hard production constraint appears.
+- Next real-PDF test should run a 5-10 item source batch against the all-page
+  source-ready list with `startAtUniqueItem=10`, then compare quality and cost
+  before spending on larger source enrichment batches.
+
 ## Next Best Work
 
-1. Run Hunter's desktop QA checklist in `docs/hunter-testing-checklist.md` and
-   move passing/failing notes from `TESTING_LOG.txt` as real Supabase/OpenAI
-   testing is completed.
-2. Apply `docs/supabase-schema.sql` to a Supabase project and add env vars to
+1. Run a context-first upload smoke with a vague/custom/supplier-quote item and
+   confirm the project review queue shows missing fields and builder info
+   prompts instead of sending the row straight to source enrichment.
+2. Plan the Azure context-processing spike from
+   `docs/azure-cloudflare-context-processing-architecture.md`: test direct PDF,
+   scanned PDF, image-only PDF, and table-heavy schedules; confirm whether
+   Azure can consume the files directly or needs local conversion/OCR first.
+3. Design the Cloudflare D1 pipeline tables for jobs, source candidates, source
+   cache indexes, idempotency keys, and cost events without moving product
+   auth/review/homeowner truth out of Supabase.
+4. Implement the database-first builder clarification gate: high-confidence
+   database matches go to accept/edit/reject, low-confidence rows request
+   builder context, clarified rows are database-matched again, and only
+   builder-confirmed source-ready unknowns are queued for search.
+5. Manually run the remaining Phase 11 `/builder/projects` upload smoke with
+   the local Worker running and `CLOUDFLARE_PIPELINE_URL=http://127.0.0.1:8787`
+   in `.env.local`; confirm the app-created extraction job shows source-ready
+   counts and `Cloudflare dry-run` status.
+6. Continue Phase 12 Cloudflare account/public Worker dry-run setup: Wrangler
+   login, queue/R2 creation, shared secret, deploy, public `/health`, public
+   `POST /jobs`, and app dispatch to the public Worker.
+7. Continue Hunter's desktop QA checklist in
+   `docs/hunter-testing-checklist.md`, focusing on credentialed Supabase/OpenAI
+   upload, review, publish, and homeowner visibility checks that cannot be
+   completed from unauthenticated local smoke tests. Move passing/failing notes
+   from `TESTING_LOG.txt` as real testing is completed.
+8. Apply `docs/supabase-schema.sql` to a Supabase project and add env vars to
    `.env.local`.
-3. Continue improving PDF extraction for long, table-heavy specification files:
+9. Continue improving PDF extraction for long, table-heavy specification files:
    tune table extraction and OCR limits against real builder specifications.
-4. Replace the deterministic source-enrichment scaffold with a real AI/search
-   workflow: official source search, extraction, critic scoring, source storage,
-   and admin review for low-confidence records.
-5. Tune the PDF intake progress and warning copy against real builder files,
+10. Replace the deterministic source-enrichment scaffold with a real AI/search
+   workflow only after context-first filtering and builder source-gap capture:
+   official source search, extraction, critic scoring, source storage, admin
+   review for low-confidence records, and project-credit usage metering around
+   unique source-ready identities/search depth rather than raw upload count.
+11. Tune the PDF intake progress and warning copy against real builder files,
    especially long scanned/image-only specifications and table-heavy schedules.
-6. Apply `docs/supabase-add-extracted-item-review-reason.sql` to existing
+12. Apply `docs/supabase-add-extracted-item-review-reason.sql` to existing
    Supabase projects so reviewer notes persist remotely, then remove the legacy
    no-column fallback once all environments have the field.
-7. Replace `POST /api/ai/product-draft` deterministic enrichment with the real
+13. Replace `POST /api/ai/product-draft` deterministic enrichment with the real
    source-backed AI/search workflow.
-8. Test Resend client invite delivery against a verified sender domain and
-   decide final invite email copy.
-9. Test the Stripe Checkout/webhook flow against a real Stripe test account and
-   confirm the `/admin/billing` manual adjustment path works for support
-   recovery.
-10. Add richer client-facing document previews once signed URL behaviour is
+14. Test Resend client invite delivery against a verified sender domain and
+    decide final invite email copy.
+15. Test the Stripe Checkout/webhook flow against a real Stripe test account and
+    confirm the `/admin/billing` manual adjustment path works for support
+    recovery.
+16. Add richer client-facing document previews once signed URL behaviour is
     stable with real uploads.
 
 ## Good Resume Prompt
 
 Continue from `HANDOFF.md`. The controlled document workflow has completed
-Phase 10 hardening. The current priority is running Hunter's desktop QA
-checklist in `docs/hunter-testing-checklist.md`, recording results in
-`TESTING_LOG.txt`, then moving on to real Supabase/OpenAI/manual workflow
-testing.
+Phase 10 hardening and Phase 11 Cloudflare local dry-run contracts have a
+partial smoke. Current product direction is context-first extraction and
+builder source-gap capture before paid source enrichment. New architecture lives
+in `docs/azure-cloudflare-context-processing-architecture.md`: evaluate Azure
+context processing, use Cloudflare D1 only for pipeline SQL state, database-
+match before search, ask builders for low-confidence context, re-match, then
+search only builder-confirmed source-ready unknowns. First smoke the
+missing-field/builder-info review prompts, then plan the Azure/D1 spikes and
+finish the manual `/builder/projects` Cloudflare upload smoke.
 
 ## Notes
 

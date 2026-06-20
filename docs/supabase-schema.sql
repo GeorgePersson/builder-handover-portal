@@ -153,6 +153,17 @@ create table public.document_download_events (
   downloaded_at timestamptz not null default now()
 );
 
+create table public.handover_open_events (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references public.projects(id) on delete cascade,
+  opened_by uuid references auth.users(id) on delete set null,
+  first_opened_at timestamptz not null default now(),
+  last_opened_at timestamptz not null default now(),
+  open_count integer not null default 1 check (open_count >= 1),
+  user_agent text,
+  unique (project_id, opened_by)
+);
+
 create table public.uploaded_documents (
   id uuid primary key default gen_random_uuid(),
   project_id uuid not null references public.projects(id) on delete cascade,
@@ -175,6 +186,8 @@ create table public.document_extraction_jobs (
   started_at timestamptz,
   completed_at timestamptz,
   retry_count integer not null default 0 check (retry_count >= 0),
+  usage_metrics jsonb not null default '{}'::jsonb,
+  redaction_summary jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -398,6 +411,7 @@ alter table public.project_clients enable row level security;
 alter table public.client_requests enable row level security;
 alter table public.documents enable row level security;
 alter table public.document_download_events enable row level security;
+alter table public.handover_open_events enable row level security;
 alter table public.uploaded_documents enable row level security;
 alter table public.document_extraction_jobs enable row level security;
 alter table public.specification_uploads enable row level security;
@@ -655,6 +669,55 @@ create policy "Users can read document download events"
 on public.document_download_events for select
 using (
   downloaded_by = auth.uid()
+  or exists (
+    select 1 from public.projects p
+    where p.id = project_id and public.is_org_member(p.organisation_id)
+  )
+);
+
+create policy "Clients can create handover open events"
+on public.handover_open_events for insert
+with check (
+  opened_by = auth.uid()
+  and exists (
+    select 1
+    from public.projects p
+    where p.id = project_id
+      and p.status = 'published'
+  )
+  and exists (
+    select 1
+    from public.project_clients pc
+    where pc.project_id = project_id
+      and pc.user_id = auth.uid()
+  )
+);
+
+create policy "Clients can update their handover open events"
+on public.handover_open_events for update
+using (
+  opened_by = auth.uid()
+  and exists (
+    select 1
+    from public.project_clients pc
+    where pc.project_id = project_id
+      and pc.user_id = auth.uid()
+  )
+)
+with check (
+  opened_by = auth.uid()
+  and exists (
+    select 1
+    from public.project_clients pc
+    where pc.project_id = project_id
+      and pc.user_id = auth.uid()
+  )
+);
+
+create policy "Users can read handover open events"
+on public.handover_open_events for select
+using (
+  opened_by = auth.uid()
   or exists (
     select 1 from public.projects p
     where p.id = project_id and public.is_org_member(p.organisation_id)

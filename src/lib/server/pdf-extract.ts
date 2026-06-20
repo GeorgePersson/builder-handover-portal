@@ -32,7 +32,7 @@ export type ExtractedPdf = {
 
 const maxChunkCharacters = 12000;
 const minUsefulPageCharacters = 80;
-const maxOcrPages = 3;
+const defaultMaxOcrPages = 3;
 const tesseractWorkerPath = path.join(
   process.cwd(),
   "node_modules/tesseract.js/src/worker-script/node/index.js",
@@ -217,6 +217,7 @@ async function ocrSparsePages(parser: PDFParse, pageNumbers: number[]) {
 
   const warnings: string[] = [];
   const ocrPages: string[] = [];
+  const maxOcrPages = getMaxOcrPages();
   const worker = await Tesseract.createWorker("eng", Tesseract.OEM.LSTM_ONLY, {
     workerPath: tesseractWorkerPath,
     corePath: tesseractCorePath,
@@ -268,6 +269,16 @@ async function ocrSparsePages(parser: PDFParse, pageNumbers: number[]) {
     characterCount: text.length,
     warnings,
   };
+}
+
+function getMaxOcrPages() {
+  const parsed = Number(process.env.PDF_OCR_MAX_PAGES || "");
+
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return defaultMaxOcrPages;
+  }
+
+  return Math.min(40, Math.max(1, Math.round(parsed)));
 }
 
 export async function extractPdfText(buffer: Buffer): Promise<ExtractedPdf> {
@@ -339,6 +350,8 @@ export async function extractPdfText(buffer: Buffer): Promise<ExtractedPdf> {
     } else if (sparsePageNumbers.length > 0) {
       warnings.push("OCR fallback did not recover additional text from sparse pages.");
     }
+
+    const maxOcrPages = getMaxOcrPages();
 
     if (sparsePageNumbers.length > maxOcrPages) {
       warnings.push(`OCR fallback was limited to the first ${maxOcrPages} sparse pages.`);

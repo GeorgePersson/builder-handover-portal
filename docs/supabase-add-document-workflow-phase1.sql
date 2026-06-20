@@ -64,6 +64,8 @@ create table if not exists public.document_extraction_jobs (
   started_at timestamptz,
   completed_at timestamptz,
   retry_count integer not null default 0 check (retry_count >= 0),
+  usage_metrics jsonb not null default '{}'::jsonb,
+  redaction_summary jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

@@ -11,6 +11,7 @@ import type {
   AuditEvent,
   ClientRequest,
   DocumentDownloadEvent,
+  HandoverOpenEvent,
   HandoverDocument,
   MaintenanceTask,
   ProductVersion,
@@ -36,9 +37,11 @@ import { getLocalGlobalProducts } from "@/lib/server/local-store/products";
 import {
   getLocalDocumentExtractionJobs,
   getLocalExtractedWorkflowItems,
+  getLocalHandoverOpenEvents,
   getLocalProductMatches,
   getLocalUploadedDocuments,
   getLocalWorkflowHandoverItems,
+  recordLocalHandoverOpen,
 } from "@/lib/server/local-store/uploaded-documents";
 
 function hasSupabaseConfig() {
@@ -394,6 +397,98 @@ export async function getDocumentDownloadEvents(projectId?: string): Promise<Doc
   }));
 }
 
+export async function getHandoverOpenEvents(projectId?: string): Promise<HandoverOpenEvent[]> {
+  if (!hasSupabaseConfig()) {
+    return getLocalHandoverOpenEvents(projectId);
+  }
+
+  const supabase = await createSupabaseServerClient();
+  let query = supabase
+    .from("handover_open_events")
+    .select("id,project_id,opened_by,first_opened_at,last_opened_at,open_count,user_agent")
+    .order("first_opened_at", { ascending: false });
+
+  if (projectId) {
+    query = query.eq("project_id", projectId);
+  }
+
+  const { data, error } = await query;
+
+  if (error || !data) {
+    return [];
+  }
+
+  return data.map((event) => ({
+    id: event.id,
+    projectId: event.project_id,
+    openedBy: event.opened_by || undefined,
+    firstOpenedAt: event.first_opened_at,
+    lastOpenedAt: event.last_opened_at,
+    openCount: event.open_count,
+    userAgent: event.user_agent || undefined,
+  }));
+}
+
+export async function recordHandoverOpen(projectId: string, userAgent?: string) {
+  if (!hasSupabaseConfig()) {
+    return recordLocalHandoverOpen(projectId, userAgent);
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return null;
+  }
+
+  const { data: projectClient } = await supabase
+    .from("project_clients")
+    .select("id")
+    .eq("project_id", projectId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (!projectClient) {
+    return null;
+  }
+
+  const { data: existing } = await supabase
+    .from("handover_open_events")
+    .select("id,open_count")
+    .eq("project_id", projectId)
+    .eq("opened_by", user.id)
+    .maybeSingle();
+
+  if (existing) {
+    const { data } = await supabase
+      .from("handover_open_events")
+      .update({
+        last_opened_at: new Date().toISOString(),
+        open_count: (existing.open_count || 1) + 1,
+        user_agent: userAgent || null,
+      })
+      .eq("id", existing.id)
+      .select("id,project_id,opened_by,first_opened_at,last_opened_at,open_count,user_agent")
+      .maybeSingle();
+
+    return data;
+  }
+
+  const { data } = await supabase
+    .from("handover_open_events")
+    .insert({
+      project_id: projectId,
+      opened_by: user.id,
+      user_agent: userAgent || null,
+    })
+    .select("id,project_id,opened_by,first_opened_at,last_opened_at,open_count,user_agent")
+    .maybeSingle();
+
+  return data;
+}
+
 export async function getUploadedProjectDocuments(projectId?: string): Promise<UploadedProjectDocument[]> {
   if (!hasSupabaseConfig()) {
     return getLocalUploadedDocuments(projectId);
@@ -434,17 +529,49 @@ export async function getDocumentExtractionJobs(projectId?: string): Promise<Doc
     return getLocalDocumentExtractionJobs(projectId);
   }
 
+  type DocumentExtractionJobRow = {
+    id: string;
+    project_id: string;
+    uploaded_document_id: string;
+    status: DocumentExtractionJob["status"];
+    error_message: string | null;
+    started_at: string | null;
+    completed_at: string | null;
+    retry_count: number;
+    created_at: string;
+    updated_at: string;
+    usage_metrics?: unknown;
+  };
+
   const supabase = await createSupabaseServerClient();
+  const baseColumns = "id,project_id,uploaded_document_id,status,error_message,started_at,completed_at,retry_count,created_at,updated_at";
   let query = supabase
     .from("document_extraction_jobs")
-    .select("id,project_id,uploaded_document_id,status,error_message,started_at,completed_at,retry_count,created_at,updated_at")
+    .select(`${baseColumns},usage_metrics`)
     .order("created_at", { ascending: false });
 
   if (projectId) {
     query = query.eq("project_id", projectId);
   }
 
-  const { data, error } = await query;
+  const result = await query;
+  let data = result.data as unknown as DocumentExtractionJobRow[] | null;
+  let error = result.error;
+
+  if (error) {
+    let fallbackQuery = supabase
+      .from("document_extraction_jobs")
+      .select(baseColumns)
+      .order("created_at", { ascending: false });
+
+    if (projectId) {
+      fallbackQuery = fallbackQuery.eq("project_id", projectId);
+    }
+
+    const fallback = await fallbackQuery;
+    data = fallback.data as unknown as DocumentExtractionJobRow[] | null;
+    error = fallback.error;
+  }
 
   if (error || !data) {
     return [];
@@ -456,6 +583,9 @@ export async function getDocumentExtractionJobs(projectId?: string): Promise<Doc
     uploadedDocumentId: job.uploaded_document_id,
     status: job.status,
     errorMessage: job.error_message || undefined,
+    usageMetrics: "usage_metrics" in job && job.usage_metrics && typeof job.usage_metrics === "object"
+      ? job.usage_metrics as Record<string, unknown>
+      : undefined,
     startedAt: job.started_at || undefined,
     completedAt: job.completed_at || undefined,
     retryCount: job.retry_count,

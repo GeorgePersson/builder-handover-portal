@@ -62,6 +62,13 @@ publish, and homeowner flows.
 
 ## Builder Review Queue
 
+1. Check context-first extraction prompts.
+   - Upload a document with a vague/custom item, supplier quote reference, or
+     incomplete product identity.
+   - Expected: The review queue shows missing fields, builder info needed, or a
+     document-context reason instead of treating the row as an internet lookup
+     failure.
+
 1. Approve an unresolved item.
    - Open Builder review queue inside the project modal.
    - Click Approve.
@@ -75,10 +82,11 @@ publish, and homeowner flows.
    - Expected: Item becomes `edited_by_builder`, edited values remain after refresh,
      and source/audit history is preserved.
 
-3. Mark builder-supplied.
-   - Click Builder supplied.
-   - Expected: Item becomes `builder_supplied`, approval metadata is stored, and
-     it is eligible for the handover.
+3. Mark builder-supplied info.
+   - Click Builder supplied info for an unfindable/custom/incomplete item.
+   - Expected: Item becomes `builder_supplied`, source-gap review metadata is
+     stored, it is eligible for this project handover after final approval, and
+     it is not globally approved without admin review.
 
 4. Exclude an item.
    - Enter an exclusion reason and submit.

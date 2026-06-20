@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { buildSpecificationProposals, getInitialExtractedItemStatus } from "@/lib/ai/spec-extract";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { extractPdfText } from "@/lib/server/pdf-extract";
+import { extractDocumentContext } from "@/lib/server/document-context";
 import { buildSpecificationExtractionResponse } from "@/lib/server/specification-response";
 import { saveLocalExtraction } from "@/lib/server/local-store/specifications";
 import { prepareSpecificationPdf, saveLocalUpload } from "@/lib/server/upload-utils";
@@ -30,7 +30,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Choose a specification PDF first." }, { status: 400 });
   }
 
-  const parsed = await extractPdfText(upload.bytes);
+  const parsed = await extractDocumentContext({
+    bytes: upload.bytes,
+    fileName: upload.fileName,
+    mimeType: upload.type,
+  });
   const proposedItems = buildSpecificationProposals(parsed.text);
 
   if (!hasSupabaseConfig()) {
@@ -45,9 +49,9 @@ export async function POST(request: Request) {
       buildSpecificationExtractionResponse({
         storage: "local",
         specificationId: saved.specification.id,
-        savedCount: saved.extractedItems.length,
-        parsed,
-        proposedItems,
+            savedCount: saved.extractedItems.length,
+            parsed,
+            proposedItems,
         file: {
           name: upload.fileName,
           size: upload.size,

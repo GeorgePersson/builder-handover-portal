@@ -1,0 +1,53 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "builder-handover-pipeline",
+  "main": "src/index.js",
+  "compatibility_date": "2026-06-20",
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "BATCH_SIZE": "10",
+    "PIPELINE_MODE": "dry_run"
+  },
+  "queues": {
+    "producers": [
+      {
+        "binding": "SOURCE_ENRICHMENT_QUEUE",
+        "queue": "builder-handover-source-enrichment"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "builder-handover-source-enrichment",
+        "max_batch_size": 5,
+        "max_batch_timeout": 30,
+        "max_retries": 3,
+        "retry_delay": 60,
+        "max_concurrency": 1
+      }
+    ]
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "JOB_STATUS",
+        "class_name": "HandoverPipelineJob"
+      }
+    ]
+  },
+  "r2_buckets": [
+    {
+      "binding": "SOURCE_PDF_BUCKET",
+      "bucket_name": "builder-handover-source-cache"
+    }
+  ],
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "HandoverPipelineJob"
+      ]
+    }
+  ]
+}

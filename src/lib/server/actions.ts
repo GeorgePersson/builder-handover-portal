@@ -12,11 +12,14 @@ import {
   extractDocumentText,
   runDocumentExtraction,
 } from "@/lib/server/document-extraction";
+import { dispatchDryRunSourceEnrichmentJob } from "@/lib/server/cloudflare-pipeline";
+import { buildExtractionUsageMetrics } from "@/lib/server/extraction-usage";
 import {
   matchExtractedItemsToVerifiedProducts,
   type ProductMatchResult,
   type VerifiedProductCandidate,
 } from "@/lib/server/product-matching";
+import { getSourceEnrichmentCandidateBreakdown } from "@/lib/server/source-enrichment-cost";
 import {
   prepareProjectDocument,
   prepareSpecificationPdf,
@@ -1609,7 +1612,24 @@ async function processSupabaseDocumentExtractionJob(
       document: input.document,
       documentText,
     });
-    const extractedItems = extraction.items;
+    const initialUsageMetrics = buildExtractionUsageMetrics({
+      items: extraction.items,
+      extractor: extraction.extractor,
+      model: extraction.model,
+      tokenUsage: extraction.tokenUsage,
+      openAiRequestCount: extraction.requestCount,
+      startedAt,
+      documentTextCharacters: documentText.length,
+      redactedTextCharacters: extraction.redactedDocumentTextLength,
+      redaction: extraction.redaction,
+    });
+    const extractedItems = extraction.items.map((item) => ({
+      ...item,
+      rawExtractedData: {
+        ...item.rawExtractedData,
+        usage: initialUsageMetrics,
+      },
+    }));
 
     await context.supabase.from("extracted_items").delete().eq("extraction_job_id", activeJobId);
 
@@ -1679,10 +1699,51 @@ async function processSupabaseDocumentExtractionJob(
     }
 
     const completedAt = new Date().toISOString();
-    await context.supabase
+    const usageMetrics = buildExtractionUsageMetrics({
+      items: extractedItems,
+      extractor: extraction.extractor,
+      model: extraction.model,
+      tokenUsage: extraction.tokenUsage,
+      openAiRequestCount: extraction.requestCount,
+      startedAt,
+      completedAt,
+      documentTextCharacters: documentText.length,
+      redactedTextCharacters: extraction.redactedDocumentTextLength,
+      redaction: extraction.redaction,
+      cacheHitCount: matchedItemCount,
+    });
+    const sourceCandidateBreakdown = getSourceEnrichmentCandidateBreakdown(insertedItems);
+    const cloudflarePipeline = await dispatchDryRunSourceEnrichmentJob({
+      projectId: input.document.projectId,
+      extractionJobId: activeJobId,
+      sourceCandidates: sourceCandidateBreakdown.candidates,
+    });
+    const usageMetricsWithPipeline = {
+      ...usageMetrics,
+      sourceCandidateBreakdown: {
+        countsByClassification: sourceCandidateBreakdown.countsByClassification,
+        sourceEnrichableUniqueIdentityCount: sourceCandidateBreakdown.candidates.length,
+        rejectedItemCount: sourceCandidateBreakdown.rejected.length,
+      },
+      cloudflarePipeline,
+    };
+    const completionUpdate = {
+      status: "completed",
+      completed_at: completedAt,
+      usage_metrics: usageMetricsWithPipeline,
+      redaction_summary: usageMetrics.redaction || {},
+    };
+    const { error: completionUpdateError } = await context.supabase
       .from("document_extraction_jobs")
-      .update({ status: "completed", completed_at: completedAt })
+      .update(completionUpdate)
       .eq("id", activeJobId);
+
+    if (completionUpdateError) {
+      await context.supabase
+        .from("document_extraction_jobs")
+        .update({ status: "completed", completed_at: completedAt })
+        .eq("id", activeJobId);
+    }
     await context.supabase
       .from("uploaded_documents")
       .update({ processing_status: "completed" })
@@ -1697,6 +1758,7 @@ async function processSupabaseDocumentExtractionJob(
         extracted_item_count: extractedItems.length,
         matched_item_count: matchedItemCount,
         extractor: extraction.extractor,
+        usage: usageMetricsWithPipeline,
         document_text: documentTextMetadata,
       },
     });
@@ -1760,6 +1822,7 @@ async function processLocalDocumentExtractionJob(input: {
 
   try {
     let documentText = "";
+    let documentTextMetadata: Record<string, unknown> = {};
 
     if (input.bytes) {
       const extractedText = await extractDocumentText({
@@ -1769,6 +1832,7 @@ async function processLocalDocumentExtractionJob(input: {
         mimeType: input.document.mimeType,
       });
       documentText = extractedText.text;
+      documentTextMetadata = extractedText.metadata;
     }
 
     const extraction = await runDocumentExtraction({
@@ -1776,11 +1840,30 @@ async function processLocalDocumentExtractionJob(input: {
       document: input.document,
       documentText,
     });
-    const extractedItems = extraction.items;
+    const initialUsageMetrics = buildExtractionUsageMetrics({
+      items: extraction.items,
+      extractor: extraction.extractor,
+      model: extraction.model,
+      tokenUsage: extraction.tokenUsage,
+      openAiRequestCount: extraction.requestCount,
+      startedAt,
+      documentTextCharacters: documentText.length,
+      redactedTextCharacters: extraction.redactedDocumentTextLength,
+      redaction: extraction.redaction,
+    });
+    const extractedItems = extraction.items.map((item) => ({
+      ...item,
+      rawExtractedData: {
+        ...item.rawExtractedData,
+        usage: initialUsageMetrics,
+        documentText: documentTextMetadata,
+      },
+    }));
 
     const insertedItems = await saveLocalExtractedWorkflowItems(extractedItems);
     const candidates = await getLocalVerifiedProductCandidates();
     const matches = matchExtractedItemsToVerifiedProducts(insertedItems, candidates);
+    const matchedItemCount = matches.filter((match) => match.matchedProductId).length;
     await applyLocalProductMatches(matches.map((match) => ({
       extractedItemId: match.extractedItemId,
       matchedProductId: match.matchedProductId,
@@ -1788,9 +1871,38 @@ async function processLocalDocumentExtractionJob(input: {
       matchConfidenceScore: match.matchConfidenceScore,
       matchReason: match.matchReason,
     })));
+    const completedAt = new Date().toISOString();
+    const usageMetrics = buildExtractionUsageMetrics({
+      items: extractedItems,
+      extractor: extraction.extractor,
+      model: extraction.model,
+      tokenUsage: extraction.tokenUsage,
+      openAiRequestCount: extraction.requestCount,
+      startedAt,
+      completedAt,
+      documentTextCharacters: documentText.length,
+      redactedTextCharacters: extraction.redactedDocumentTextLength,
+      redaction: extraction.redaction,
+      cacheHitCount: matchedItemCount,
+    });
+    const sourceCandidateBreakdown = getSourceEnrichmentCandidateBreakdown(insertedItems);
+    const cloudflarePipeline = await dispatchDryRunSourceEnrichmentJob({
+      projectId: input.document.projectId,
+      extractionJobId: activeJobId,
+      sourceCandidates: sourceCandidateBreakdown.candidates,
+    });
     await updateLocalDocumentExtractionJob(activeJobId, {
       status: "completed",
-      completedAt: new Date().toISOString(),
+      completedAt,
+      usageMetrics: {
+        ...usageMetrics,
+        sourceCandidateBreakdown: {
+          countsByClassification: sourceCandidateBreakdown.countsByClassification,
+          sourceEnrichableUniqueIdentityCount: sourceCandidateBreakdown.candidates.length,
+          rejectedItemCount: sourceCandidateBreakdown.rejected.length,
+        },
+        cloudflarePipeline,
+      },
     });
     await updateLocalUploadedDocumentStatus(input.document.id, "completed");
   } catch (error) {
@@ -2136,7 +2248,13 @@ export async function markWorkflowItemBuilderSuppliedAction(formData: FormData) 
   await reviewWorkflowItem(itemId, {
     actionType: "marked_builder_supplied",
     nextReviewStatus: "builder_supplied",
-    notes: getOptional(formData, "notes") || "Builder confirmed this item from their own supplied information.",
+    notes: getOptional(formData, "notes")
+      || "Builder supplied project-specific information because official/source-backed details were unavailable or incomplete.",
+    metadata: {
+      source_lookup_status: "builder_supplied_unverified",
+      global_reuse_status: "requires_admin_review",
+      homeowner_visibility_gate: "builder_final_approval_required",
+    },
     itemUpdate: {
       reviewStatus: "builder_supplied",
       approvedAt: new Date().toISOString(),
