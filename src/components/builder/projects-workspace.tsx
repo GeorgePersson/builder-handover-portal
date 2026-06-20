@@ -64,7 +64,10 @@ import type {
   Project,
   SpecificationUpload,
 } from "@/lib/types";
-import { getWorkflowPublishReadiness } from "@/lib/workflow-readiness";
+import {
+  getWorkflowPublishReadiness,
+  hasSourceGapSignals,
+} from "@/lib/workflow-readiness";
 
 type ProjectsWorkspaceProps = {
   draft?: string;
@@ -313,6 +316,7 @@ export function ProjectsWorkspace({
             "workflow-publish-blocked": "This project is not ready to publish yet. Resolve workflow processing and review blockers first.",
             "workflow-review-action-failed": "The review action could not be saved.",
             "workflow-review-update-failed": "The extracted item could not be updated.",
+            "workflow-source-gap-approval-blocked": "Resolve missing fields, quote references, or builder-info prompts before approving the item as correct. Use Builder supplied for project-only approval if the evidence is builder-provided.",
             "publish-readiness-check-failed": "The project readiness check could not be completed.",
           }}
           storage={storage}
@@ -1057,6 +1061,7 @@ function WorkflowReviewCard({
   const quoteLike = isQuoteLikeWorkflowItem(item, contextSchema);
   const careGuidanceSource = getCareGuidanceSource(item);
   const comparisonRows = getWorkflowComparisonRows(item, variation, careGuidanceSource);
+  const hasSourceGap = hasSourceGapSignals(item);
 
   return (
     <article className="rounded-md border border-white/70 bg-white p-3 text-slate-900">
@@ -1091,7 +1096,9 @@ function WorkflowReviewCard({
           <form action={approveWorkflowItemAction}>
             <input name="itemId" type="hidden" value={item.id} />
             <button
-              className="inline-flex h-9 items-center rounded-md bg-emerald-700 px-3 text-xs font-semibold text-white hover:bg-emerald-800"
+              className="inline-flex h-9 items-center rounded-md bg-emerald-700 px-3 text-xs font-semibold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600"
+              disabled={hasSourceGap}
+              title={hasSourceGap ? "Resolve missing fields, quote references, or builder-info prompts before approving as correct." : undefined}
               type="submit"
             >
               Approve
@@ -1108,6 +1115,13 @@ function WorkflowReviewCard({
           </form>
         </div>
       </div>
+
+      {hasSourceGap ? (
+        <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
+          Approve is locked until source gaps are resolved. Edit the item to add the missing details,
+          upload supporting evidence, or mark it as builder supplied for project-only use.
+        </p>
+      ) : null}
 
       {contextSchema.missingFields.length || contextSchema.builderInfoNeeded.length || contextSchema.sourceEvidenceText ? (
         <div className="mt-4 grid gap-3 md:grid-cols-3">

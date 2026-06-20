@@ -730,3 +730,28 @@ Continue the Builder Handover Portal from C:\Users\hunte\OneDrive\Desktop\TestWe
   binding smoke is still useful before relying on local dev behavior, but no
   public Cloudflare, R2, OpenAI, source search, source PDF fetch, or live
   enrichment ran here.
+
+## 2026-06-20 - Source-Gap Approval Guard
+
+### What Changed
+
+- Hardened the Phase 3 builder review loop so items with missing fields, builder-info prompts, unresolved quote references, or builder-input-needed classifications cannot be approved as simply correct.
+- Added a shared source-gap signal helper used by both publish readiness and the builder project review cards.
+- Updated the project review card to disable the plain Approve button for source-gap rows and steer builders toward editing, uploading evidence, or marking the row builder supplied for project-only use.
+
+### Files Changed
+
+- `src/lib/workflow-readiness.ts`
+- `src/lib/server/actions.ts`
+- `src/components/builder/projects-workspace.tsx`
+- `WORKSHEET.md`
+- `docs/agent-handoff-log.md`
+
+### Checks Run
+
+- `npm run lint` - passed.
+- `npm run build` - failed because Next/font could not fetch Google-hosted Geist and Geist Mono CSS from `fonts.googleapis.com` in this environment. No TypeScript/application compile error was reached before the font fetch failure.
+
+### Unknowns/Risks
+
+- This does not clear source gaps automatically when a builder edits an item; it only prevents the accidental plain approval path. Builders should still use edit/evidence/builder-supplied flows to resolve the row.
