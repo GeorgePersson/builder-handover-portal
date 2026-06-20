@@ -114,8 +114,10 @@ async function main() {
   }), env);
   const created = await readJson(createResponse);
   assert(created.status === "queued", "Expected created job to be queued.");
+  assert(created.safety?.mode === "dry_run_failure_test", "Expected dry-run failure-test safety metadata.");
   assert(created.batchCount === 1, "Expected one queued batch.");
   assert(queue.messages.length === 1, "Expected one queued message.");
+  assert(queue.messages[0].safety?.mode === "dry_run_failure_test", "Expected queue message to carry safety metadata.");
 
   try {
     await worker.queue(queue.takeBatch(), env);
@@ -131,6 +133,7 @@ async function main() {
   assert(failed.status === "failed", "Expected job status to be failed after simulated batch failure.");
   assert(failed.failedBatchCount === 1, "Expected one failed batch.");
   assert(failed.batches?.[0]?.status === "failed", "Expected batch 0 to be failed.");
+  assert(failed.safety?.mode === "dry_run_failure_test", "Expected job status to retain safety metadata.");
   assert(failed.batches?.[0]?.candidates?.length === 2, "Expected failed batch to retain candidate payloads.");
 
   const retry = await readJson(await worker.fetch(new Request(`https://worker.test/jobs/${jobId}/retry-failed`, {
@@ -140,6 +143,7 @@ async function main() {
   assert(retry.requeuedBatchCount === 1, "Expected one failed batch to be requeued.");
   assert(queue.messages.length === 1, "Expected retry to enqueue one message.");
   assert(queue.messages[0].retryAttempt === 1, "Expected retry attempt to increment.");
+  assert(queue.messages[0].safety?.mode === "dry_run_failure_test", "Expected retry queue message to retain safety metadata.");
 
   const requeued = await readJson(await worker.fetch(new Request(`https://worker.test/jobs/${jobId}`), env));
   assert(requeued.failedBatchCount === 0, "Expected failed batch count to clear after retry queueing.");

@@ -959,7 +959,10 @@ Both passed after the latest changes.
   `dryRunEnrichment: true`, so this is an admission/cost guard only, not live
   source enrichment. `npm.cmd run cloudflare:smoke:live-guard` verifies disabled
   jobs return 403, over-cap jobs return 413, missing-budget jobs return 403, and
-  a budgeted one-candidate admission still queues dry-run work only.
+  a budgeted one-candidate admission still queues dry-run work only. The same
+  safety snapshot, including live-pilot budget, is now persisted in Durable
+  Object job status and copied onto queue messages so future live work can
+  consume the approved budget deliberately.
 - Product direction update: prefer context-first extraction and builder
   source-gap capture before internet/source enrichment. The uploaded PDF/spec is
   parsed into a strict handover schema with document evidence, missing fields,
@@ -1058,7 +1061,8 @@ Both passed after the latest changes.
    `npm.cmd run cloudflare:smoke:live-guard` green and decide the exact live
    source implementation that will sit behind the existing `LIVE_PILOT_ENABLED`,
    `LIVE_PILOT_MAX_CANDIDATES`, `LIVE_PILOT_MAX_SEARCHES`, and
-   `LIVE_PILOT_MAX_ESTIMATED_COST_USD` gates.
+   `LIVE_PILOT_MAX_ESTIMATED_COST_USD` gates. The approved safety/budget
+   snapshot is already available on Worker job status and queue messages.
 8. Continue Hunter's desktop QA checklist in
    `docs/hunter-testing-checklist.md`, focusing on credentialed Supabase/OpenAI
    upload, review, publish, and homeowner visibility checks that cannot be

@@ -351,13 +351,17 @@ reports `liveEnrichmentEnabled: false` plus `dryRunEnrichment: true`. This means
 the gate can be tested before any live search/enrichment implementation exists.
 `npm.cmd run cloudflare:smoke:live-guard` verifies disabled live-pilot jobs are
 rejected, oversized jobs are rejected, missing-budget jobs are rejected, and a
-budgeted one-candidate admitted job still queues dry-run work only.
+budgeted one-candidate admitted job still queues dry-run work only. The admitted
+safety snapshot is persisted in Durable Object job status and copied onto queue
+messages, so later live source logic can consume the approved budget rather than
+reading fresh mutable environment state mid-job.
 
 Tasks:
 
 - Keep the explicit `PIPELINE_MODE=live_pilot` / `LIVE_PILOT_ENABLED=true` gate
   default-off.
 - Keep the max candidate count plus explicit per-job search/cost budgets.
+- Preserve the admitted budget snapshot on job status and source batch messages.
 - Run one source-ready candidate through official-source search.
 - Do not search builder-input-needed or generic/source-gap rows until the
   builder supplies enough identity detail.
@@ -369,6 +373,8 @@ Exit criteria:
 
 - Live-pilot admission remains impossible unless the explicit enable flag is
   present, the candidate cap is respected, and search/cost budgets are set.
+- Accepted live-pilot jobs expose the admitted budget snapshot through status
+  and queue payloads.
 - One live candidate can be enriched and reviewed.
 - Cost/search usage is recorded and visible.
 - No homeowner-facing data changes until the builder/admin approves it.

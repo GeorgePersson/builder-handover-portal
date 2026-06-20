@@ -461,6 +461,7 @@ async function handleCreateJob(request, env) {
       jobId,
       projectId,
       status,
+      safety,
       candidateCount: sourceCandidates.length,
       batchCount: batches.length,
       batches: batches.map((candidates, batchIndex) => ({
@@ -476,6 +477,7 @@ async function handleCreateJob(request, env) {
     jobId,
     projectId,
     status,
+    safety,
     candidateCount: sourceCandidates.length,
     batchCount: batches.length,
   }, batches);
@@ -486,6 +488,7 @@ async function handleCreateJob(request, env) {
       projectId,
       batchIndex,
       candidates,
+      safety,
       retryAttempt: 0,
       createdAt: new Date().toISOString(),
     });
@@ -552,6 +555,7 @@ async function handleRetryFailedBatches(request, env, jobId) {
       projectId: job.projectId,
       batchIndex: batch.batchIndex,
       candidates: batch.candidates,
+      safety: job.safety,
       retryAttempt: batch.retryAttempt,
       createdAt: new Date().toISOString(),
     });
@@ -594,6 +598,7 @@ async function handleQueueMessage(message, env) {
       candidateCount: candidates.length,
       retryAttempt: payload.retryAttempt || 0,
       candidates,
+      safety: payload.safety,
       startedAt: new Date().toISOString(),
     });
 
@@ -728,6 +733,7 @@ export class HandoverPipelineJob {
           candidates: Array.isArray(update.candidates)
             ? update.candidates
             : batches[update.batchIndex]?.candidates || [],
+          safety: update.safety || batches[update.batchIndex]?.safety,
           retryAttempt: update.retryAttempt || batches[update.batchIndex]?.retryAttempt || 0,
           startedAt: update.startedAt,
         };

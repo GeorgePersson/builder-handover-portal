@@ -316,6 +316,8 @@ Continue the Builder Handover Portal from C:\Users\hunte\OneDrive\Desktop\TestWe
   implementation exists.
 - Added required `LIVE_PILOT_MAX_SEARCHES` and
   `LIVE_PILOT_MAX_ESTIMATED_COST_USD` admission checks.
+- Persisted the admitted safety/budget snapshot into Durable Object job status
+  and copied it onto queue messages.
 - Added `scripts/smoke-cloudflare-live-guard.mjs` and
   `npm.cmd run cloudflare:smoke:live-guard`.
 - Updated the handoff, implementation phases, runbook, and testing log.
@@ -334,7 +336,7 @@ Continue the Builder Handover Portal from C:\Users\hunte\OneDrive\Desktop\TestWe
 ### Checks Run
 
 - `npm.cmd run cloudflare:smoke:live-guard` - passed, including missing-budget
-  rejection.
+  rejection and safety/budget propagation to job status plus queue messages.
 - `npm.cmd run cloudflare:smoke:retry` - passed.
 
 ### Unknowns/Risks

@@ -170,7 +170,8 @@ Expected result: `PIPELINE_MODE=live_pilot` returns 403 unless
 `LIVE_PILOT_MAX_CANDIDATES`, returns 403 when `LIVE_PILOT_MAX_SEARCHES` or
 `LIVE_PILOT_MAX_ESTIMATED_COST_USD` is missing, and accepts a budgeted
 one-candidate job as dry-run only. This does not enable live source enrichment;
-the Worker still reports `liveEnrichmentEnabled: false`.
+the Worker still reports `liveEnrichmentEnabled: false`. The accepted safety
+snapshot is visible on `/jobs/<jobId>` and copied onto the queue message.
 
 Smoke test the synthetic R2 cache path locally:
 
@@ -265,6 +266,7 @@ default.
 2. Run the failing dry-run UI smoke from `/builder/projects` and confirm the
    app-side retry button reflects the local module smoke behavior.
 3. Replace dry-run queue processing with a one-candidate live pilot only after
-   the implementation consumes the existing search/cost budget fields.
+   the implementation consumes the admitted search/cost budget snapshot from
+   the queue payload.
 4. Keep live OpenAI/web-search calls disabled until budget consumption and
    review persistence are implemented.

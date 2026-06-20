@@ -145,6 +145,12 @@ async function main() {
   assert(accepted.safety?.livePilotBudget?.maxEstimatedCostUsd === 0.5, "Expected live pilot cost budget to be recorded.");
   assert(accepted.dryRunEnrichment === true, "Expected accepted live pilot admission to remain dry-run only.");
   assert(acceptedQueue.messages.length === 1, "Expected accepted live pilot admission to enqueue one dry-run message.");
+  assert(acceptedQueue.messages[0].safety?.mode === "live_pilot", "Expected live pilot safety to be sent with the queue message.");
+  assert(acceptedQueue.messages[0].safety?.livePilotBudget?.maxEstimatedCostUsd === 0.5, "Expected queue message to carry live pilot budget.");
+
+  const acceptedStatus = await readJson(await worker.fetch(new Request("https://worker.test/jobs/live-guard-accepted"), acceptedEnv));
+  assert(acceptedStatus.safety?.mode === "live_pilot", "Expected live pilot safety to persist in job status.");
+  assert(acceptedStatus.safety?.livePilotBudget?.maxSearches === 2, "Expected job status to persist live pilot search budget.");
 
   console.log(JSON.stringify({
     ok: true,
@@ -154,6 +160,7 @@ async function main() {
     acceptedStatus: acceptedResponse.status,
     acceptedDryRunOnly: accepted.dryRunEnrichment === true && accepted.safety.liveEnrichmentEnabled === false,
     acceptedBudget: accepted.safety.livePilotBudget,
+    persistedBudget: acceptedStatus.safety.livePilotBudget,
     queuedMessages: acceptedQueue.messages.length,
   }, null, 2));
 }
