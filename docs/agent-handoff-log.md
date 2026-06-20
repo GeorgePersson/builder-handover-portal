@@ -1,4 +1,54 @@
 # Agent Handoff Log
+## 2026-06-21 - Supabase Migrations Applied And Agent Skills Installed
+
+### What Changed
+
+- Added the direct Supabase Postgres connection string to local `.env.local` only; no secrets were committed.
+- Installed Supabase agent skills with `npx skills add supabase/agent-skills --yes`, adding `.agents/skills/supabase`, `.agents/skills/supabase-postgres-best-practices`, and `skills-lock.json` for compatible agents.
+- Applied every repo migration file matching `docs/supabase-add-*.sql` to the Supabase database.
+- Verified previously missing workflow/billing/event tables are now available through both direct Postgres checks and Supabase REST.
+
+### Migration Files Applied
+
+- `docs/supabase-add-document-workflow-phase1.sql`
+- `docs/supabase-add-builder-workspace-bootstrap.sql`
+- `docs/supabase-add-client-extracted-items-policy.sql`
+- `docs/supabase-add-client-invite-acceptance.sql`
+- `docs/supabase-add-document-download-events.sql`
+- `docs/supabase-add-extracted-item-review-reason.sql`
+- `docs/supabase-add-extraction-usage-metrics.sql`
+- `docs/supabase-add-handover-approvals.sql`
+- `docs/supabase-add-handover-open-events.sql`
+- `docs/supabase-add-maintenance-completion-policies.sql`
+- `docs/supabase-add-organisation-update-policy.sql`
+- `docs/supabase-add-project-credits-stripe.sql`
+
+### Files Changed
+
+- `.env.local` locally only, ignored by git
+- `.agents/skills/supabase/**`
+- `.agents/skills/supabase-postgres-best-practices/**`
+- `skills-lock.json`
+- `WORKSHEET.md`
+- `docs/agent-handoff-log.md`
+
+### Checks Run
+
+- Direct Postgres connection check as `postgres` - passed.
+- Applied all listed migration files - passed.
+- Direct database table verification - passed for `uploaded_documents`, `document_extraction_jobs`, `project_credit_accounts`, `project_credit_events`, `handover_open_events`, `document_download_events`, `handover_approvals`, and related workflow types/RPCs.
+- Supabase REST verification - passed for `uploaded_documents`, `document_extraction_jobs`, `project_credit_events`, `handover_open_events`, `document_download_events`, and `handover_approvals`.
+- Supabase Storage bucket check for `handover-documents` - passed.
+
+### Unknowns/Risks
+
+- Magic-link login itself still needs a browser/app smoke test.
+- The provided outline spec PDF is scanned/image-heavy, so realistic extraction still needs LlamaCloud or another OCR-capable path.
+- `.codex/` remains untracked and was not committed.
+
+### Suggested Next Task
+
+Run the app in Supabase mode and perform an end-to-end smoke test: magic-link login, builder workspace bootstrap, project/spec upload using the provided PDF, extraction/review queue creation, and publish-readiness behavior.
 ## 2026-06-21 - Documentation Push Completed
 
 ### What Changed

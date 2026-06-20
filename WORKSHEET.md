@@ -54,6 +54,7 @@ After the push, update this worksheet and `docs/agent-handoff-log.md` with what 
 
 ## Last Updated
 
+- 2026-06-21: Applied all repo Supabase add-migrations, verified missing REST tables now exist, and installed Supabase agent skills.
 - 2026-06-21: Pushed cross-agent worksheet/setup documentation to `codex/llamacloud-greenfield` at commit `ead6510`.
 - 2026-06-21: Added cross-agent ground-truth workflow and push/handoff discipline.
 - 2026-06-21: Verified Supabase service-role access, created/confirmed `handover-documents`, and documented remaining migration gaps.
@@ -62,11 +63,12 @@ After the push, update this worksheet and `docs/agent-handoff-log.md` with what 
 
 ### Supabase
 
-- `.env.local` has Supabase URL, anon key, and service role key configured locally. Do not commit `.env.local`.
-- Service-role REST access was verified against the Supabase project.
+- `.env.local` has Supabase URL, anon key, service role key, and direct Postgres `SUPABASE_DB_URL` configured locally. Do not commit `.env.local`.
+- Service-role REST access and direct Postgres migration access were verified against the Supabase project.
 - Private storage bucket `handover-documents` was created/confirmed for app uploads. An older underscore bucket `handover_documents` also exists but the app expects the hyphenated bucket.
-- Base tables such as `organisations`, `organisation_members`, `projects`, and `extracted_handover_items` are reachable.
-- Some later migration tables are not present yet in the REST schema cache, including `uploaded_documents`, `document_extraction_jobs`, `project_credit_events`, and `handover_open_events`. Apply the relevant `docs/supabase-add-*.sql` migrations before full Supabase-mode testing.
+- All repo Supabase add-migrations in `docs/supabase-add-*.sql` were applied successfully on 2026-06-21.
+- REST verification now passes for `uploaded_documents`, `document_extraction_jobs`, `project_credit_events`, `handover_open_events`, `document_download_events`, and `handover_approvals`.
+- Database verification confirms the newer workflow tables, project credit tables, handover event/approval tables, expected enums, and `ensure_builder_workspace` / `accept_project_client_invite` RPCs exist.
 
 ### LlamaCloud
 
@@ -76,3 +78,7 @@ After the push, update this worksheet and `docs/agent-handoff-log.md` with what 
 ### Test Spec
 
 - User provided a real outline spec PDF at `C:\Users\hunte\Downloads\2074 legal signed outline spec.pdf.pdf` for extraction/upload testing. Initial `pdf-parse` check found 34 pages but only ~957 text characters, so it is likely scanned/image-heavy; local plain-text parsing alone is not enough for realistic extraction. LlamaCloud or OCR-capable processing will be important for this file.
+
+### Agent Skills
+
+- Installed Supabase agent skills via `npx skills add supabase/agent-skills --yes`. The repo now has `.agents/skills/supabase`, `.agents/skills/supabase-postgres-best-practices`, and `skills-lock.json` so compatible coding agents can load Supabase-specific guidance.
