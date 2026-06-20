@@ -898,6 +898,12 @@ Both passed after the latest changes.
   automation could not attach a file to the upload input, so a real desktop
   upload from `/builder/projects` remains the manual confirmation before
   calling Phase 11 fully closed.
+- Local R2 cache smoke update: `POST /cache/smoke` now writes and reads a tiny
+  synthetic JSON metadata record through the Worker `SOURCE_PDF_BUCKET` binding.
+  The verified local run used Wrangler's simulated R2 storage only, writing
+  `dry-run/smoke/local-r2-smoke-codex-001.json` with a 236 byte payload. Do not
+  call the deployed `/cache/smoke` endpoint without confirming first, because
+  that would write a small object to the real Cloudflare R2 bucket.
 - Product direction update: prefer context-first extraction and builder
   source-gap capture before internet/source enrichment. The uploaded PDF/spec is
   parsed into a strict handover schema with document evidence, missing fields,
@@ -983,7 +989,9 @@ Both passed after the latest changes.
 5. Manually run the remaining Phase 11 `/builder/projects` upload smoke with
    the local Worker running and `CLOUDFLARE_PIPELINE_URL=http://127.0.0.1:8787`
    in `.env.local`; confirm the app-created extraction job shows source-ready
-   counts and `Cloudflare dry-run` status.
+   counts and `Cloudflare dry-run` status. Codex confirmed the route renders in
+   scaffold mode, but the in-app browser did not activate project modal buttons,
+   so this remains a real desktop check.
 6. Continue Phase 12 Cloudflare account/public Worker dry-run setup: Wrangler
    login, queue/R2 creation, shared secret, deploy, public `/health`, public
    `POST /jobs`, and app dispatch to the public Worker.

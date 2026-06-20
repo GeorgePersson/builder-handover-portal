@@ -766,3 +766,20 @@ Tested
     Chromium binary is missing.
   - `npm.cmd run lint` passed.
   - `npm.cmd run build` passed.
+
+- 2026-06-20 Codex Cloudflare local R2/queue dry-run smoke:
+  - Temporarily moved `.env.local` aside and started Next.js in local scaffold
+    mode so the smoke would not use Supabase/OpenAI keys; restored it after the
+    smoke.
+  - Started Wrangler local Worker on `http://127.0.0.1:8787` with local
+    Durable Object, Queue, and simulated R2 bindings.
+  - `GET /health` returned `ok=true` and `dryRunEnrichment=true`.
+  - `POST /jobs` with one source candidate queued and completed one dry-run
+    batch after the local queue timeout; result status was
+    `dry_run_not_enriched` with no OpenAI or web-search calls.
+  - Added and tested `POST /cache/smoke`; local simulated R2 wrote/read
+    `dry-run/smoke/local-r2-smoke-codex-001.json` with a 236 byte synthetic JSON
+    payload.
+  - `/builder/projects` rendered with HTTP 200 in scaffold mode, but the
+    in-app browser did not activate the Help/Edit modal buttons; real desktop
+    click/upload confirmation is still needed before closing the manual smoke.

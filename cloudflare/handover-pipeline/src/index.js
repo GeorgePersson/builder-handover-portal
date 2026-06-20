@@ -134,6 +134,52 @@ async function handleQueueMessage(message, env) {
   });
 }
 
+async function handleCacheSmoke(request, env) {
+  if (!isAuthorized(request, env)) {
+    return jsonResponse({ error: "Unauthorized." }, { status: 401 });
+  }
+
+  if (!env.SOURCE_PDF_BUCKET) {
+    return jsonResponse({ error: "SOURCE_PDF_BUCKET binding is not configured." }, { status: 500 });
+  }
+
+  const body = request.method === "POST" ? await request.json().catch(() => ({})) : {};
+  const requestedJobId = typeof body.jobId === "string" && body.jobId.trim()
+    ? body.jobId.trim()
+    : `smoke-${crypto.randomUUID()}`;
+  const safeJobId = requestedJobId.replace(/[^a-zA-Z0-9._-]/g, "-").slice(0, 120);
+  const key = `dry-run/smoke/${safeJobId}.json`;
+  const payload = {
+    jobId: safeJobId,
+    kind: "r2_synthetic_smoke",
+    dryRunEnrichment: true,
+    note: "Synthetic metadata only. No third-party PDFs or source documents were fetched.",
+    createdAt: new Date().toISOString(),
+  };
+  const serialized = JSON.stringify(payload, null, 2);
+
+  await env.SOURCE_PDF_BUCKET.put(key, serialized, {
+    httpMetadata: {
+      contentType: "application/json; charset=utf-8",
+    },
+    customMetadata: {
+      dryRun: "true",
+      source: "builder-handover-pipeline",
+    },
+  });
+
+  const object = await env.SOURCE_PDF_BUCKET.get(key);
+
+  return jsonResponse({
+    ok: Boolean(object),
+    key,
+    byteSize: serialized.length,
+    uploaded: Boolean(object),
+    dryRunOnly: true,
+    note: "Wrangler local mode stores this in local simulated R2. Calling this on a deployed Worker writes one tiny synthetic JSON object to the bound R2 bucket.",
+  });
+}
+
 export class HandoverPipelineJob {
   constructor(state) {
     this.state = state;
@@ -222,6 +268,10 @@ const worker = {
 
     if (request.method === "POST" && url.pathname === "/jobs") {
       return handleCreateJob(request, env);
+    }
+
+    if ((request.method === "GET" || request.method === "POST") && url.pathname === "/cache/smoke") {
+      return handleCacheSmoke(request, env);
     }
 
     const jobMatch = url.pathname.match(/^\/jobs\/([^/]+)$/);

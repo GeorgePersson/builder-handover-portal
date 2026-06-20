@@ -67,3 +67,33 @@ Continue the Builder Handover Portal from C:\Users\hunte\OneDrive\Desktop\TestWe
 
 - Browser upload smoke for `/builder/projects` is still a manual follow-up because file attachment automation has been unreliable in this environment.
 - Existing worktree changes from earlier slices are still present and should be treated as part of the broader branch state, not reverted.
+
+## 2026-06-20 - Cloudflare Local R2 Smoke
+
+### What Changed
+
+- Added a dry-run Worker `/cache/smoke` endpoint that writes and reads one tiny synthetic JSON metadata record through the `SOURCE_PDF_BUCKET` binding.
+- Documented the local-only R2 smoke command and warned that calling the deployed endpoint would write a small object to the real R2 bucket.
+- Verified the local Worker queue and R2 paths with Wrangler local bindings only.
+
+### Files Changed
+
+- `cloudflare/handover-pipeline/src/index.js`
+- `docs/cloudflare-pipeline-runbook.md`
+- `HANDOFF.md`
+- `TESTING_LOG.txt`
+- `docs/agent-handoff-log.md`
+
+### Checks Run
+
+- `GET http://127.0.0.1:8787/health` - passed.
+- `POST http://127.0.0.1:8787/jobs` plus follow-up `GET /jobs/local-test-codex-002` - passed, completed one dry-run batch.
+- `POST http://127.0.0.1:8787/cache/smoke` - passed against local simulated R2.
+- `node --check cloudflare\handover-pipeline\src\index.js` - passed.
+- `npm.cmd run lint` - passed.
+- `npm.cmd run build` - passed.
+
+### Unknowns/Risks
+
+- No deployed Cloudflare resources were created or written during this pass.
+- The real `/builder/projects` desktop modal/upload smoke still needs manual confirmation; the route rendered in scaffold mode, but the in-app browser did not activate modal buttons.

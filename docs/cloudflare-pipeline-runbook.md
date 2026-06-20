@@ -109,6 +109,24 @@ Local queue delivery may wait for the configured `max_batch_timeout` before the
 consumer updates the Durable Object. In this scaffold that can mean waiting up
 to about 30 seconds before `/jobs/<jobId>` moves from `queued` to `completed`.
 
+Smoke test the synthetic R2 cache path locally:
+
+```powershell
+$body = @{ jobId = "local-r2-smoke-001" } | ConvertTo-Json
+
+Invoke-RestMethod `
+  -Method Post `
+  -Uri http://127.0.0.1:8787/cache/smoke `
+  -ContentType "application/json" `
+  -Body $body
+```
+
+Expected result: the Worker writes and reads one tiny synthetic JSON metadata
+object through the `SOURCE_PDF_BUCKET` binding. In local Wrangler mode this uses
+local simulated R2 storage, not the real Cloudflare bucket. Do not call the
+deployed `/cache/smoke` endpoint until you intentionally want to write a small
+test object to the real R2 bucket.
+
 If `PIPELINE_SHARED_SECRET` is set, include:
 
 ```powershell
@@ -164,7 +182,6 @@ default.
 1. Add progress sync from Worker job status back into Supabase/local scaffold
    job records.
 2. Add a retry path for failed dry-run batches.
-3. Add synthetic R2 cache smoke records.
-4. Replace dry-run queue processing with a one-candidate live pilot only after
+3. Replace dry-run queue processing with a one-candidate live pilot only after
    cost guards are implemented.
-5. Add cost guards before enabling live OpenAI/web-search calls.
+4. Add cost guards before enabling live OpenAI/web-search calls.

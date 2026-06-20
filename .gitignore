@@ -36,10 +36,15 @@ yarn-error.log*
 
 # local dev server logs
 dev-server.*.log
+.local-logs/
 
 # local scaffold uploads
 .local-uploads/
 .local-data/
+
+# local Cloudflare/Wrangler state
+.wrangler/
+cloudflare/**/.wrangler/
 
 # vercel
 .vercel
