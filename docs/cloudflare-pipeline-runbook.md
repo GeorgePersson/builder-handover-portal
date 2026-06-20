@@ -14,6 +14,8 @@ There is no config switch that enables live source enrichment yet.
 - Cloudflare Queues for source-enrichment batches.
 - SQLite-backed Durable Objects for per-job status.
 - R2 binding reserved for future source PDF cache storage.
+- Optional Cloudflare D1 binding for pipeline SQL metadata. D1 is not the app
+  database; Supabase remains the product/auth/review/homeowner source of truth.
 
 The scaffold lives in:
 
@@ -39,6 +41,30 @@ Create the queue and R2 bucket:
 npx.cmd wrangler queues create builder-handover-source-enrichment
 npx.cmd wrangler r2 bucket create builder-handover-source-cache
 ```
+
+Optional D1 setup for pipeline metadata:
+
+```powershell
+npx.cmd wrangler d1 create builder-handover-pipeline
+```
+
+Copy the returned `database_id` into `cloudflare/handover-pipeline/wrangler.jsonc`
+as a `d1_databases` binding named `PIPELINE_DB`, then apply the schema:
+
+```powershell
+npx.cmd wrangler d1 execute builder-handover-pipeline --local --file cloudflare/handover-pipeline/schema.sql
+```
+
+For public deployment, run the same command without `--local` only after you are
+ready to create/update the real Cloudflare D1 database:
+
+```powershell
+npx.cmd wrangler d1 execute builder-handover-pipeline --file cloudflare/handover-pipeline/schema.sql
+```
+
+The schema stores only pipeline-safe state: jobs, job events, context segments,
+source candidates/results, source cache indexes, idempotency keys, and cost
+events. Do not store raw project PDFs or homeowner-facing product truth in D1.
 
 Optional but recommended before any public deploy:
 
@@ -172,6 +198,17 @@ Expected result: the app queues a dry-run Cloudflare job and records the status
 in extraction job usage metrics. It should not call OpenAI source enrichment,
 web search, crawling, or live source PDF fetching.
 
+If `PIPELINE_DB` is configured and `schema.sql` has been applied, the Worker
+also mirrors dry-run job metadata into D1 using prepared statements:
+
+- `pipeline_jobs`
+- `pipeline_job_events`
+- `source_search_candidates`
+- `cost_meter_events`
+
+Without the binding, `/health` reports `d1Configured: false` and the Worker
+continues using Durable Object status only.
+
 When running this smoke without paid services, start the Next.js app in a local
 scaffold environment or remove paid/service keys from the process. If
 `.env.local` contains Supabase and OpenAI keys, `next dev` will use them by
@@ -179,9 +216,10 @@ default.
 
 ## Next Build Steps
 
-1. Add progress sync from Worker job status back into Supabase/local scaffold
+1. Bind a real `PIPELINE_DB` D1 database and run the local D1 dry-run smoke.
+2. Add progress sync from Worker job status back into Supabase/local scaffold
    job records.
-2. Add a retry path for failed dry-run batches.
-3. Replace dry-run queue processing with a one-candidate live pilot only after
+3. Add a retry path for failed dry-run batches.
+4. Replace dry-run queue processing with a one-candidate live pilot only after
    cost guards are implemented.
-4. Add cost guards before enabling live OpenAI/web-search calls.
+5. Add cost guards before enabling live OpenAI/web-search calls.

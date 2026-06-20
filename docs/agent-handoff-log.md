@@ -97,3 +97,31 @@ Continue the Builder Handover Portal from C:\Users\hunte\OneDrive\Desktop\TestWe
 
 - No deployed Cloudflare resources were created or written during this pass.
 - The real `/builder/projects` desktop modal/upload smoke still needs manual confirmation; the route rendered in scaffold mode, but the in-app browser did not activate modal buttons.
+
+## 2026-06-20 - Cloudflare D1 Pipeline SQL Scaffold
+
+### What Changed
+
+- Added the D1 schema for pipeline-only SQL metadata: jobs, events, context segments, identity lookup cache, source candidates/results, source cache indexes, idempotency keys, and cost events.
+- Added optional Worker prepared-statement writes that mirror dry-run job creation, candidate queueing, batch completion, and zero-cost dry-run meter events when `PIPELINE_DB` is configured.
+- Documented the D1 setup/apply flow and kept Supabase as the product/auth/review/homeowner source of truth.
+
+### Files Changed
+
+- `cloudflare/handover-pipeline/schema.sql`
+- `cloudflare/handover-pipeline/src/index.js`
+- `cloudflare/handover-pipeline/wrangler.jsonc`
+- `docs/cloudflare-pipeline-runbook.md`
+- `docs/implementation-phases.md`
+- `HANDOFF.md`
+- `TESTING_LOG.txt`
+- `docs/agent-handoff-log.md`
+
+### Checks Run
+
+- `node --check cloudflare\handover-pipeline\src\index.js` - passed.
+
+### Unknowns/Risks
+
+- No real D1 database was created or bound in this pass.
+- The next D1 verification needs `wrangler d1 create`, a real `database_id`, schema application, and a local dry-run `/jobs` smoke with `PIPELINE_DB` configured.

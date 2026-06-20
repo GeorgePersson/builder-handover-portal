@@ -29,6 +29,10 @@ function getJobStub(env, jobId) {
   return env.JOB_STATUS.get(env.JOB_STATUS.idFromName(jobId));
 }
 
+function hasPipelineDb(env) {
+  return Boolean(env.PIPELINE_DB && typeof env.PIPELINE_DB.prepare === "function");
+}
+
 function isAuthorized(request, env) {
   if (!env.PIPELINE_SHARED_SECRET) {
     return true;
@@ -45,6 +49,189 @@ async function sendJobUpdate(env, jobId, update) {
   });
 }
 
+async function runPipelineStateWrite(env, operation) {
+  if (!hasPipelineDb(env)) {
+    return { ok: true, skipped: true, reason: "PIPELINE_DB binding is not configured." };
+  }
+
+  try {
+    await operation(env.PIPELINE_DB);
+    return { ok: true, skipped: false };
+  } catch (error) {
+    console.error("D1 pipeline state write failed", error);
+    return {
+      ok: false,
+      skipped: false,
+      error: error instanceof Error ? error.message : "Unknown D1 error.",
+    };
+  }
+}
+
+function candidateIdFor(jobId, batchIndex, candidateIndex, candidate) {
+  const fingerprint = typeof candidate.fingerprint === "string" && candidate.fingerprint
+    ? candidate.fingerprint
+    : `candidate-${candidateIndex}`;
+  return `${jobId}:${batchIndex}:${fingerprint}`.replace(/[^a-zA-Z0-9:._-]/g, "-").slice(0, 240);
+}
+
+async function writeJobCreatedToD1(env, job, batches) {
+  const now = new Date().toISOString();
+  return runPipelineStateWrite(env, async (db) => {
+    const statements = [
+      db.prepare(
+        `INSERT INTO pipeline_jobs (
+          job_id, project_id, status, pipeline_mode, dry_run, candidate_count,
+          batch_count, completed_batch_count, failed_batch_count, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)
+        ON CONFLICT(job_id) DO UPDATE SET
+          project_id = excluded.project_id,
+          status = excluded.status,
+          pipeline_mode = excluded.pipeline_mode,
+          dry_run = excluded.dry_run,
+          candidate_count = excluded.candidate_count,
+          batch_count = excluded.batch_count,
+          updated_at = excluded.updated_at`,
+      ).bind(
+        job.jobId,
+        job.projectId || null,
+        job.status,
+        env.PIPELINE_MODE || "dry_run",
+        1,
+        job.candidateCount,
+        job.batchCount,
+        now,
+        now,
+      ),
+      db.prepare(
+        `INSERT INTO pipeline_job_events (
+          event_id, job_id, event_type, batch_index, message, payload_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(
+        crypto.randomUUID(),
+        job.jobId,
+        "job_created",
+        null,
+        "Dry-run pipeline job accepted.",
+        JSON.stringify(job),
+        now,
+      ),
+    ];
+
+    for (const [batchIndex, candidates] of batches.entries()) {
+      for (const [candidateIndex, candidate] of candidates.entries()) {
+        statements.push(
+          db.prepare(
+            `INSERT OR REPLACE INTO source_search_candidates (
+              candidate_id, job_id, batch_index, identity_fingerprint, product_name,
+              category, search_query, status, review_reason, payload_json, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ).bind(
+            candidateIdFor(job.jobId, batchIndex, candidateIndex, candidate),
+            job.jobId,
+            batchIndex,
+            candidate.fingerprint || null,
+            candidate.productName || null,
+            candidate.category || null,
+            candidate.searchQuery || null,
+            "queued",
+            "Queued for Cloudflare dry-run only; no OpenAI or web search will run.",
+            JSON.stringify(candidate),
+            now,
+            now,
+          ),
+        );
+      }
+    }
+
+    await db.batch(statements);
+  });
+}
+
+async function writeBatchStartedToD1(env, payload, candidateCount) {
+  const now = new Date().toISOString();
+  return runPipelineStateWrite(env, async (db) => {
+    await db.batch([
+      db.prepare(
+        `UPDATE source_search_candidates
+         SET status = ?, updated_at = ?
+         WHERE job_id = ? AND batch_index = ?`,
+      ).bind("processing", now, payload.jobId, payload.batchIndex),
+      db.prepare(
+        `INSERT INTO pipeline_job_events (
+          event_id, job_id, event_type, batch_index, message, payload_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(
+        crypto.randomUUID(),
+        payload.jobId,
+        "batch_started",
+        payload.batchIndex,
+        `Dry-run batch started with ${candidateCount} candidates.`,
+        JSON.stringify({ candidateCount }),
+        now,
+      ),
+    ]);
+  });
+}
+
+async function writeBatchCompletedToD1(env, payload, results) {
+  const now = new Date().toISOString();
+  return runPipelineStateWrite(env, async (db) => {
+    const statements = [
+      db.prepare(
+        `UPDATE pipeline_jobs
+         SET completed_batch_count = completed_batch_count + 1,
+             status = CASE
+               WHEN completed_batch_count + 1 + failed_batch_count >= batch_count THEN 'completed'
+               ELSE 'processing'
+             END,
+             updated_at = ?
+         WHERE job_id = ?`,
+      ).bind(now, payload.jobId),
+      db.prepare(
+        `UPDATE source_search_candidates
+         SET status = ?, review_reason = ?, updated_at = ?
+         WHERE job_id = ? AND batch_index = ?`,
+      ).bind(
+        "dry_run_not_enriched",
+        "Cloudflare pipeline accepted this candidate without calling OpenAI or web search.",
+        now,
+        payload.jobId,
+        payload.batchIndex,
+      ),
+      db.prepare(
+        `INSERT INTO pipeline_job_events (
+          event_id, job_id, event_type, batch_index, message, payload_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(
+        crypto.randomUUID(),
+        payload.jobId,
+        "batch_completed",
+        payload.batchIndex,
+        `Dry-run batch completed with ${results.length} candidates.`,
+        JSON.stringify({ results }),
+        now,
+      ),
+      db.prepare(
+        `INSERT INTO cost_meter_events (
+          event_id, job_id, candidate_id, event_type, provider, model, input_units,
+          output_units, search_count, estimated_cost_usd, dry_run, payload_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, 0, 0, 0, 0, 1, ?, ?)`,
+      ).bind(
+        crypto.randomUUID(),
+        payload.jobId,
+        null,
+        "dry_run_batch_completed",
+        "cloudflare-worker",
+        null,
+        JSON.stringify({ batchIndex: payload.batchIndex, candidateCount: results.length }),
+        now,
+      ),
+    ];
+
+    await db.batch(statements);
+  });
+}
+
 async function handleCreateJob(request, env) {
   if (!isAuthorized(request, env)) {
     return jsonResponse({ error: "Unauthorized." }, { status: 401 });
@@ -55,18 +242,27 @@ async function handleCreateJob(request, env) {
   const projectId = typeof body.projectId === "string" ? body.projectId : undefined;
   const sourceCandidates = Array.isArray(body.sourceCandidates) ? body.sourceCandidates.slice(0, 250) : [];
   const batches = chunkItems(sourceCandidates, getBatchSize(env));
+  const status = batches.length ? "queued" : "waiting_for_candidates";
 
   await getJobStub(env, jobId).fetch("https://job-status/init", {
     method: "POST",
     body: JSON.stringify({
       jobId,
       projectId,
-      status: batches.length ? "queued" : "waiting_for_candidates",
+      status,
       candidateCount: sourceCandidates.length,
       batchCount: batches.length,
       createdAt: new Date().toISOString(),
     }),
   });
+
+  const d1State = await writeJobCreatedToD1(env, {
+    jobId,
+    projectId,
+    status,
+    candidateCount: sourceCandidates.length,
+    batchCount: batches.length,
+  }, batches);
 
   for (const [batchIndex, candidates] of batches.entries()) {
     await env.SOURCE_ENRICHMENT_QUEUE.send({
@@ -85,6 +281,7 @@ async function handleCreateJob(request, env) {
       candidateCount: sourceCandidates.length,
       batchCount: batches.length,
       dryRunEnrichment: true,
+      d1State,
       statusUrl: `/jobs/${encodeURIComponent(jobId)}`,
     },
     { status: 202 },
@@ -111,19 +308,24 @@ async function handleQueueMessage(message, env) {
     return;
   }
 
+  const candidates = Array.isArray(payload.candidates) ? payload.candidates : [];
+  await writeBatchStartedToD1(env, payload, candidates.length);
+
   await sendJobUpdate(env, jobId, {
     type: "batch_started",
     batchIndex: payload.batchIndex,
-    candidateCount: Array.isArray(payload.candidates) ? payload.candidates.length : 0,
+    candidateCount: candidates.length,
     startedAt: new Date().toISOString(),
   });
 
-  const results = (Array.isArray(payload.candidates) ? payload.candidates : []).map((candidate) => ({
+  const results = candidates.map((candidate) => ({
     fingerprint: candidate.fingerprint,
     productName: candidate.productName,
     status: "dry_run_not_enriched",
     reviewReason: "Cloudflare pipeline accepted this candidate without calling OpenAI or web search.",
   }));
+
+  await writeBatchCompletedToD1(env, payload, results);
 
   await sendJobUpdate(env, jobId, {
     type: "batch_completed",
@@ -263,6 +465,7 @@ const worker = {
         ok: true,
         service: "builder-handover-pipeline",
         dryRunEnrichment: true,
+        d1Configured: hasPipelineDb(env),
       });
     }
 

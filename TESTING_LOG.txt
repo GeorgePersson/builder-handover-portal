@@ -783,3 +783,18 @@ Tested
   - `/builder/projects` rendered with HTTP 200 in scaffold mode, but the
     in-app browser did not activate the Help/Edit modal buttons; real desktop
     click/upload confirmation is still needed before closing the manual smoke.
+
+- 2026-06-20 Codex Cloudflare D1 pipeline SQL scaffold:
+  - Added `cloudflare/handover-pipeline/schema.sql` for pipeline-only D1 tables:
+    jobs, events, context segments, identity lookup cache, source candidates,
+    source results, source cache index, idempotency keys, and cost meter events.
+  - Added optional Worker D1 prepared-statement writes for dry-run job creation,
+    source candidate queueing, batch completion, and zero-cost dry-run meter
+    events when `PIPELINE_DB` is bound.
+  - Left current Worker behavior unchanged when D1 is not configured; Durable
+    Object status remains the active local path.
+  - Direct Worker module mock check for `GET /health` and `POST /jobs` passed
+    without a D1 binding; `/health` returned `d1Configured=false` and `/jobs`
+    returned `d1State.skipped`.
+  - No real Cloudflare D1 database was created, no deployed Worker was called,
+    and no paid/live source enrichment ran.

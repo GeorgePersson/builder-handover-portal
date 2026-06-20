@@ -904,6 +904,14 @@ Both passed after the latest changes.
   `dry-run/smoke/local-r2-smoke-codex-001.json` with a 236 byte payload. Do not
   call the deployed `/cache/smoke` endpoint without confirming first, because
   that would write a small object to the real Cloudflare R2 bucket.
+- Cloudflare D1 pipeline SQL update: Phase 11D has started. The Worker now has
+  an optional `PIPELINE_DB` D1 mirror path and
+  `cloudflare/handover-pipeline/schema.sql` defines pipeline-only tables for
+  jobs, job events, context segments, identity cache, source candidates/results,
+  source cache indexes, idempotency keys, and dry-run cost events. If D1 is not
+  bound, the Worker continues using Durable Object status only. D1 must remain
+  pipeline metadata/cache state; Supabase remains the auth, tenant, review,
+  billing, and homeowner publication source of truth.
 - Product direction update: prefer context-first extraction and builder
   source-gap capture before internet/source enrichment. The uploaded PDF/spec is
   parsed into a strict handover schema with document evidence, missing fields,
@@ -983,9 +991,10 @@ Both passed after the latest changes.
    `docs/azure-cloudflare-context-processing-architecture.md`: test direct PDF,
    scanned PDF, image-only PDF, and table-heavy schedules; confirm whether
    Azure can consume the files directly or needs local conversion/OCR first.
-4. Design the Cloudflare D1 pipeline tables for jobs, source candidates, source
-   cache indexes, idempotency keys, and cost events without moving product
-   auth/review/homeowner truth out of Supabase.
+4. Create/bind the Cloudflare D1 pipeline database, apply
+   `cloudflare/handover-pipeline/schema.sql`, and run a local D1 dry-run smoke
+   to confirm `/jobs` mirrors rows into D1 without moving product auth/review/
+   homeowner truth out of Supabase.
 5. Manually run the remaining Phase 11 `/builder/projects` upload smoke with
    the local Worker running and `CLOUDFLARE_PIPELINE_URL=http://127.0.0.1:8787`
    in `.env.local`; confirm the app-created extraction job shows source-ready

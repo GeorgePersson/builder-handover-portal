@@ -42,6 +42,16 @@
       "bucket_name": "builder-handover-source-cache"
     }
   ],
+  // Uncomment after running:
+  // npx.cmd wrangler d1 create builder-handover-pipeline
+  //
+  // "d1_databases": [
+  //   {
+  //     "binding": "PIPELINE_DB",
+  //     "database_name": "builder-handover-pipeline",
+  //     "database_id": "<paste-d1-database-id-here>"
+  //   }
+  // ],
   "migrations": [
     {
       "tag": "v1",
