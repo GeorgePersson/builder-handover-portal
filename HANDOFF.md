@@ -922,6 +922,12 @@ Both passed after the latest changes.
   usage as searches used plus estimated cost, so dry-run jobs visibly remain at
   0 searches and $0.00. A real local Worker UI smoke is still needed to confirm
   the refresh button end to end.
+- Publish-readiness pipeline gate update: the shared workflow readiness helper
+  now blocks publishing only when an extraction job's Cloudflare usage metrics
+  explicitly mark source pipeline work as live/required for publish and that
+  pipeline status is not `completed` or its sync status failed. Current dry-run
+  jobs remain non-blocking, so the gate is ready for a future live pilot without
+  breaking local/public dry-run QA.
 - Cloudflare public dry-run update: Phase 12 public Worker dry-run is deployed
   at `https://builder-handover-pipeline.gpersson2002.workers.dev`. Wrangler
   created the queue `builder-handover-source-enrichment`, R2 bucket

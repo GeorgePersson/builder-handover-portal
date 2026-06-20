@@ -9,7 +9,8 @@ export type WorkflowPublishBlockerCode =
   | "extraction_processing_incomplete"
   | "extraction_failed"
   | "review_items_unresolved"
-  | "source_gap_unresolved";
+  | "source_gap_unresolved"
+  | "pipeline_incomplete";
 
 export type WorkflowPublishBlocker = {
   code: WorkflowPublishBlockerCode;
@@ -46,6 +47,7 @@ export function getWorkflowPublishReadiness(input: {
   const failedDocumentCount = input.documents.filter((document) => document.processingStatus === "failed").length;
   const unresolvedItemCount = input.items.filter((item) => unresolvedReviewStatuses.has(item.reviewStatus)).length;
   const unresolvedSourceGapCount = input.items.filter(hasUnresolvedSourceGap).length;
+  const incompletePipelineCount = input.jobs.filter(hasIncompletePublishRequiredPipeline).length;
   const approvedItemCount = input.items.filter((item) => approvedReviewStatuses.has(item.reviewStatus)).length;
   const blockers = [
     blocker("document_processing_incomplete", "Document processing is still incomplete", incompleteDocumentCount),
@@ -53,6 +55,7 @@ export function getWorkflowPublishReadiness(input: {
     blocker("extraction_failed", "Extraction jobs or documents failed and need retry", failedJobCount + failedDocumentCount),
     blocker("review_items_unresolved", "Workflow review items still need builder resolution", unresolvedItemCount),
     blocker("source_gap_unresolved", "Quote references or missing source details still need builder resolution", unresolvedSourceGapCount),
+    blocker("pipeline_incomplete", "Required source pipeline work is incomplete", incompletePipelineCount),
   ].filter((item): item is WorkflowPublishBlocker => Boolean(item));
 
   return {
@@ -60,6 +63,35 @@ export function getWorkflowPublishReadiness(input: {
     approvedItemCount,
     blockers,
   };
+}
+
+function hasIncompletePublishRequiredPipeline(job: DocumentExtractionJob) {
+  const usageMetrics = getRecord(job.usageMetrics);
+  const pipeline = getRecord(usageMetrics.cloudflarePipeline);
+
+  if (!isPublishRequiredPipeline(pipeline)) {
+    return false;
+  }
+
+  const status = getString(pipeline.status);
+  const syncStatus = getString(pipeline.syncStatus);
+
+  return syncStatus === "failed" || status !== "completed";
+}
+
+function isPublishRequiredPipeline(pipeline: Record<string, unknown>) {
+  if (!Object.keys(pipeline).length) {
+    return false;
+  }
+
+  const safety = getRecord(pipeline.safety);
+
+  return getBoolean(pipeline.requiredForPublish)
+    || getBoolean(pipeline.liveEnrichmentRequired)
+    || getBoolean(pipeline.liveEnrichmentEnabled)
+    || getBoolean(safety.liveEnrichmentEnabled)
+    || getString(pipeline.pipelineMode) === "live_pilot"
+    || pipeline.dryRunEnrichment === false;
 }
 
 function hasUnresolvedSourceGap(item: ExtractedWorkflowItem) {
@@ -102,6 +134,10 @@ function getRecord(value: unknown) {
 
 function getString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function getBoolean(value: unknown) {
+  return typeof value === "boolean" ? value : false;
 }
 
 function getStringList(value: unknown) {

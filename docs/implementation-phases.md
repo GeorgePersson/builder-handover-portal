@@ -277,7 +277,10 @@ job record in local mode. The builder project workspace exposes a refresh
 control for dispatched Worker jobs and displays completed/processing batch
 progress from the stored usage metrics. Status sync now also preserves Worker
 `budgetUsage` and the builder project workspace displays searches used plus
-estimated cost, keeping dry-run jobs visibly at 0 searches and $0.00.
+estimated cost, keeping dry-run jobs visibly at 0 searches and $0.00. Publish
+readiness now has a future-live pipeline blocker: jobs whose Cloudflare usage
+metrics explicitly mark live/required source pipeline work must reach
+`completed` before the package can be sent. Dry-run jobs remain non-blocking.
 
 The Worker also has a dry-run batch retry primitive:
 `POST /jobs/<jobId>/retry-failed` requeues only failed batches using the
@@ -311,6 +314,8 @@ Exit criteria:
 - Dry-run budget usage remains visible as 0 searches and $0.00 estimated cost
   after a status refresh.
 - Failed or incomplete Cloudflare jobs are visible and retryable.
+- Incomplete live/required pipeline jobs block publish readiness without
+  blocking ordinary dry-run jobs.
 
 Remaining setup:
 
@@ -320,8 +325,8 @@ Remaining setup:
 - Smoke a failing dry-run scenario from the project workspace to prove the retry
   button surfaces the already-tested Worker retry path and the follow-up refresh
   survives page reload in both local scaffold and Supabase modes.
-- Decide the publish-readiness blocking rule for incomplete pipeline work before
-  live enrichment is enabled.
+- Before live enrichment is enabled, make the Worker/app sync mark only the
+  intended live source jobs as `requiredForPublish` or equivalent live metadata.
 
 ## Phase 14: Source Cache And R2 Dry-Run Records
 

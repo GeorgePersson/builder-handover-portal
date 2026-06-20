@@ -385,3 +385,34 @@ Continue the Builder Handover Portal from C:\Users\hunte\OneDrive\Desktop\TestWe
 
 - Still needs a real `/builder/projects` UI smoke with a running Worker to
   click refresh and confirm the displayed 0-search/$0.00 usage survives reload.
+
+## 2026-06-20 - Publish Readiness Pipeline Gate
+
+### What Changed
+
+- Added a shared workflow readiness blocker for Cloudflare pipeline work that
+  is explicitly marked live/required for publish.
+- The blocker counts required pipeline jobs unless their stored pipeline status
+  is `completed`; failed status sync also blocks.
+- Current dry-run jobs remain non-blocking unless future metadata marks them as
+  required for publish.
+- Updated the handoff, implementation phase plan, and testing log.
+
+### Files Changed
+
+- `src/lib/workflow-readiness.ts`
+- `docs/implementation-phases.md`
+- `HANDOFF.md`
+- `TESTING_LOG.txt`
+- `docs/agent-handoff-log.md`
+
+### Checks Run
+
+- `npm.cmd run lint` - passed.
+- `npm.cmd run build` - passed.
+
+### Unknowns/Risks
+
+- The future live-pilot implementation must deliberately set
+  `requiredForPublish`, `liveEnrichmentRequired`, `pipelineMode=live_pilot`, or
+  equivalent live metadata when a source job should block publish.

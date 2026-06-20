@@ -923,3 +923,15 @@ Tested
   - `npm.cmd run cloudflare:smoke:retry` passed.
   - No public Cloudflare call, R2 write, OpenAI call, source search, source PDF
     fetch, or live enrichment ran.
+
+- 2026-06-20 Codex publish-readiness pipeline gate:
+  - Added a shared workflow readiness blocker for Cloudflare pipeline work that
+    is explicitly marked live/required for publish.
+  - The blocker requires those future live/required jobs to reach `completed`
+    and also blocks if the latest status sync failed.
+  - Current dry-run jobs remain non-blocking unless future metadata marks them
+    required for publish.
+  - `npm.cmd run lint` passed.
+  - `npm.cmd run build` passed.
+  - No public Cloudflare call, R2 write, OpenAI call, source search, source PDF
+    fetch, or live enrichment ran.
