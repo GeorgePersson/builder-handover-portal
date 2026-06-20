@@ -990,3 +990,18 @@ Tested
   - `npm.cmd run lint` passed.
   - `npm.cmd run build` passed.
   - Restarted the local dev server and verified `/builder` returned HTTP 200.
+
+- 2026-06-20 Codex Supabase configuration smoke helper:
+  - Added `npm.cmd run smoke:supabase-config` as a non-mutating desktop preflight
+    for Supabase-mode upload/review/publish testing.
+  - The helper loads `.env.local`/`.env`, prints only presence or absence of
+    secrets, checks required REST tables, and confirms the private
+    `handover-documents` bucket when Supabase credentials are available.
+  - `npm run smoke:supabase-config` failed in this cloud container because
+    `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and
+    `SUPABASE_SERVICE_ROLE_KEY` are not configured here; rerun on desktop after
+    adding those secrets.
+  - Optional secrets still needed for full live validation are documented in
+    `docs/hunter-testing-checklist.md`: `NEXT_PUBLIC_SITE_URL`,
+    `OPENAI_API_KEY`, `LLAMACLOUD_API_KEY`, `CLOUDFLARE_PIPELINE_URL`,
+    `CLOUDFLARE_PIPELINE_SECRET`, `RESEND_API_KEY`, and `STRIPE_SECRET_KEY`.

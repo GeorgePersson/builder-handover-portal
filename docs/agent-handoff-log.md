@@ -1,4 +1,30 @@
 # Agent Handoff Log
+
+## 2026-06-20 - Supabase Configuration Smoke Helper
+
+### What Changed
+
+- Added `npm.cmd run smoke:supabase-config` to verify Supabase-mode app configuration without printing secret values.
+- The helper loads local env files, checks required Supabase env vars, verifies required REST tables, and confirms the private `handover-documents` Storage bucket when credentials are available.
+- Documented which optional secrets are needed for desktop-only live validation of OpenAI extraction, LlamaCloud scanned/table-heavy PDF parsing, Cloudflare pipeline dispatch, Resend invites, and Stripe billing.
+
+### Files Changed
+
+- `package.json`
+- `scripts/smoke-supabase-app-config.mjs`
+- `docs/hunter-testing-checklist.md`
+- `WORKSHEET.md`
+- `docs/agent-handoff-log.md`
+
+### Checks Run
+
+- `npm run smoke:supabase-config` - failed in this cloud container because Supabase secrets are not configured here; expected desktop follow-up after adding `.env.local`.
+
+### Unknowns/Risks
+
+- This helper does not perform magic-link login or mutate project data. It is a preflight for the next credentialed desktop smoke.
+- The full desktop smoke still needs valid Supabase credentials and, for realistic scanned PDF extraction, `LLAMACLOUD_API_KEY` or another OCR-capable provider.
+
 ## 2026-06-21 - Bedtime Codex Cloud Handoff Prompt
 
 ### What Changed

@@ -25,6 +25,35 @@ publish, and homeowner flows.
      ventilation, kitchen oven, roofing document, and garage door maintenance
      examples.
 
+
+## Supabase Desktop Smoke Helper
+
+Before a credentialed Supabase-mode app smoke, run the configuration helper from
+the repository root:
+
+```bash
+npm.cmd run smoke:supabase-config
+```
+
+The helper intentionally prints only whether secrets are present, never the
+secret values. It checks:
+
+- Required Supabase app variables: `NEXT_PUBLIC_SUPABASE_URL`,
+  `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`.
+- Required REST tables used by the upload/review/publish workflow, including
+  `uploaded_documents`, `document_extraction_jobs`, `extracted_handover_items`,
+  `handover_items`, `handover_approvals`, and usage/event tables.
+- Private Supabase Storage bucket `handover-documents`.
+- Optional desktop-only/live-integration secrets that are not required for local
+  scaffold work but are needed for full validation: `NEXT_PUBLIC_SITE_URL`,
+  `OPENAI_API_KEY`, `LLAMACLOUD_API_KEY`, `CLOUDFLARE_PIPELINE_URL`,
+  `CLOUDFLARE_PIPELINE_SECRET`, `RESEND_API_KEY`, and `STRIPE_SECRET_KEY`.
+
+If the helper reports missing optional secrets, continue with local/Supabase
+checks that do not need them and record the blocked live checks in this file or
+`TESTING_LOG.txt`. Do not paste secret values into chat, docs, commits, or pull
+request notes.
+
 ## Document Upload And Extraction
 
 1. Upload a valid project document.
