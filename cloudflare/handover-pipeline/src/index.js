@@ -124,6 +124,17 @@ function validateQueueSafety(env, payload) {
   }
 }
 
+function getDryRunBudgetUsage(payload, candidateCount) {
+  return {
+    mode: payload.safety?.mode || "dry_run",
+    dryRun: true,
+    candidateCount,
+    searchesUsed: 0,
+    estimatedCostUsd: 0,
+    budget: payload.safety?.livePilotBudget,
+  };
+}
+
 function shouldSimulateFailure(env, payload) {
   if (getPipelineMode(env) !== "dry_run_failure_test") {
     return false;
@@ -302,7 +313,7 @@ async function writeBatchStartedToD1(env, payload, candidateCount) {
   });
 }
 
-async function writeBatchCompletedToD1(env, payload, results) {
+async function writeBatchCompletedToD1(env, payload, results, budgetUsage) {
   const now = new Date().toISOString();
   return runPipelineStateWrite(env, async (db) => {
     const statements = [
@@ -337,7 +348,7 @@ async function writeBatchCompletedToD1(env, payload, results) {
         "batch_completed",
         payload.batchIndex,
         `Dry-run batch completed with ${results.length} candidates.`,
-        JSON.stringify({ results }),
+        JSON.stringify({ results, budgetUsage, safety: payload.safety }),
         now,
       ),
       db.prepare(
@@ -352,7 +363,12 @@ async function writeBatchCompletedToD1(env, payload, results) {
         "dry_run_batch_completed",
         "cloudflare-worker",
         null,
-        JSON.stringify({ batchIndex: payload.batchIndex, candidateCount: results.length }),
+        JSON.stringify({
+          batchIndex: payload.batchIndex,
+          candidateCount: results.length,
+          budgetUsage,
+          safety: payload.safety,
+        }),
         now,
       ),
     ];
@@ -630,13 +646,16 @@ async function handleQueueMessage(message, env) {
       status: "dry_run_not_enriched",
       reviewReason: "Cloudflare pipeline accepted this candidate without calling OpenAI or web search.",
     }));
+    const budgetUsage = getDryRunBudgetUsage(payload, results.length);
 
-    await writeBatchCompletedToD1(env, payload, results);
+    await writeBatchCompletedToD1(env, payload, results, budgetUsage);
 
     await sendJobUpdate(env, jobId, {
       type: "batch_completed",
       batchIndex: payload.batchIndex,
       candidateCount: results.length,
+      safety: payload.safety,
+      budgetUsage,
       results,
       completedAt: new Date().toISOString(),
     });
@@ -758,14 +777,28 @@ export class HandoverPipelineJob {
       }
 
       if (update.type === "batch_completed") {
+        const budgetUsage = update.budgetUsage && typeof update.budgetUsage === "object"
+          ? update.budgetUsage
+          : {
+              searchesUsed: 0,
+              estimatedCostUsd: 0,
+              dryRun: true,
+            };
         batches[update.batchIndex] = {
           ...batches[update.batchIndex],
           status: "completed",
           candidateCount: update.candidateCount,
+          safety: update.safety || batches[update.batchIndex]?.safety,
+          budgetUsage,
           completedAt: update.completedAt,
         };
         results.push(...(Array.isArray(update.results) ? update.results : []));
         job.completedBatchCount = (job.completedBatchCount || 0) + 1;
+        job.budgetUsage = {
+          searchesUsed: (job.budgetUsage?.searchesUsed || 0) + (budgetUsage.searchesUsed || 0),
+          estimatedCostUsd: Number(((job.budgetUsage?.estimatedCostUsd || 0) + (budgetUsage.estimatedCostUsd || 0)).toFixed(4)),
+          dryRun: budgetUsage.dryRun !== false,
+        };
       }
 
       if (update.type === "batch_failed") {

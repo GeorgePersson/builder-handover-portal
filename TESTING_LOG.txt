@@ -901,6 +901,9 @@ Tested
   - The live-guard smoke now also verifies a tampered live-pilot queue message
     without the admitted safety budget is rejected before processing, while the
     valid budgeted message still completes as dry-run only.
+  - Completed dry-run batches now expose `budgetUsage` with 0 searches and
+    $0.00 estimated cost in Worker job status; both live-guard and retry smokes
+    assert this.
   - `npm.cmd run cloudflare:smoke:retry` still passed after the guard change.
   - No public Cloudflare call, R2 write, OpenAI call, source search, source PDF
     fetch, or live enrichment ran.

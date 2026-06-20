@@ -356,7 +356,9 @@ safety snapshot is persisted in Durable Object job status and copied onto queue
 messages, so later live source logic can consume the approved budget rather than
 reading fresh mutable environment state mid-job. The queue consumer rejects
 `PIPELINE_MODE=live_pilot` messages that do not carry the admitted safety
-budget.
+budget. Completed dry-run batches now record zero-cost `budgetUsage` on batch
+and aggregate job status, ready for real budget consumption in a later live
+pilot.
 
 Tasks:
 
@@ -366,6 +368,8 @@ Tasks:
 - Preserve the admitted budget snapshot on job status and source batch messages.
 - Reject live-pilot queue messages that do not carry the admitted budget
   snapshot.
+- Record per-batch and aggregate budget usage, even while dry-run usage remains
+  zero.
 - Run one source-ready candidate through official-source search.
 - Do not search builder-input-needed or generic/source-gap rows until the
   builder supplies enough identity detail.
@@ -381,6 +385,8 @@ Exit criteria:
   and queue payloads.
 - Live-pilot queue execution refuses messages without that admitted budget
   snapshot.
+- Dry-run completion exposes zero-cost budget usage on status so live budget
+  consumption has a stable output shape.
 - One live candidate can be enriched and reviewed.
 - Cost/search usage is recorded and visible.
 - No homeowner-facing data changes until the builder/admin approves it.

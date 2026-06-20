@@ -965,7 +965,9 @@ Both passed after the latest changes.
   consume the approved budget deliberately. The queue consumer now rejects
   `PIPELINE_MODE=live_pilot` messages that are missing the admitted safety
   budget, so live-pilot execution cannot be triggered by an unsafely crafted
-  queue payload.
+  queue payload. Dry-run batch completion now records `budgetUsage` with
+  `searchesUsed: 0` and `estimatedCostUsd: 0` on the batch and aggregate job
+  status, giving future live steps a concrete ledger surface to enforce.
 - Product direction update: prefer context-first extraction and builder
   source-gap capture before internet/source enrichment. The uploaded PDF/spec is
   parsed into a strict handover schema with document evidence, missing fields,

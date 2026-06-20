@@ -320,6 +320,8 @@ Continue the Builder Handover Portal from C:\Users\hunte\OneDrive\Desktop\TestWe
   and copied it onto queue messages.
 - Added queue-time rejection for `PIPELINE_MODE=live_pilot` messages that do
   not carry the admitted safety/budget snapshot.
+- Added zero-cost dry-run `budgetUsage` recording on completed batches and
+  aggregate job status.
 - Added `scripts/smoke-cloudflare-live-guard.mjs` and
   `npm.cmd run cloudflare:smoke:live-guard`.
 - Updated the handoff, implementation phases, runbook, and testing log.
@@ -339,8 +341,8 @@ Continue the Builder Handover Portal from C:\Users\hunte\OneDrive\Desktop\TestWe
 
 - `npm.cmd run cloudflare:smoke:live-guard` - passed, including missing-budget
   rejection, tampered queue-message rejection, and safety/budget propagation to
-  job status plus queue messages.
-- `npm.cmd run cloudflare:smoke:retry` - passed.
+  job status plus queue messages, plus zero-cost budget usage on completion.
+- `npm.cmd run cloudflare:smoke:retry` - passed with zero-cost budget usage.
 
 ### Unknowns/Risks
 

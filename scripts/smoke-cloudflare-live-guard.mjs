@@ -188,6 +188,8 @@ async function main() {
   const completedStatus = await readJson(await worker.fetch(new Request("https://worker.test/jobs/live-guard-accepted"), acceptedEnv));
   assert(completedStatus.status === "completed", "Expected budgeted dry-run live-pilot-shaped job to complete.");
   assert(completedStatus.batches?.[0]?.safety?.livePilotBudget?.maxEstimatedCostUsd === 0.5, "Expected processed batch to retain safety budget.");
+  assert(completedStatus.batches?.[0]?.budgetUsage?.searchesUsed === 0, "Expected processed batch to record zero dry-run searches.");
+  assert(completedStatus.budgetUsage?.estimatedCostUsd === 0, "Expected job budget usage to remain zero in dry-run.");
 
   console.log(JSON.stringify({
     ok: true,
@@ -200,6 +202,7 @@ async function main() {
     persistedBudget: acceptedStatus.safety.livePilotBudget,
     finalStatus: completedStatus.status,
     processedBatchBudget: completedStatus.batches[0].safety.livePilotBudget,
+    budgetUsage: completedStatus.budgetUsage,
     ackedMessages: acceptedQueue.acked.length,
   }, null, 2));
 }

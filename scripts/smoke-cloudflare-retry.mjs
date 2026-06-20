@@ -156,6 +156,8 @@ async function main() {
   assert(completed.completedBatchCount === 1, "Expected completed batch count to be one.");
   assert(completed.failedBatchCount === 0, "Expected no failed batches after retry completion.");
   assert(completed.results?.length === 2, "Expected dry-run results for both candidates.");
+  assert(completed.budgetUsage?.searchesUsed === 0, "Expected dry-run retry completion to record zero searches.");
+  assert(completed.budgetUsage?.estimatedCostUsd === 0, "Expected dry-run retry completion to record zero cost.");
 
   console.log(JSON.stringify({
     ok: true,
@@ -164,6 +166,7 @@ async function main() {
     retryStatus: retry.status,
     finalStatus: completed.status,
     resultCount: completed.results.length,
+    budgetUsage: completed.budgetUsage,
     dryRunOnly: true,
   }, null, 2));
 }
