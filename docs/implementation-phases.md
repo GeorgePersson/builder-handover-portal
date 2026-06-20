@@ -281,7 +281,10 @@ The Worker also has a dry-run batch retry primitive:
 `POST /jobs/<jobId>/retry-failed` requeues only failed batches using the
 candidates retained in Durable Object job status. The endpoint is authenticated
 with the same `PIPELINE_SHARED_SECRET` as the other Worker routes and does not
-call OpenAI, web search, R2 source writes, or live enrichment.
+call OpenAI, web search, R2 source writes, or live enrichment. The builder
+project workspace now exposes this retry route through a `Retry failed batches`
+action when stored Cloudflare metrics indicate a failed job or failed batch
+count, then persists retry status and requeued counts back into usage metrics.
 
 Tasks:
 
@@ -306,8 +309,9 @@ Remaining setup:
 - Run a real local Worker smoke from `/builder/projects`, click the refresh
   control after queue completion, and confirm the persisted metrics survive page
   refresh in both local scaffold and Supabase modes.
-- Add the app-side button/action for retrying failed Worker batches from the
-  project workspace once a failing dry-run scenario is available.
+- Smoke a failing dry-run scenario from the project workspace to prove the retry
+  button requeues only failed Worker batches and the follow-up refresh survives
+  page reload in both local scaffold and Supabase modes.
 - Decide the publish-readiness blocking rule for incomplete pipeline work before
   live enrichment is enabled.
 

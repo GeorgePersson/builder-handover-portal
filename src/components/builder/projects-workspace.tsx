@@ -42,6 +42,7 @@ import {
   markWorkflowItemBuilderSuppliedAction,
   publishHandoverPackageAction,
   retryDocumentExtractionJobAction,
+  retryCloudflarePipelineFailedBatchesAction,
   revokeClientInviteAction,
   sendClientInviteEmailAction,
   syncCloudflarePipelineStatusAction,
@@ -792,15 +793,28 @@ function ProjectEditPanel({
                         const usage = getWorkflowUsageMetrics(latestJob, items);
 
                         return usage?.cloudflarePipeline?.jobId && usage.cloudflarePipeline.status !== "skipped" ? (
-                          <form action={syncCloudflarePipelineStatusAction} className="mt-3">
-                            <input name="jobId" type="hidden" value={latestJob.id} />
-                            <button
-                              className="inline-flex h-8 items-center rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                              type="submit"
-                            >
-                              Refresh pipeline status
-                            </button>
-                          </form>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <form action={syncCloudflarePipelineStatusAction}>
+                              <input name="jobId" type="hidden" value={latestJob.id} />
+                              <button
+                                className="inline-flex h-8 items-center rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                type="submit"
+                              >
+                                Refresh pipeline status
+                              </button>
+                            </form>
+                            {canRetryCloudflarePipeline(usage.cloudflarePipeline) ? (
+                              <form action={retryCloudflarePipelineFailedBatchesAction}>
+                                <input name="jobId" type="hidden" value={latestJob.id} />
+                                <button
+                                  className="inline-flex h-8 items-center rounded-md border border-amber-200 bg-white px-2 text-xs font-semibold text-amber-800 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                  type="submit"
+                                >
+                                  Retry failed batches
+                                </button>
+                              </form>
+                            ) : null}
+                          </div>
                         ) : null;
                       })()}
                       {latestJob.status === "failed" ? (
@@ -1629,6 +1643,9 @@ type WorkflowUsageMetrics = {
     failedBatchCount?: number;
     resultsCount?: number;
     lastSyncedAt?: string;
+    retryStatus?: string;
+    requeuedBatchCount?: number;
+    lastRetriedAt?: string;
     error?: string;
   };
 };
@@ -1682,6 +1699,9 @@ function getWorkflowUsageMetrics(
           failedBatchCount: getNumber(cloudflarePipeline.failedBatchCount),
           resultsCount: getNumber(cloudflarePipeline.resultsCount),
           lastSyncedAt: typeof cloudflarePipeline.lastSyncedAt === "string" ? cloudflarePipeline.lastSyncedAt : undefined,
+          retryStatus: typeof cloudflarePipeline.retryStatus === "string" ? cloudflarePipeline.retryStatus : undefined,
+          requeuedBatchCount: getNumber(cloudflarePipeline.requeuedBatchCount),
+          lastRetriedAt: typeof cloudflarePipeline.lastRetriedAt === "string" ? cloudflarePipeline.lastRetriedAt : undefined,
           error: typeof cloudflarePipeline.error === "string" ? cloudflarePipeline.error : undefined,
         }
       : undefined,
@@ -1693,6 +1713,10 @@ function formatUsageNumber(value: number | undefined) {
 }
 
 function formatCloudflarePipelineStatus(pipeline: NonNullable<WorkflowUsageMetrics["cloudflarePipeline"]>) {
+  if (pipeline.retryStatus === "retry_queued") {
+    return `${pipeline.requeuedBatchCount || 0} failed batches requeued`;
+  }
+
   if (pipeline.syncStatus === "failed") {
     return `status check failed${pipeline.error ? ` (${pipeline.error})` : ""}`;
   }
@@ -1722,6 +1746,10 @@ function formatCloudflarePipelineStatus(pipeline: NonNullable<WorkflowUsageMetri
   }
 
   return pipeline.status || "unknown";
+}
+
+function canRetryCloudflarePipeline(pipeline: NonNullable<WorkflowUsageMetrics["cloudflarePipeline"]>) {
+  return Boolean(pipeline.jobId && (pipeline.status === "failed" || (pipeline.failedBatchCount || 0) > 0));
 }
 
 function getContextSchemaMetadata(item: ExtractedWorkflowItem): ContextSchemaMetadata {

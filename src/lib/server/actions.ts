@@ -15,6 +15,7 @@ import {
 import {
   dispatchDryRunSourceEnrichmentJob,
   fetchCloudflarePipelineJobStatus,
+  retryCloudflarePipelineFailedBatches,
 } from "@/lib/server/cloudflare-pipeline";
 import { extractDocumentContext } from "@/lib/server/document-context";
 import { buildExtractionUsageMetrics } from "@/lib/server/extraction-usage";
@@ -2775,6 +2776,39 @@ function mergeCloudflarePipelineStatus(
   };
 }
 
+function mergeCloudflarePipelineRetry(
+  usageMetrics: Record<string, unknown> | undefined,
+  retry: Awaited<ReturnType<typeof retryCloudflarePipelineFailedBatches>>,
+) {
+  const usage = usageMetrics && typeof usageMetrics === "object" ? usageMetrics : {};
+  const existing = usage.cloudflarePipeline && typeof usage.cloudflarePipeline === "object"
+    ? usage.cloudflarePipeline as Record<string, unknown>
+    : {};
+  const existingFailedBatchCount = typeof existing.failedBatchCount === "number"
+    ? existing.failedBatchCount
+    : undefined;
+  const failedBatchCount = retry.status === "retry_queued" && existingFailedBatchCount !== undefined
+    ? Math.max(0, existingFailedBatchCount - retry.requeuedBatchCount)
+    : retry.status === "no_failed_batches"
+      ? 0
+      : existing.failedBatchCount;
+
+  return {
+    ...usage,
+    cloudflarePipeline: {
+      ...existing,
+      status: retry.status === "retry_queued" ? "queued" : existing.status,
+      failedBatchCount,
+      retryStatus: retry.status,
+      jobId: retry.jobId,
+      workerUrl: retry.workerUrl || existing.workerUrl,
+      requeuedBatchCount: retry.requeuedBatchCount,
+      lastRetriedAt: retry.retriedAt,
+      error: retry.error,
+    },
+  };
+}
+
 export async function syncCloudflarePipelineStatusAction(formData: FormData) {
   const jobId = getRequired(formData, "jobId");
   const context = await getBuilderContext();
@@ -2847,6 +2881,78 @@ export async function syncCloudflarePipelineStatusAction(formData: FormData) {
   }
 
   redirect(`/builder/projects?draft=cloudflare-pipeline-synced&storage=${hasSupabaseConfig() ? "supabase" : "stub"}`);
+}
+
+export async function retryCloudflarePipelineFailedBatchesAction(formData: FormData) {
+  const jobId = getRequired(formData, "jobId");
+  const context = await getBuilderContext();
+
+  if (context) {
+    const { data: job, error: jobError } = await context.supabase
+      .from("document_extraction_jobs")
+      .select("id,project_id,usage_metrics")
+      .eq("id", jobId)
+      .single();
+
+    if (jobError || !job) {
+      redirect("/builder/projects?error=extraction-job-not-found");
+    }
+
+    const { data: project, error: projectError } = await context.supabase
+      .from("projects")
+      .select("id")
+      .eq("id", job.project_id)
+      .eq("organisation_id", context.organisationId)
+      .single();
+
+    if (projectError || !project) {
+      redirect("/builder/projects?error=project-not-found");
+    }
+
+    const usageMetrics = job.usage_metrics && typeof job.usage_metrics === "object"
+      ? job.usage_metrics as Record<string, unknown>
+      : {};
+    const pipeline = usageMetrics.cloudflarePipeline && typeof usageMetrics.cloudflarePipeline === "object"
+      ? usageMetrics.cloudflarePipeline as Record<string, unknown>
+      : {};
+    const pipelineJobId = typeof pipeline.jobId === "string" ? pipeline.jobId : job.id;
+    const retry = await retryCloudflarePipelineFailedBatches({
+      jobId: pipelineJobId,
+      workerUrl: typeof pipeline.workerUrl === "string" ? pipeline.workerUrl : undefined,
+    });
+    const nextUsageMetrics = mergeCloudflarePipelineRetry(usageMetrics, retry);
+    const { error: updateError } = await context.supabase
+      .from("document_extraction_jobs")
+      .update({ usage_metrics: nextUsageMetrics })
+      .eq("id", job.id);
+
+    if (updateError) {
+      redirect("/builder/projects?error=cloudflare-retry-failed");
+    }
+  } else {
+    const jobs = await getLocalDocumentExtractionJobs();
+    const job = jobs.find((candidate) => candidate.id === jobId);
+
+    if (!job) {
+      redirect("/builder/projects?error=extraction-job-not-found");
+    }
+
+    const usageMetrics = job.usageMetrics && typeof job.usageMetrics === "object" ? job.usageMetrics : {};
+    const pipeline = usageMetrics.cloudflarePipeline && typeof usageMetrics.cloudflarePipeline === "object"
+      ? usageMetrics.cloudflarePipeline as Record<string, unknown>
+      : {};
+    const pipelineJobId = typeof pipeline.jobId === "string" ? pipeline.jobId : job.id;
+    const retry = await retryCloudflarePipelineFailedBatches({
+      jobId: pipelineJobId,
+      workerUrl: typeof pipeline.workerUrl === "string" ? pipeline.workerUrl : undefined,
+    });
+
+    await updateLocalDocumentExtractionJob(job.id, {
+      usageMetrics: mergeCloudflarePipelineRetry(usageMetrics, retry),
+    });
+  }
+
+  redirect(`/builder/projects?draft=cloudflare-pipeline-retried&storage=${hasSupabaseConfig() ? "supabase" : "stub"}`);
 }
 
 export async function approveWorkflowItemAction(formData: FormData) {

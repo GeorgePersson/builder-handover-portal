@@ -234,3 +234,39 @@ Continue the Builder Handover Portal from C:\Users\hunte\OneDrive\Desktop\TestWe
 ### Unknowns/Risks
 
 - No app-side retry button exists yet.
+
+## 2026-06-20 - Cloudflare App-Side Failed-Batch Retry
+
+### What Changed
+
+- Added a server helper for `POST /jobs/<jobId>/retry-failed` against the
+  configured Cloudflare Worker.
+- Added a builder server action that persists retry status, requeued batch
+  count, retry timestamp, and cleared retry errors into extraction job usage
+  metrics.
+- Added a `Retry failed batches` action to builder project extraction job cards
+  when stored Cloudflare dry-run metrics indicate a failed job or failed batch
+  count.
+- Updated the runbook and phase docs so the remaining work is a failing-scenario
+  UI smoke instead of adding the button.
+
+### Files Changed
+
+- `src/lib/server/cloudflare-pipeline.ts`
+- `src/lib/server/actions.ts`
+- `src/components/builder/projects-workspace.tsx`
+- `docs/cloudflare-pipeline-runbook.md`
+- `docs/implementation-phases.md`
+- `HANDOFF.md`
+- `TESTING_LOG.txt`
+- `docs/agent-handoff-log.md`
+
+### Checks Run
+
+- `npm.cmd run lint` - passed.
+- `npm.cmd run build` - passed.
+
+### Unknowns/Risks
+
+- A synthetic failing dry-run job still needs to be smoked through the real
+  `/builder/projects` UI to prove the retry action end to end.

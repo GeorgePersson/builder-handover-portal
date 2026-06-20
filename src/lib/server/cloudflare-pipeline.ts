@@ -39,6 +39,15 @@ export type CloudflarePipelineJobStatus = {
   error?: string;
 };
 
+export type CloudflarePipelineRetryResult = {
+  status: "retry_queued" | "no_failed_batches" | "failed";
+  jobId: string;
+  requeuedBatchCount: number;
+  retriedAt: string;
+  workerUrl?: string;
+  error?: string;
+};
+
 type CreatePipelineJobResponse = {
   jobId?: unknown;
   candidateCount?: unknown;
@@ -55,6 +64,12 @@ type PipelineJobStatusResponse = {
   failedBatchCount?: unknown;
   results?: unknown;
   updatedAt?: unknown;
+};
+
+type PipelineRetryResponse = {
+  status?: unknown;
+  jobId?: unknown;
+  requeuedBatchCount?: unknown;
 };
 
 function getPipelineBaseUrl() {
@@ -189,6 +204,60 @@ export async function fetchCloudflarePipelineJobStatus(input: {
       workerUrl,
       error: error instanceof Error ? error.message : "Cloudflare pipeline status sync failed.",
       syncedAt,
+    };
+  }
+}
+
+export async function retryCloudflarePipelineFailedBatches(input: {
+  jobId: string;
+  workerUrl?: string;
+}): Promise<CloudflarePipelineRetryResult> {
+  const workerUrl = (input.workerUrl || getPipelineBaseUrl()).trim().replace(/\/$/, "");
+  const retriedAt = new Date().toISOString();
+
+  if (!workerUrl) {
+    return {
+      status: "failed",
+      jobId: input.jobId,
+      requeuedBatchCount: 0,
+      error: "Cloudflare pipeline URL is not configured.",
+      retriedAt,
+    };
+  }
+
+  try {
+    const secret = getPipelineSecret();
+    const response = await fetch(`${workerUrl}/jobs/${encodeURIComponent(input.jobId)}/retry-failed`, {
+      method: "POST",
+      headers: {
+        ...(secret ? { Authorization: `Bearer ${secret}` } : {}),
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Cloudflare pipeline returned ${response.status}.`);
+    }
+
+    const body = (await response.json()) as PipelineRetryResponse;
+    const status = body.status === "retry_queued" || body.status === "no_failed_batches"
+      ? body.status
+      : "failed";
+
+    return {
+      status,
+      jobId: typeof body.jobId === "string" ? body.jobId : input.jobId,
+      requeuedBatchCount: getNumber(body.requeuedBatchCount) || 0,
+      retriedAt,
+      workerUrl,
+    };
+  } catch (error) {
+    return {
+      status: "failed",
+      jobId: input.jobId,
+      requeuedBatchCount: 0,
+      workerUrl,
+      error: error instanceof Error ? error.message : "Cloudflare pipeline retry failed.",
+      retriedAt,
     };
   }
 }

@@ -855,3 +855,17 @@ Tested
     `no_failed_batches` and `requeuedBatchCount=0`, as expected for a completed
     job.
   - No live enrichment, source search, source PDF fetch, or R2 object write ran.
+
+- 2026-06-20 Codex Cloudflare app-side retry action:
+  - Added a Next.js server helper/action that posts to the configured Worker's
+    `POST /jobs/<jobId>/retry-failed` route with the existing shared secret.
+  - The action merges retry status, requeued batch count, retry timestamp, and
+    cleared retry errors into extraction job usage metrics in Supabase or local
+    scaffold mode.
+  - Builder project extraction job cards now show `Retry failed batches` only
+    when stored Cloudflare metrics indicate a failed Worker job or failed batch
+    count.
+  - `npm.cmd run lint` passed.
+  - `npm.cmd run build` passed.
+  - Still needs a failing dry-run UI smoke to prove the button appears,
+    requeues failed batches, and survives a follow-up refresh/page reload.

@@ -937,6 +937,12 @@ Both passed after the latest changes.
   a failed batch without D1 configured. The public Worker was redeployed with
   this route and `POST /jobs/public-dry-run-d1-smoke-001/retry-failed` returned
   `no_failed_batches` for the completed smoke job.
+- Cloudflare app-side retry update: builder project extraction job cards now
+  show a `Retry failed batches` action when stored Cloudflare dry-run metrics
+  indicate a failed Worker job or failed batch count. The server action posts to
+  `POST /jobs/<jobId>/retry-failed`, merges retry status, requeued batch count,
+  retry time, and cleared retry errors into extraction job usage metrics in
+  Supabase or local scaffold mode, and keeps live enrichment disabled.
 - Product direction update: prefer context-first extraction and builder
   source-gap capture before internet/source enrichment. The uploaded PDF/spec is
   parsed into a strict handover schema with document evidence, missing fields,
@@ -1026,8 +1032,9 @@ Both passed after the latest changes.
    batch/result status survives page refresh. Codex confirmed the route renders
    in scaffold mode, but the in-app browser did not activate project modal
    buttons, so this remains a real desktop check.
-6. Add the app-side retry button/action for failed Cloudflare dry-run batches
-   before any live pilot.
+6. Smoke a failing dry-run scenario through `/builder/projects`: confirm the
+   app-side retry button appears for failed Cloudflare batches, requeues only
+   failed batches, and then persists the refreshed status after page reload.
 7. Continue Hunter's desktop QA checklist in
    `docs/hunter-testing-checklist.md`, focusing on credentialed Supabase/OpenAI
    upload, review, publish, and homeowner visibility checks that cannot be

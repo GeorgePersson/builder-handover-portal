@@ -203,12 +203,19 @@ With the Worker running locally or deployed publicly:
 3. Wait for extraction to complete.
 4. Reopen the project modal and check the upload processing card.
 5. Confirm it shows source-ready identity counts and `Cloudflare dry-run`.
-6. Open the Worker job URL from the runbook pattern if you need raw status:
+6. Click `Refresh pipeline status` after the Worker queue has had time to
+   process the batch, then refresh the page and confirm the stored status
+   remains visible.
+7. If a dry-run failure scenario is configured and failed batches are present,
+   click `Retry failed batches`, then refresh status again after the retry queue
+   processes.
+8. Open the Worker job URL from the runbook pattern if you need raw status:
    `/jobs/<document_extraction_job_id>`.
 
 Expected result: the app queues a dry-run Cloudflare job and records the status
-in extraction job usage metrics. It should not call OpenAI source enrichment,
-web search, crawling, or live source PDF fetching.
+in extraction job usage metrics. Refresh and retry actions update those stored
+usage metrics. The flow should not call OpenAI source enrichment, web search,
+crawling, R2 source writes, or live source PDF fetching.
 
 If `PIPELINE_DB` is configured and `schema.sql` has been applied, the Worker
 also mirrors dry-run job metadata into D1 using prepared statements:
