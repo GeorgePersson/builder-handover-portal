@@ -934,6 +934,10 @@ Both passed after the latest changes.
   The app status sync stores those references, and the builder project modal
   shows them as `Source cache dry-run` metadata. This does not write R2 objects;
   only the separate `/cache/smoke` endpoint performs a tiny synthetic R2 write.
+  When D1 is bound, the Worker also mirrors those planned keys into
+  `source_cache_index` with `status='planned'` and links
+  `identity_lookup_cache.source_cache_key`, keeping D1 as metadata/index state
+  only.
 - Cloudflare public dry-run update: Phase 12 public Worker dry-run is deployed
   at `https://builder-handover-pipeline.gpersson2002.workers.dev`. Wrangler
   created the queue `builder-handover-source-enrichment`, R2 bucket

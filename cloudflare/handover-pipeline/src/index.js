@@ -396,6 +396,65 @@ async function writeBatchCompletedToD1(env, payload, results, budgetUsage) {
       ),
     ];
 
+    for (const result of results) {
+      const cacheReference = result.sourceCacheReference && typeof result.sourceCacheReference === "object"
+        ? result.sourceCacheReference
+        : undefined;
+
+      if (!cacheReference?.objectKey) {
+        continue;
+      }
+
+      statements.push(
+        db.prepare(
+          `INSERT OR REPLACE INTO source_cache_index (
+            cache_key, identity_fingerprint, source_url, source_domain,
+            source_file_hash, source_text_hash, r2_object_key, content_type,
+            byte_size, status, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).bind(
+          cacheReference.objectKey,
+          cacheReference.identityFingerprint || result.fingerprint || null,
+          null,
+          null,
+          null,
+          cacheReference.sourceHash || null,
+          cacheReference.objectKey,
+          "application/json; charset=utf-8",
+          0,
+          "planned",
+          now,
+          now,
+        ),
+      );
+
+      if (cacheReference.identityFingerprint || result.fingerprint) {
+        statements.push(
+          db.prepare(
+            `INSERT INTO identity_lookup_cache (
+              identity_fingerprint, normalized_identity, database_match_status,
+              approved_product_id, source_cache_key, confidence, payload_json,
+              created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(identity_fingerprint) DO UPDATE SET
+              source_cache_key = excluded.source_cache_key,
+              payload_json = excluded.payload_json,
+              updated_at = excluded.updated_at`,
+          ).bind(
+            cacheReference.identityFingerprint || result.fingerprint,
+            result.productName || null,
+            "unknown",
+            null,
+            cacheReference.objectKey,
+            null,
+            JSON.stringify({ sourceCacheReference: cacheReference, dryRun: true }),
+            now,
+            now,
+          ),
+        );
+      }
+    }
+
     await db.batch(statements);
   });
 }

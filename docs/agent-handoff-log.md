@@ -427,10 +427,13 @@ Continue the Builder Handover Portal from C:\Users\hunte\OneDrive\Desktop\TestWe
   `dry-run/source-cache/<job>/<identity>/<source-hash>.json`.
 - Parsed and persisted planned source-cache references during app-side
   Cloudflare status sync.
+- Mirrored planned cache keys into D1 `source_cache_index` with
+  `status='planned'` and linked `identity_lookup_cache.source_cache_key` when
+  the D1 binding is present.
 - Updated the builder project extraction job card to show `Source cache
   dry-run` metadata.
-- Updated Worker module smokes, the runbook, phase plan, handoff, and testing
-  log.
+- Updated Worker module smokes, including a D1 mock assertion, plus the
+  runbook, phase plan, handoff, and testing log.
 
 ### Files Changed
 
@@ -449,7 +452,8 @@ Continue the Builder Handover Portal from C:\Users\hunte\OneDrive\Desktop\TestWe
 ### Checks Run
 
 - `node --check cloudflare\handover-pipeline\src\index.js` - passed.
-- `npm.cmd run cloudflare:smoke:retry` - passed.
+- `npm.cmd run cloudflare:smoke:retry` - passed and confirmed the D1 mock
+  received planned `source_cache_index` writes.
 - `npm.cmd run cloudflare:smoke:live-guard` - passed.
 - `npm.cmd run lint` - passed.
 - `npm.cmd run build` - passed after tightening TypeScript narrowing in the

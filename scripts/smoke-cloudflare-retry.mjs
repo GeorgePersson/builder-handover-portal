@@ -58,6 +58,25 @@ class QueueMock {
   }
 }
 
+class D1Mock {
+  constructor() {
+    this.statements = [];
+  }
+
+  prepare(sql) {
+    return {
+      bind: (...params) => ({
+        sql,
+        params,
+      }),
+    };
+  }
+
+  async batch(statements) {
+    this.statements.push(...statements);
+  }
+}
+
 async function loadWorkerModule() {
   const sourcePath = resolve("cloudflare/handover-pipeline/src/index.js");
   const source = await readFile(sourcePath, "utf8");
@@ -83,12 +102,14 @@ function assert(condition, message) {
 async function main() {
   const { default: worker, HandoverPipelineJob } = await loadWorkerModule();
   const queue = new QueueMock();
+  const pipelineDb = new D1Mock();
   const env = {
     BATCH_SIZE: "10",
     PIPELINE_MODE: "dry_run_failure_test",
     DRY_RUN_FAIL_BATCH_INDEX: "0",
     JOB_STATUS: new JobStatusNamespace(HandoverPipelineJob),
     SOURCE_ENRICHMENT_QUEUE: queue,
+    PIPELINE_DB: pipelineDb,
   };
   const jobId = `local-retry-smoke-${Date.now()}`;
   const sourceCandidates = [
@@ -164,6 +185,20 @@ async function main() {
   assert(completed.sourceCacheReferences[0].dryRun === true, "Expected source cache reference to be dry-run only.");
   assert(completed.budgetUsage?.searchesUsed === 0, "Expected dry-run retry completion to record zero searches.");
   assert(completed.budgetUsage?.estimatedCostUsd === 0, "Expected dry-run retry completion to record zero cost.");
+  const plannedCacheStatements = pipelineDb.statements.filter((statement) =>
+    statement.sql.includes("source_cache_index") && statement.params.includes(completed.sourceCacheReferences[0].objectKey),
+  );
+  assert(plannedCacheStatements.length >= 1, "Expected D1 mock to receive planned source cache index writes.");
+  assert(
+    plannedCacheStatements.some((statement) => statement.params.includes("planned")),
+    "Expected D1 source cache index status to be planned.",
+  );
+  assert(
+    pipelineDb.statements.some((statement) =>
+      statement.sql.includes("identity_lookup_cache") && statement.params.includes(completed.sourceCacheReferences[0].objectKey),
+    ),
+    "Expected D1 identity lookup cache to reference the planned cache key.",
+  );
 
   console.log(JSON.stringify({
     ok: true,
@@ -174,6 +209,7 @@ async function main() {
     resultCount: completed.results.length,
     sourceCacheReferenceCount: completed.sourceCacheReferences.length,
     firstSourceCacheKey: completed.sourceCacheReferences[0].objectKey,
+    d1PlannedCacheWrites: plannedCacheStatements.length,
     budgetUsage: completed.budgetUsage,
     dryRunOnly: true,
   }, null, 2));

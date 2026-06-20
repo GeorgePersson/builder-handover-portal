@@ -944,9 +944,14 @@ Tested
     metrics.
   - Builder project extraction job cards now show `Source cache dry-run`
     metadata after pipeline status refresh.
+  - D1-bound dry-run completion now mirrors planned keys into
+    `source_cache_index` with `status='planned'` and links
+    `identity_lookup_cache.source_cache_key`.
   - Updated the retry and live-guard module smokes to assert planned cache keys.
+  - Updated the retry smoke D1 mock to assert planned source-cache index writes.
   - `node --check cloudflare\handover-pipeline\src\index.js` passed.
-  - `npm.cmd run cloudflare:smoke:retry` passed.
+  - `npm.cmd run cloudflare:smoke:retry` passed and confirmed the D1 mock
+    received planned `source_cache_index` writes.
   - `npm.cmd run cloudflare:smoke:live-guard` passed.
   - `npm.cmd run lint` passed.
   - `npm.cmd run build` passed after tightening TypeScript narrowing in the
