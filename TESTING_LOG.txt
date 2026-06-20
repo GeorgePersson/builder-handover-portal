@@ -958,3 +958,12 @@ Tested
     app-side cache-reference parsers.
   - No public Cloudflare call, R2 write, OpenAI call, source search, source PDF
     fetch, or live enrichment ran.
+
+- 2026-06-21 Codex Cloudflare safety metadata app sync:
+  - Added app-side parsing for Worker `safety` metadata from job creation and
+    `/jobs/<jobId>` status responses.
+  - Status refresh now persists `pipelineMode`, `dryRunEnrichment`,
+    `liveEnrichmentEnabled`, and the admitted safety/budget snapshot into
+    extraction job usage metrics in Supabase or local scaffold mode.
+  - This keeps the future live-pilot publish gate tied to stored Worker
+    metadata while ordinary dry-run jobs remain non-blocking.

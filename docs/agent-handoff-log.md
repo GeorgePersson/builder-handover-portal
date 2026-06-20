@@ -464,3 +464,36 @@ Continue the Builder Handover Portal from C:\Users\hunte\OneDrive\Desktop\TestWe
 - Planned cache keys are metadata only. The normal dry-run queue path still
   does not write R2 objects; `/cache/smoke` remains the only synthetic R2 write
   endpoint and should not be called publicly without confirmation.
+
+## 2026-06-21 - Cloudflare Safety Metadata App Sync
+
+### What Changed
+
+- Added app-side parsing for the Worker `safety` snapshot from job creation and
+  status responses.
+- Preserved `pipelineMode`, `dryRunEnrichment`, `liveEnrichmentEnabled`, and
+  the full safety/budget snapshot when Cloudflare status refresh merges into
+  extraction job usage metrics.
+- Updated the phase plan, handoff, and testing log so future live-pilot work
+  knows the app-side publish gate can read stored Worker metadata.
+
+### Files Changed
+
+- `src/lib/server/cloudflare-pipeline.ts`
+- `src/lib/server/actions.ts`
+- `docs/implementation-phases.md`
+- `HANDOFF.md`
+- `TESTING_LOG.txt`
+- `docs/agent-handoff-log.md`
+
+### Checks Run
+
+- `npm.cmd run lint` - passed.
+- `npm.cmd run cloudflare:smoke:live-guard` - passed.
+- `npm.cmd run cloudflare:smoke:retry` - passed.
+- `npm.cmd run build` - passed.
+
+### Unknowns/Risks
+
+- This only persists safety metadata. It does not enable live source
+  enrichment, public Cloudflare calls, R2 writes, OpenAI calls, or web search.

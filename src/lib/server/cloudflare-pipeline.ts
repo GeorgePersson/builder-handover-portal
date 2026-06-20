@@ -13,6 +13,9 @@ export type CloudflarePipelineDispatchResult =
       batchCount?: number;
       statusUrl?: string;
       dryRunEnrichment: true;
+      pipelineMode?: string;
+      liveEnrichmentEnabled?: boolean;
+      safety?: CloudflarePipelineSafety;
       workerUrl: string;
       dispatchedAt: string;
     }
@@ -35,6 +38,10 @@ export type CloudflarePipelineJobStatus = {
   resultsCount?: number;
   budgetUsage?: CloudflarePipelineBudgetUsage;
   sourceCacheReferences?: CloudflarePipelineSourceCacheReference[];
+  pipelineMode?: string;
+  dryRunEnrichment?: boolean;
+  liveEnrichmentEnabled?: boolean;
+  safety?: CloudflarePipelineSafety;
   updatedAt?: string;
   syncedAt: string;
   workerUrl?: string;
@@ -55,6 +62,19 @@ export type CloudflarePipelineSourceCacheReference = {
   sourceHash?: string;
 };
 
+export type CloudflarePipelineSafety = {
+  mode?: string;
+  dryRunEnrichment?: boolean;
+  livePilotEnabled?: boolean;
+  livePilotMaxCandidates?: number;
+  liveEnrichmentEnabled?: boolean;
+  livePilotBudget?: {
+    maxSearches?: number;
+    maxEstimatedCostUsd?: number;
+    configured?: boolean;
+  };
+};
+
 export type CloudflarePipelineRetryResult = {
   status: "retry_queued" | "no_failed_batches" | "failed";
   jobId: string;
@@ -70,6 +90,7 @@ type CreatePipelineJobResponse = {
   batchCount?: unknown;
   statusUrl?: unknown;
   dryRunEnrichment?: unknown;
+  safety?: unknown;
 };
 
 type PipelineJobStatusResponse = {
@@ -81,6 +102,9 @@ type PipelineJobStatusResponse = {
   results?: unknown;
   budgetUsage?: unknown;
   sourceCacheReferences?: unknown;
+  dryRunEnrichment?: unknown;
+  liveEnrichmentEnabled?: unknown;
+  safety?: unknown;
   updatedAt?: unknown;
 };
 
@@ -100,6 +124,10 @@ function getPipelineSecret() {
 
 function getNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function getBoolean(value: unknown) {
+  return typeof value === "boolean" ? value : undefined;
 }
 
 function getBudgetUsage(value: unknown): CloudflarePipelineBudgetUsage | undefined {
@@ -145,6 +173,32 @@ function getSourceCacheReferences(value: unknown): CloudflarePipelineSourceCache
   }, []);
 
   return references.length ? references : undefined;
+}
+
+function getSafety(value: unknown): CloudflarePipelineSafety | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const safety = value as Record<string, unknown>;
+  const livePilotBudget = safety.livePilotBudget && typeof safety.livePilotBudget === "object"
+    ? safety.livePilotBudget as Record<string, unknown>
+    : undefined;
+
+  return {
+    mode: typeof safety.mode === "string" ? safety.mode : undefined,
+    dryRunEnrichment: getBoolean(safety.dryRunEnrichment),
+    livePilotEnabled: getBoolean(safety.livePilotEnabled),
+    livePilotMaxCandidates: getNumber(safety.livePilotMaxCandidates),
+    liveEnrichmentEnabled: getBoolean(safety.liveEnrichmentEnabled),
+    livePilotBudget: livePilotBudget
+      ? {
+          maxSearches: getNumber(livePilotBudget.maxSearches),
+          maxEstimatedCostUsd: getNumber(livePilotBudget.maxEstimatedCostUsd),
+          configured: getBoolean(livePilotBudget.configured),
+        }
+      : undefined,
+  };
 }
 
 export async function dispatchDryRunSourceEnrichmentJob(input: {
@@ -193,6 +247,7 @@ export async function dispatchDryRunSourceEnrichmentJob(input: {
 
     const body = (await response.json()) as CreatePipelineJobResponse;
     const jobId = typeof body.jobId === "string" ? body.jobId : input.extractionJobId;
+    const safety = getSafety(body.safety);
 
     return {
       status: "queued",
@@ -201,6 +256,9 @@ export async function dispatchDryRunSourceEnrichmentJob(input: {
       batchCount: getNumber(body.batchCount),
       statusUrl: typeof body.statusUrl === "string" ? body.statusUrl : undefined,
       dryRunEnrichment: true,
+      pipelineMode: safety?.mode,
+      liveEnrichmentEnabled: safety?.liveEnrichmentEnabled,
+      safety,
       workerUrl,
       dispatchedAt,
     };
@@ -247,6 +305,7 @@ export async function fetchCloudflarePipelineJobStatus(input: {
     }
 
     const body = (await response.json()) as PipelineJobStatusResponse;
+    const safety = getSafety(body.safety);
     return {
       status: "synced",
       jobId: input.jobId,
@@ -258,6 +317,10 @@ export async function fetchCloudflarePipelineJobStatus(input: {
       resultsCount: Array.isArray(body.results) ? body.results.length : undefined,
       budgetUsage: getBudgetUsage(body.budgetUsage),
       sourceCacheReferences: getSourceCacheReferences(body.sourceCacheReferences),
+      pipelineMode: safety?.mode,
+      dryRunEnrichment: safety?.dryRunEnrichment ?? getBoolean(body.dryRunEnrichment),
+      liveEnrichmentEnabled: safety?.liveEnrichmentEnabled ?? getBoolean(body.liveEnrichmentEnabled),
+      safety,
       updatedAt: typeof body.updatedAt === "string" ? body.updatedAt : undefined,
       syncedAt,
       workerUrl,

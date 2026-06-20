@@ -920,8 +920,11 @@ Both passed after the latest changes.
   any sync error into the extraction job usage metrics in Supabase or local
   scaffold mode. The builder project modal now renders the synced pipeline
   usage as searches used plus estimated cost, so dry-run jobs visibly remain at
-  0 searches and $0.00. A real local Worker UI smoke is still needed to confirm
-  the refresh button end to end.
+  0 searches and $0.00. Status sync also preserves the Worker safety snapshot,
+  `pipelineMode`, `dryRunEnrichment`, and `liveEnrichmentEnabled` in app usage
+  metrics, giving the future live-pilot publish gate durable metadata to read.
+  A real local Worker UI smoke is still needed to confirm the refresh button end
+  to end.
 - Publish-readiness pipeline gate update: the shared workflow readiness helper
   now blocks publishing only when an extraction job's Cloudflare usage metrics
   explicitly mark source pipeline work as live/required for publish and that
@@ -1086,7 +1089,8 @@ Both passed after the latest changes.
    source implementation that will sit behind the existing `LIVE_PILOT_ENABLED`,
    `LIVE_PILOT_MAX_CANDIDATES`, `LIVE_PILOT_MAX_SEARCHES`, and
    `LIVE_PILOT_MAX_ESTIMATED_COST_USD` gates. The approved safety/budget
-   snapshot is already available on Worker job status and queue messages.
+   snapshot is already available on Worker job status, queue messages, and
+   app-synced extraction job usage metrics after refresh.
 8. Continue Hunter's desktop QA checklist in
    `docs/hunter-testing-checklist.md`, focusing on credentialed Supabase/OpenAI
    upload, review, publish, and homeowner visibility checks that cannot be

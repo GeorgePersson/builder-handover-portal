@@ -280,7 +280,10 @@ progress from the stored usage metrics. Status sync now also preserves Worker
 estimated cost, keeping dry-run jobs visibly at 0 searches and $0.00. Publish
 readiness now has a future-live pipeline blocker: jobs whose Cloudflare usage
 metrics explicitly mark live/required source pipeline work must reach
-`completed` before the package can be sent. Dry-run jobs remain non-blocking.
+`completed` before the package can be sent. App-side status sync now also
+preserves the Worker safety snapshot, `pipelineMode`, `dryRunEnrichment`, and
+`liveEnrichmentEnabled`, so that future blocker can use stored Worker metadata
+instead of mutable environment assumptions. Dry-run jobs remain non-blocking.
 
 The Worker also has a dry-run batch retry primitive:
 `POST /jobs/<jobId>/retry-failed` requeues only failed batches using the
@@ -304,6 +307,8 @@ Tasks:
   status and stores it on the extraction job.
 - Show batch progress and failure state in the project workspace.
 - Show Worker budget usage in the project workspace after status sync.
+- Preserve the Worker safety snapshot and pipeline mode in app usage metrics
+  after dispatch and status refresh.
 - Ensure publish readiness can block on incomplete pipeline work once live
   enrichment begins.
 
@@ -313,6 +318,7 @@ Exit criteria:
 - Supabase and local scaffold modes show equivalent pipeline status.
 - Dry-run budget usage remains visible as 0 searches and $0.00 estimated cost
   after a status refresh.
+- Worker safety metadata remains available in stored app usage metrics.
 - Failed or incomplete Cloudflare jobs are visible and retryable.
 - Incomplete live/required pipeline jobs block publish readiness without
   blocking ordinary dry-run jobs.
@@ -326,7 +332,8 @@ Remaining setup:
   button surfaces the already-tested Worker retry path and the follow-up refresh
   survives page reload in both local scaffold and Supabase modes.
 - Before live enrichment is enabled, make the Worker/app sync mark only the
-  intended live source jobs as `requiredForPublish` or equivalent live metadata.
+  intended live source jobs as `requiredForPublish` or equivalent live metadata,
+  and confirm the stored safety snapshot is present on the refreshed app job.
 
 ## Phase 14: Source Cache And R2 Dry-Run Records
 
