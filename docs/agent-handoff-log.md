@@ -1,4 +1,71 @@
 # Agent Handoff Log
+## 2026-06-21 - Supabase Local Environment And Storage Check
+
+### What Changed
+
+- Added the Supabase service role key to local `.env.local` only; no secrets were committed.
+- Verified service-role REST access to the configured Supabase project.
+- Created/confirmed the private `handover-documents` storage bucket required by the app.
+- Documented that an older `handover_documents` bucket also exists, but the app code uses `handover-documents`.
+- Recorded current Supabase readiness in `WORKSHEET.md`.
+
+### Files Changed
+
+- `.env.local` locally only, ignored by git
+- `WORKSHEET.md`
+- `docs/agent-handoff-log.md`
+
+### Checks Run
+
+- Queried representative REST tables with the service-role key.
+- Listed Supabase storage buckets and created/confirmed `handover-documents`.
+- Confirmed `organisations`, `organisation_members`, `projects`, and `extracted_handover_items` are reachable.
+
+### Unknowns/Risks
+
+- Several later migration tables were not found through PostgREST: `uploaded_documents`, `document_extraction_jobs`, `project_credit_events`, and `handover_open_events`. Full Supabase-mode testing needs the relevant `docs/supabase-add-*.sql` migrations applied.
+- Applying SQL migrations still needs database-owner access, a Supabase access token/project link, or the database password; the service role JWT is enough for app/server API access but not enough for arbitrary SQL migration execution through the standard REST API.
+- Magic-link configuration was reported by the user but not verified through the dashboard/API in this pass.
+- The provided outline spec PDF is likely scanned/image-heavy: `pdf-parse` saw 34 pages but only about 957 text characters, so LlamaCloud or OCR-capable processing is important for realistic extraction testing.
+
+### Suggested Next Task
+
+Apply the pending `docs/supabase-add-*.sql` migrations through the Supabase SQL editor or provide database migration access, then run a real Supabase-mode upload/review smoke test with the provided outline spec PDF.
+
+## 2026-06-21 - Cross-Agent Ground Truth And Push Handoff Rules
+
+### What Changed
+
+- Confirmed the active local project is `C:\Users\hunte\OneDrive\Desktop\TestWebApp`.
+- Verified the repository remote points to `https://github.com/GeorgePersson/builder-handover-portal.git` and the active branch is `codex/llamacloud-greenfield`.
+- Added explicit cross-agent ground-truth rules so Hermes, local Codex, Codex cloud/mobile, and future agents read the same required docs before changing the project.
+- Added a push discipline: before `git push`, provide a detailed explanation of the work, checks, risks, and follow-ups; after pushing, update the worksheet and handoff log.
+- Created `WORKSHEET.md` as the simple live tracker for done/next work.
+
+### Files Changed
+
+- `AGENTS.md`
+- `WORKSHEET.md`
+- `docs/agent-handoff-log.md`
+
+### Checks Run
+
+- Verified `git ls-remote --heads origin` succeeded for the GitHub remote.
+- Verified global git identity is configured as `George Persson <129338143+GeorgePersson@users.noreply.github.com>`.
+- No app build/lint needed because this was documentation-only.
+
+### Unknowns/Risks
+
+- GitHub CLI (`gh`) is not installed in this environment, so GitHub API/PR tasks will use plain `git`/HTTPS unless `gh` is installed later.
+- No push was performed for this documentation update yet.
+
+### Suggested Next Task
+
+Use this prompt from local or cloud Codex:
+
+```txt
+Continue the Builder Handover Portal from C:\Users\hunte\OneDrive\Desktop\TestWebApp. Read AGENTS.md, HANDOFF.md, WORKSHEET.md, docs/product-brief.md, docs/phased-work.md, and docs/architecture.md first. Follow the worksheet and update it plus docs/agent-handoff-log.md after meaningful work.
+```
 
 ## 2026-06-20 - Project Memory Documentation Setup
 

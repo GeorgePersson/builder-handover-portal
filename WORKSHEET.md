@@ -1,0 +1,77 @@
+# Project Worksheet
+
+This is the live worksheet for agents working on this repository from local Hermes, Codex CLI, Codex cloud/mobile, or any other coding agent. Keep it short, current, and honest.
+
+## Mandatory Agent Startup
+
+Before changing code or docs, read these files in this order:
+
+1. `AGENTS.md`
+2. `HANDOFF.md`
+3. `WORKSHEET.md`
+4. `docs/product-brief.md`
+5. `docs/phased-work.md`
+6. `docs/architecture.md`
+7. Any phase-specific docs relevant to the task
+
+## Git Push / Handoff Rule
+
+Before any `git push`, prepare a detailed explanation covering:
+
+- What was changed
+- Why it was changed
+- Files touched
+- Checks/tests run and their results
+- Remaining risks, unknowns, or follow-up work
+
+After the push, update this worksheet and `docs/agent-handoff-log.md` with what is done and what should happen next.
+
+## Current Ground Truth
+
+- Local project path: `C:\Users\hunte\OneDrive\Desktop\TestWebApp`
+- GitHub remote: `https://github.com/GeorgePersson/builder-handover-portal.git`
+- Active branch at setup time: `codex/llamacloud-greenfield`
+- Product direction: builder uploads specification/supporting documents, extraction proposes package items, known matches are handled first, builder/admin review resolves uncertainty, and only reviewed/package-ready items become homeowner-facing.
+- Stable planning docs: `HANDOFF.md`, `docs/product-brief.md`, `docs/phased-work.md`, and `docs/architecture.md`.
+
+## Done
+
+- Next.js/TypeScript/Tailwind app scaffold exists.
+- Builder, admin, and client portal routes exist.
+- Specification upload, extraction preview/review, package preview, and publish scaffolds exist.
+- Supabase-ready schema and local scaffold persistence exist.
+- LlamaCloud/document-context adapter work exists on the active branch.
+- Cloudflare pipeline/D1/R2 dry-run scaffolding and runbooks exist.
+- Agent startup and handoff rules are now documented in `AGENTS.md` and this worksheet.
+
+## Needs Doing / Next Work
+
+- Continue from `HANDOFF.md` and `docs/phased-work.md`; do not change product direction without documenting the decision.
+- Keep hardening Phase 3 builder review/edit workflow unless the user gives a more specific priority.
+- Verify current app checks before pushing meaningful app changes: usually `npm.cmd run lint` and `npm.cmd run build`.
+- Keep publish readiness strict: unresolved source gaps, quote references, or builder-context prompts should not silently become client-facing.
+- Continue documenting any Cloudflare/LlamaCloud/Supabase production setup steps as they are actually verified.
+
+## Last Updated
+
+- 2026-06-21: Added cross-agent ground-truth workflow and push/handoff discipline.
+- 2026-06-21: Verified Supabase service-role access, created/confirmed `handover-documents`, and documented remaining migration gaps.
+
+## Setup Status
+
+### Supabase
+
+- `.env.local` has Supabase URL, anon key, and service role key configured locally. Do not commit `.env.local`.
+- Service-role REST access was verified against the Supabase project.
+- Private storage bucket `handover-documents` was created/confirmed for app uploads. An older underscore bucket `handover_documents` also exists but the app expects the hyphenated bucket.
+- Base tables such as `organisations`, `organisation_members`, `projects`, and `extracted_handover_items` are reachable.
+- Some later migration tables are not present yet in the REST schema cache, including `uploaded_documents`, `document_extraction_jobs`, `project_credit_events`, and `handover_open_events`. Apply the relevant `docs/supabase-add-*.sql` migrations before full Supabase-mode testing.
+
+### LlamaCloud
+
+- Not configured yet. This does not block local development because `DOCUMENT_CONTEXT_PROVIDER=local_pdf` can continue using the local PDF fallback.
+- It does block validation of the preferred LlamaCloud Parse path for real PDFs, scanned/table-heavy specs, latency, and failure handling.
+
+### Test Spec
+
+- User provided a real outline spec PDF at `C:\Users\hunte\Downloads\2074 legal signed outline spec.pdf.pdf` for extraction/upload testing. Initial `pdf-parse` check found 34 pages but only ~957 text characters, so it is likely scanned/image-heavy; local plain-text parsing alone is not enough for realistic extraction. LlamaCloud or OCR-capable processing will be important for this file.
