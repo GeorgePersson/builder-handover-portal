@@ -44,6 +44,7 @@ import {
   retryDocumentExtractionJobAction,
   revokeClientInviteAction,
   sendClientInviteEmailAction,
+  syncCloudflarePipelineStatusAction,
   updateProjectAction,
   uploadWorkflowItemSupportingDocumentAction,
 } from "@/lib/server/actions";
@@ -779,7 +780,27 @@ function ProjectEditPanel({
                                 Cloudflare dry-run: {formatCloudflarePipelineStatus(usage.cloudflarePipeline)}
                               </span>
                             ) : null}
+                            {usage.cloudflarePipeline?.lastSyncedAt ? (
+                              <span className="sm:col-span-2">
+                                Pipeline status checked {formatDate(usage.cloudflarePipeline.lastSyncedAt)}
+                              </span>
+                            ) : null}
                           </div>
+                        ) : null;
+                      })()}
+                      {(() => {
+                        const usage = getWorkflowUsageMetrics(latestJob, items);
+
+                        return usage?.cloudflarePipeline?.jobId && usage.cloudflarePipeline.status !== "skipped" ? (
+                          <form action={syncCloudflarePipelineStatusAction} className="mt-3">
+                            <input name="jobId" type="hidden" value={latestJob.id} />
+                            <button
+                              className="inline-flex h-8 items-center rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                              type="submit"
+                            >
+                              Refresh pipeline status
+                            </button>
+                          </form>
                         ) : null;
                       })()}
                       {latestJob.status === "failed" ? (
@@ -1599,10 +1620,15 @@ type WorkflowUsageMetrics = {
   sourceEnrichableUniqueIdentityCount?: number;
   cloudflarePipeline?: {
     status?: string;
+    syncStatus?: string;
     reason?: string;
     jobId?: string;
     candidateCount?: number;
     batchCount?: number;
+    completedBatchCount?: number;
+    failedBatchCount?: number;
+    resultsCount?: number;
+    lastSyncedAt?: string;
     error?: string;
   };
 };
@@ -1644,7 +1670,21 @@ function getWorkflowUsageMetrics(
     estimatedOpenAiCostUsd: getNumber(usage.estimatedOpenAiCostUsd),
     estimatedCostPerUniqueIdentityUsd: getNumber(usage.estimatedCostPerUniqueIdentityUsd),
     sourceEnrichableUniqueIdentityCount: getNumber(sourceCandidateBreakdown.sourceEnrichableUniqueIdentityCount),
-    cloudflarePipeline,
+    cloudflarePipeline: cloudflarePipeline
+      ? {
+          status: typeof cloudflarePipeline.status === "string" ? cloudflarePipeline.status : undefined,
+          syncStatus: typeof cloudflarePipeline.syncStatus === "string" ? cloudflarePipeline.syncStatus : undefined,
+          reason: typeof cloudflarePipeline.reason === "string" ? cloudflarePipeline.reason : undefined,
+          jobId: typeof cloudflarePipeline.jobId === "string" ? cloudflarePipeline.jobId : undefined,
+          candidateCount: getNumber(cloudflarePipeline.candidateCount),
+          batchCount: getNumber(cloudflarePipeline.batchCount),
+          completedBatchCount: getNumber(cloudflarePipeline.completedBatchCount),
+          failedBatchCount: getNumber(cloudflarePipeline.failedBatchCount),
+          resultsCount: getNumber(cloudflarePipeline.resultsCount),
+          lastSyncedAt: typeof cloudflarePipeline.lastSyncedAt === "string" ? cloudflarePipeline.lastSyncedAt : undefined,
+          error: typeof cloudflarePipeline.error === "string" ? cloudflarePipeline.error : undefined,
+        }
+      : undefined,
   };
 }
 
@@ -1653,8 +1693,24 @@ function formatUsageNumber(value: number | undefined) {
 }
 
 function formatCloudflarePipelineStatus(pipeline: NonNullable<WorkflowUsageMetrics["cloudflarePipeline"]>) {
+  if (pipeline.syncStatus === "failed") {
+    return `status check failed${pipeline.error ? ` (${pipeline.error})` : ""}`;
+  }
+
   if (pipeline.status === "queued") {
     return `${pipeline.candidateCount || 0} candidates queued${pipeline.batchCount ? ` in ${pipeline.batchCount} batches` : ""}`;
+  }
+
+  if (pipeline.status === "processing") {
+    const completed = pipeline.completedBatchCount || 0;
+    const failed = pipeline.failedBatchCount || 0;
+    const total = pipeline.batchCount || completed + failed;
+    return `${completed + failed}/${total} batches processed`;
+  }
+
+  if (pipeline.status === "completed") {
+    const results = pipeline.resultsCount ?? pipeline.candidateCount ?? 0;
+    return `completed dry-run for ${results} candidates`;
   }
 
   if (pipeline.status === "skipped") {

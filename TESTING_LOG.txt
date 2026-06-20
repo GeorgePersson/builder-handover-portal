@@ -798,3 +798,15 @@ Tested
     returned `d1State.skipped`.
   - No real Cloudflare D1 database was created, no deployed Worker was called,
     and no paid/live source enrichment ran.
+
+- 2026-06-20 Codex Cloudflare progress sync scaffold:
+  - Added a server-side sync action that fetches dry-run Worker job status and
+    persists latest pipeline status, batch counts, result counts, sync time, and
+    sync errors into extraction job usage metrics.
+  - Added a builder project card refresh action for dispatched Cloudflare
+    dry-run jobs and clearer queued/processing/completed status formatting.
+  - `npm.cmd run lint` passed.
+  - `npm.cmd run build` passed.
+  - Still needs a real local Worker UI smoke from `/builder/projects` to click
+    the refresh action after a queue batch completes and confirm the persisted
+    metrics survive page refresh.

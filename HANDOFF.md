@@ -912,6 +912,12 @@ Both passed after the latest changes.
   bound, the Worker continues using Durable Object status only. D1 must remain
   pipeline metadata/cache state; Supabase remains the auth, tenant, review,
   billing, and homeowner publication source of truth.
+- Cloudflare progress sync update: Phase 13 has started. Builder project
+  extraction job cards can now refresh a dispatched dry-run Worker job; the
+  server action fetches `/jobs/<jobId>` from the configured Worker and persists
+  status, batch counts, result counts, sync time, and any sync error into the
+  extraction job usage metrics in Supabase or local scaffold mode. A real local
+  Worker UI smoke is still needed to confirm the refresh button end to end.
 - Product direction update: prefer context-first extraction and builder
   source-gap capture before internet/source enrichment. The uploaded PDF/spec is
   parsed into a strict handover schema with document evidence, missing fields,
@@ -995,12 +1001,13 @@ Both passed after the latest changes.
    `cloudflare/handover-pipeline/schema.sql`, and run a local D1 dry-run smoke
    to confirm `/jobs` mirrors rows into D1 without moving product auth/review/
    homeowner truth out of Supabase.
-5. Manually run the remaining Phase 11 `/builder/projects` upload smoke with
+5. Manually run the remaining Phase 11/13 `/builder/projects` upload smoke with
    the local Worker running and `CLOUDFLARE_PIPELINE_URL=http://127.0.0.1:8787`
    in `.env.local`; confirm the app-created extraction job shows source-ready
-   counts and `Cloudflare dry-run` status. Codex confirmed the route renders in
-   scaffold mode, but the in-app browser did not activate project modal buttons,
-   so this remains a real desktop check.
+   counts and `Cloudflare dry-run` status, then click refresh after queue
+   completion and confirm the synced batch/result status survives page refresh.
+   Codex confirmed the route renders in scaffold mode, but the in-app browser
+   did not activate project modal buttons, so this remains a real desktop check.
 6. Continue Phase 12 Cloudflare account/public Worker dry-run setup: Wrangler
    login, queue/R2 creation, shared secret, deploy, public `/health`, public
    `POST /jobs`, and app dispatch to the public Worker.

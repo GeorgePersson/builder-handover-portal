@@ -12,7 +12,10 @@ import {
   extractDocumentText,
   runDocumentExtraction,
 } from "@/lib/server/document-extraction";
-import { dispatchDryRunSourceEnrichmentJob } from "@/lib/server/cloudflare-pipeline";
+import {
+  dispatchDryRunSourceEnrichmentJob,
+  fetchCloudflarePipelineJobStatus,
+} from "@/lib/server/cloudflare-pipeline";
 import { extractDocumentContext } from "@/lib/server/document-context";
 import { buildExtractionUsageMetrics } from "@/lib/server/extraction-usage";
 import {
@@ -2741,6 +2744,109 @@ export async function retryDocumentExtractionJobAction(formData: FormData) {
   }
 
   redirect(`/builder/projects?draft=extraction-retried&storage=${hasSupabaseConfig() ? "supabase" : "stub"}`);
+}
+
+function mergeCloudflarePipelineStatus(
+  usageMetrics: Record<string, unknown> | undefined,
+  status: Awaited<ReturnType<typeof fetchCloudflarePipelineJobStatus>>,
+) {
+  const usage = usageMetrics && typeof usageMetrics === "object" ? usageMetrics : {};
+  const existing = usage.cloudflarePipeline && typeof usage.cloudflarePipeline === "object"
+    ? usage.cloudflarePipeline as Record<string, unknown>
+    : {};
+
+  return {
+    ...usage,
+    cloudflarePipeline: {
+      ...existing,
+      status: status.workerStatus || existing.status || status.status,
+      syncStatus: status.status,
+      jobId: status.jobId,
+      workerUrl: status.workerUrl || existing.workerUrl,
+      candidateCount: status.candidateCount ?? existing.candidateCount,
+      batchCount: status.batchCount ?? existing.batchCount,
+      completedBatchCount: status.completedBatchCount,
+      failedBatchCount: status.failedBatchCount,
+      resultsCount: status.resultsCount,
+      workerUpdatedAt: status.updatedAt,
+      lastSyncedAt: status.syncedAt,
+      error: status.error,
+    },
+  };
+}
+
+export async function syncCloudflarePipelineStatusAction(formData: FormData) {
+  const jobId = getRequired(formData, "jobId");
+  const context = await getBuilderContext();
+
+  if (context) {
+    const { data: job, error: jobError } = await context.supabase
+      .from("document_extraction_jobs")
+      .select("id,project_id,usage_metrics")
+      .eq("id", jobId)
+      .single();
+
+    if (jobError || !job) {
+      redirect("/builder/projects?error=extraction-job-not-found");
+    }
+
+    const { data: project, error: projectError } = await context.supabase
+      .from("projects")
+      .select("id")
+      .eq("id", job.project_id)
+      .eq("organisation_id", context.organisationId)
+      .single();
+
+    if (projectError || !project) {
+      redirect("/builder/projects?error=project-not-found");
+    }
+
+    const usageMetrics = job.usage_metrics && typeof job.usage_metrics === "object"
+      ? job.usage_metrics as Record<string, unknown>
+      : {};
+    const pipeline = usageMetrics.cloudflarePipeline && typeof usageMetrics.cloudflarePipeline === "object"
+      ? usageMetrics.cloudflarePipeline as Record<string, unknown>
+      : {};
+    const pipelineJobId = typeof pipeline.jobId === "string" ? pipeline.jobId : job.id;
+    const status = await fetchCloudflarePipelineJobStatus({
+      jobId: pipelineJobId,
+      workerUrl: typeof pipeline.workerUrl === "string" ? pipeline.workerUrl : undefined,
+      statusUrl: typeof pipeline.statusUrl === "string" ? pipeline.statusUrl : undefined,
+    });
+    const nextUsageMetrics = mergeCloudflarePipelineStatus(usageMetrics, status);
+    const { error: updateError } = await context.supabase
+      .from("document_extraction_jobs")
+      .update({ usage_metrics: nextUsageMetrics })
+      .eq("id", job.id);
+
+    if (updateError) {
+      redirect("/builder/projects?error=cloudflare-sync-failed");
+    }
+  } else {
+    const jobs = await getLocalDocumentExtractionJobs();
+    const job = jobs.find((candidate) => candidate.id === jobId);
+
+    if (!job) {
+      redirect("/builder/projects?error=extraction-job-not-found");
+    }
+
+    const usageMetrics = job.usageMetrics && typeof job.usageMetrics === "object" ? job.usageMetrics : {};
+    const pipeline = usageMetrics.cloudflarePipeline && typeof usageMetrics.cloudflarePipeline === "object"
+      ? usageMetrics.cloudflarePipeline as Record<string, unknown>
+      : {};
+    const pipelineJobId = typeof pipeline.jobId === "string" ? pipeline.jobId : job.id;
+    const status = await fetchCloudflarePipelineJobStatus({
+      jobId: pipelineJobId,
+      workerUrl: typeof pipeline.workerUrl === "string" ? pipeline.workerUrl : undefined,
+      statusUrl: typeof pipeline.statusUrl === "string" ? pipeline.statusUrl : undefined,
+    });
+
+    await updateLocalDocumentExtractionJob(job.id, {
+      usageMetrics: mergeCloudflarePipelineStatus(usageMetrics, status),
+    });
+  }
+
+  redirect(`/builder/projects?draft=cloudflare-pipeline-synced&storage=${hasSupabaseConfig() ? "supabase" : "stub"}`);
 }
 
 export async function approveWorkflowItemAction(formData: FormData) {

@@ -125,3 +125,31 @@ Continue the Builder Handover Portal from C:\Users\hunte\OneDrive\Desktop\TestWe
 
 - No real D1 database was created or bound in this pass.
 - The next D1 verification needs `wrangler d1 create`, a real `database_id`, schema application, and a local dry-run `/jobs` smoke with `PIPELINE_DB` configured.
+
+## 2026-06-20 - Cloudflare Progress Sync Scaffold
+
+### What Changed
+
+- Added a Cloudflare Worker job-status fetch helper for `GET /jobs/<jobId>`.
+- Added a server action that merges Worker dry-run progress back into extraction job usage metrics in Supabase mode or local scaffold mode.
+- Added a builder project card refresh action and clearer Cloudflare queued, processing, and completed status copy.
+
+### Files Changed
+
+- `src/lib/server/cloudflare-pipeline.ts`
+- `src/lib/server/actions.ts`
+- `src/components/builder/projects-workspace.tsx`
+- `docs/implementation-phases.md`
+- `HANDOFF.md`
+- `TESTING_LOG.txt`
+- `docs/agent-handoff-log.md`
+
+### Checks Run
+
+- `npm.cmd run lint` - passed.
+- `npm.cmd run build` - passed.
+
+### Unknowns/Risks
+
+- End-to-end refresh was not clicked through a real browser with a running local Worker in this pass.
+- Publish-readiness blocking on incomplete pipeline work is still intentionally deferred until live enrichment mode exists.

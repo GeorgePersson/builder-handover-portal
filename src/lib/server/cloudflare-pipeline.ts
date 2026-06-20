@@ -24,12 +24,37 @@ export type CloudflarePipelineDispatchResult =
       dispatchedAt: string;
     };
 
+export type CloudflarePipelineJobStatus = {
+  status: "synced" | "failed";
+  jobId: string;
+  workerStatus?: string;
+  candidateCount?: number;
+  batchCount?: number;
+  completedBatchCount?: number;
+  failedBatchCount?: number;
+  resultsCount?: number;
+  updatedAt?: string;
+  syncedAt: string;
+  workerUrl?: string;
+  error?: string;
+};
+
 type CreatePipelineJobResponse = {
   jobId?: unknown;
   candidateCount?: unknown;
   batchCount?: unknown;
   statusUrl?: unknown;
   dryRunEnrichment?: unknown;
+};
+
+type PipelineJobStatusResponse = {
+  status?: unknown;
+  candidateCount?: unknown;
+  batchCount?: unknown;
+  completedBatchCount?: unknown;
+  failedBatchCount?: unknown;
+  results?: unknown;
+  updatedAt?: unknown;
 };
 
 function getPipelineBaseUrl() {
@@ -108,6 +133,62 @@ export async function dispatchDryRunSourceEnrichmentJob(input: {
       error: error instanceof Error ? error.message : "Cloudflare pipeline dispatch failed.",
       workerUrl,
       dispatchedAt,
+    };
+  }
+}
+
+export async function fetchCloudflarePipelineJobStatus(input: {
+  jobId: string;
+  workerUrl?: string;
+  statusUrl?: string;
+}): Promise<CloudflarePipelineJobStatus> {
+  const workerUrl = (input.workerUrl || getPipelineBaseUrl()).trim().replace(/\/$/, "");
+  const syncedAt = new Date().toISOString();
+
+  if (!workerUrl) {
+    return {
+      status: "failed",
+      jobId: input.jobId,
+      error: "Cloudflare pipeline URL is not configured.",
+      syncedAt,
+    };
+  }
+
+  try {
+    const secret = getPipelineSecret();
+    const statusPath = input.statusUrl || `/jobs/${encodeURIComponent(input.jobId)}`;
+    const response = await fetch(`${workerUrl}${statusPath}`, {
+      method: "GET",
+      headers: {
+        ...(secret ? { Authorization: `Bearer ${secret}` } : {}),
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Cloudflare pipeline returned ${response.status}.`);
+    }
+
+    const body = (await response.json()) as PipelineJobStatusResponse;
+    return {
+      status: "synced",
+      jobId: input.jobId,
+      workerStatus: typeof body.status === "string" ? body.status : undefined,
+      candidateCount: getNumber(body.candidateCount),
+      batchCount: getNumber(body.batchCount),
+      completedBatchCount: getNumber(body.completedBatchCount),
+      failedBatchCount: getNumber(body.failedBatchCount),
+      resultsCount: Array.isArray(body.results) ? body.results.length : undefined,
+      updatedAt: typeof body.updatedAt === "string" ? body.updatedAt : undefined,
+      syncedAt,
+      workerUrl,
+    };
+  } catch (error) {
+    return {
+      status: "failed",
+      jobId: input.jobId,
+      workerUrl,
+      error: error instanceof Error ? error.message : "Cloudflare pipeline status sync failed.",
+      syncedAt,
     };
   }
 }

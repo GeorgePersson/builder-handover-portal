@@ -255,6 +255,13 @@ Exit criteria:
 Goal: make Cloudflare job progress durable in the main app database, not only in
 the Worker Durable Object.
 
+Current status: started. The app now has a server action that reads a dry-run
+Worker job status and merges the latest Cloudflare progress back into
+`document_extraction_jobs.usage_metrics` in Supabase mode, or the local scaffold
+job record in local mode. The builder project workspace exposes a refresh
+control for dispatched Worker jobs and displays completed/processing batch
+progress from the stored usage metrics.
+
 Tasks:
 
 - Add Supabase columns or a companion table for pipeline job id, status,
@@ -272,6 +279,14 @@ Exit criteria:
 - Refreshing the app does not lose Cloudflare pipeline progress.
 - Supabase and local scaffold modes show equivalent pipeline status.
 - Failed or incomplete Cloudflare jobs are visible and retryable.
+
+Remaining setup:
+
+- Run a real local Worker smoke from `/builder/projects`, click the refresh
+  control after queue completion, and confirm the persisted metrics survive page
+  refresh in both local scaffold and Supabase modes.
+- Decide the publish-readiness blocking rule for incomplete pipeline work before
+  live enrichment is enabled.
 
 ## Phase 14: Source Cache And R2 Dry-Run Records
 
