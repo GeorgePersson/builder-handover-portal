@@ -982,3 +982,11 @@ Tested
     estimated cost.
   - No remote Cloudflare binding, R2 write, OpenAI call, source search, source
     PDF fetch, or live enrichment ran.
+
+- 2026-06-21 Codex document upload body-size limit fix:
+  - Raised Next Server Action `bodySizeLimit` to `60mb` in `next.config.ts`.
+  - This matches the app's existing upload intent: project documents are
+    validated up to 50 MB and specification PDFs up to 30 MB before storage.
+  - `npm.cmd run lint` passed.
+  - `npm.cmd run build` passed.
+  - Restarted the local dev server and verified `/builder` returned HTTP 200.
