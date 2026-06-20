@@ -54,6 +54,7 @@ After the push, update this worksheet and `docs/agent-handoff-log.md` with what 
 
 ## Last Updated
 
+- 2026-06-21: Added bedtime Codex cloud/mobile handoff prompt and clarified that local Hermes cannot continue after the computer is off.
 - 2026-06-21: Pushed Supabase migration verification and agent skills setup to `codex/llamacloud-greenfield` at commit `9332619`.
 - 2026-06-21: Applied all repo Supabase add-migrations, verified missing REST tables now exist, and installed Supabase agent skills.
 - 2026-06-21: Pushed cross-agent worksheet/setup documentation to `codex/llamacloud-greenfield` at commit `ead6510`.
@@ -83,3 +84,19 @@ After the push, update this worksheet and `docs/agent-handoff-log.md` with what 
 ### Agent Skills
 
 - Installed Supabase agent skills via `npx skills add supabase/agent-skills --yes`. The repo now has `.agents/skills/supabase`, `.agents/skills/supabase-postgres-best-practices`, and `skills-lock.json` so compatible coding agents can load Supabase-specific guidance.
+
+## Bedtime / Phone Codex Cloud Prompt
+
+Use this from Codex cloud/mobile when handing off from local Hermes:
+
+```txt
+Continue the Builder Handover Portal on branch codex/llamacloud-greenfield. First read AGENTS.md, HANDOFF.md, WORKSHEET.md, docs/product-brief.md, docs/phased-work.md, docs/architecture.md, and docs/agent-handoff-log.md.
+
+Current state: Supabase URL/anon/service-role/direct Postgres access were configured locally by Hermes, the private handover-documents bucket exists, all docs/supabase-add-*.sql migrations were applied successfully, and Supabase REST verification passed for uploaded_documents, document_extraction_jobs, project_credit_events, handover_open_events, document_download_events, and handover_approvals. Supabase agent skills are committed under .agents/skills.
+
+Do not assume secrets are available in Codex cloud unless configured there. If cloud secrets are missing, do code/docs work only and document exactly which secret is needed. Do not print secrets.
+
+Next best task: run or prepare the Supabase-mode app smoke test for magic-link login, builder workspace bootstrap, project/spec upload, extraction/review queue creation, and publish-readiness behavior. The real test PDF is scanned/image-heavy, so plain local pdf-parse sees very little text; LlamaCloud/OCR is still needed for realistic extraction. If you cannot access the local PDF from cloud, add a clear test checklist or use repo demo assets instead.
+
+Before any git push, write a detailed explanation of what changed, why, files touched, checks run, and remaining risks. After pushing, update WORKSHEET.md and docs/agent-handoff-log.md.
+```

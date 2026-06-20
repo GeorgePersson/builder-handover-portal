@@ -1,4 +1,29 @@
 # Agent Handoff Log
+## 2026-06-21 - Bedtime Codex Cloud Handoff Prompt
+
+### What Changed
+
+- Added a copy/paste prompt to `WORKSHEET.md` for running one final Codex cloud/mobile command from the phone.
+- The prompt tells the cloud agent what to read first, what Supabase setup was completed locally, what secrets may be missing in cloud, and what the next best smoke-test task is.
+- Clarified that local-only files like the scanned PDF may not be available to Codex cloud unless uploaded or present in the repo.
+
+### Files Changed
+
+- `WORKSHEET.md`
+- `docs/agent-handoff-log.md`
+
+### Checks Run
+
+- Documentation-only update; no app checks required.
+
+### Unknowns/Risks
+
+- Codex cloud will only have access to pushed repo files and any cloud-configured secrets, not this local machine after it is powered off.
+- LlamaCloud is still not configured, so scanned-PDF extraction remains a future realistic-testing dependency.
+
+### Suggested Next Task
+
+From phone/Codex cloud, use the prompt in `WORKSHEET.md` to prepare or run the Supabase-mode smoke test, depending on cloud secret availability.
 ## 2026-06-21 - Supabase Migration Setup Push Completed
 
 ### What Changed
