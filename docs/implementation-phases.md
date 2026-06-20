@@ -283,7 +283,9 @@ metrics explicitly mark live/required source pipeline work must reach
 `completed` before the package can be sent. App-side status sync now also
 preserves the Worker safety snapshot, `pipelineMode`, `dryRunEnrichment`, and
 `liveEnrichmentEnabled`, so that future blocker can use stored Worker metadata
-instead of mutable environment assumptions. Dry-run jobs remain non-blocking.
+instead of mutable environment assumptions. The builder project workspace uses
+that same mode metadata so guarded live-pilot jobs are not mislabeled as plain
+dry-run jobs. Dry-run jobs remain non-blocking.
 
 The Worker also has a dry-run batch retry primitive:
 `POST /jobs/<jobId>/retry-failed` requeues only failed batches using the
@@ -309,6 +311,7 @@ Tasks:
 - Show Worker budget usage in the project workspace after status sync.
 - Preserve the Worker safety snapshot and pipeline mode in app usage metrics
   after dispatch and status refresh.
+- Label Cloudflare project-workspace status from the stored pipeline mode.
 - Ensure publish readiness can block on incomplete pipeline work once live
   enrichment begins.
 

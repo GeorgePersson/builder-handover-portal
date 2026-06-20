@@ -923,8 +923,9 @@ Both passed after the latest changes.
   0 searches and $0.00. Status sync also preserves the Worker safety snapshot,
   `pipelineMode`, `dryRunEnrichment`, and `liveEnrichmentEnabled` in app usage
   metrics, giving the future live-pilot publish gate durable metadata to read.
-  A real local Worker UI smoke is still needed to confirm the refresh button end
-  to end.
+  The builder project modal now uses that stored mode metadata to label guarded
+  live-pilot jobs separately from ordinary dry-run jobs. A real local Worker UI
+  smoke is still needed to confirm the refresh button end to end.
 - Publish-readiness pipeline gate update: the shared workflow readiness helper
   now blocks publishing only when an extraction job's Cloudflare usage metrics
   explicitly mark source pipeline work as live/required for publish and that

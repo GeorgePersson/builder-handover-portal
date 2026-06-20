@@ -965,5 +965,7 @@ Tested
   - Status refresh now persists `pipelineMode`, `dryRunEnrichment`,
     `liveEnrichmentEnabled`, and the admitted safety/budget snapshot into
     extraction job usage metrics in Supabase or local scaffold mode.
+  - Builder project extraction job cards now label stored live-pilot guard
+    metadata separately from ordinary dry-run jobs.
   - This keeps the future live-pilot publish gate tied to stored Worker
     metadata while ordinary dry-run jobs remain non-blocking.

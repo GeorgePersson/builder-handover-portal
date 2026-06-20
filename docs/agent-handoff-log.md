@@ -474,6 +474,8 @@ Continue the Builder Handover Portal from C:\Users\hunte\OneDrive\Desktop\TestWe
 - Preserved `pipelineMode`, `dryRunEnrichment`, `liveEnrichmentEnabled`, and
   the full safety/budget snapshot when Cloudflare status refresh merges into
   extraction job usage metrics.
+- Updated builder project extraction job cards to label guarded live-pilot
+  metadata separately from ordinary dry-run jobs.
 - Updated the phase plan, handoff, and testing log so future live-pilot work
   knows the app-side publish gate can read stored Worker metadata.
 
@@ -481,6 +483,7 @@ Continue the Builder Handover Portal from C:\Users\hunte\OneDrive\Desktop\TestWe
 
 - `src/lib/server/cloudflare-pipeline.ts`
 - `src/lib/server/actions.ts`
+- `src/components/builder/projects-workspace.tsx`
 - `docs/implementation-phases.md`
 - `HANDOFF.md`
 - `TESTING_LOG.txt`

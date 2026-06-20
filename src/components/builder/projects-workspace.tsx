@@ -778,7 +778,7 @@ function ProjectEditPanel({
                             ) : null}
                             {usage.cloudflarePipeline ? (
                               <span className="sm:col-span-2">
-                                Cloudflare dry-run: {formatCloudflarePipelineStatus(usage.cloudflarePipeline)}
+                                {formatCloudflarePipelineLabel(usage.cloudflarePipeline)}: {formatCloudflarePipelineStatus(usage.cloudflarePipeline)}
                               </span>
                             ) : null}
                             {usage.cloudflarePipeline?.budgetUsage ? (
@@ -1652,6 +1652,9 @@ type WorkflowUsageMetrics = {
     completedBatchCount?: number;
     failedBatchCount?: number;
     resultsCount?: number;
+    pipelineMode?: string;
+    dryRunEnrichment?: boolean;
+    liveEnrichmentEnabled?: boolean;
     lastSyncedAt?: string;
     retryStatus?: string;
     requeuedBatchCount?: number;
@@ -1668,6 +1671,7 @@ type WorkflowUsageMetrics = {
       identityFingerprint?: string;
       sourceHash?: string;
     }>;
+    safety?: unknown;
     error?: string;
   };
 };
@@ -1678,6 +1682,10 @@ type CloudflareSourceCacheReference = NonNullable<
 
 function getNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function getBoolean(value: unknown) {
+  return typeof value === "boolean" ? value : undefined;
 }
 
 function getCloudflareSourceCacheReferences(value: unknown): CloudflareSourceCacheReference[] | undefined {
@@ -1734,6 +1742,9 @@ function getWorkflowUsageMetrics(
     ? cloudflarePipeline.budgetUsage
     : undefined;
   const sourceCacheReferences = getCloudflareSourceCacheReferences(cloudflarePipeline?.sourceCacheReferences);
+  const safety = cloudflarePipeline?.safety && typeof cloudflarePipeline.safety === "object"
+    ? cloudflarePipeline.safety as Record<string, unknown>
+    : {};
 
   return {
     extractedRowCount: getNumber(usage.extractedRowCount),
@@ -1758,6 +1769,13 @@ function getWorkflowUsageMetrics(
           completedBatchCount: getNumber(cloudflarePipeline.completedBatchCount),
           failedBatchCount: getNumber(cloudflarePipeline.failedBatchCount),
           resultsCount: getNumber(cloudflarePipeline.resultsCount),
+          pipelineMode: typeof cloudflarePipeline.pipelineMode === "string"
+            ? cloudflarePipeline.pipelineMode
+            : typeof safety.mode === "string"
+              ? safety.mode
+              : undefined,
+          dryRunEnrichment: getBoolean(cloudflarePipeline.dryRunEnrichment ?? safety.dryRunEnrichment),
+          liveEnrichmentEnabled: getBoolean(cloudflarePipeline.liveEnrichmentEnabled ?? safety.liveEnrichmentEnabled),
           lastSyncedAt: typeof cloudflarePipeline.lastSyncedAt === "string" ? cloudflarePipeline.lastSyncedAt : undefined,
           retryStatus: typeof cloudflarePipeline.retryStatus === "string" ? cloudflarePipeline.retryStatus : undefined,
           requeuedBatchCount: getNumber(cloudflarePipeline.requeuedBatchCount),
@@ -1778,6 +1796,14 @@ function getWorkflowUsageMetrics(
 
 function formatUsageNumber(value: number | undefined) {
   return typeof value === "number" ? value.toLocaleString() : "0";
+}
+
+function formatCloudflarePipelineLabel(pipeline: NonNullable<WorkflowUsageMetrics["cloudflarePipeline"]>) {
+  if (pipeline.pipelineMode === "live_pilot") {
+    return pipeline.liveEnrichmentEnabled ? "Cloudflare live pilot" : "Cloudflare live-pilot guard";
+  }
+
+  return pipeline.dryRunEnrichment === false ? "Cloudflare pipeline" : "Cloudflare dry-run";
 }
 
 function formatCloudflarePipelineStatus(pipeline: NonNullable<WorkflowUsageMetrics["cloudflarePipeline"]>) {
@@ -1802,7 +1828,8 @@ function formatCloudflarePipelineStatus(pipeline: NonNullable<WorkflowUsageMetri
 
   if (pipeline.status === "completed") {
     const results = pipeline.resultsCount ?? pipeline.candidateCount ?? 0;
-    return `completed dry-run for ${results} candidates`;
+    const dryRunLabel = pipeline.dryRunEnrichment === false ? "" : "dry-run ";
+    return `completed ${dryRunLabel}for ${results} candidates`;
   }
 
   if (pipeline.status === "skipped") {
