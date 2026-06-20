@@ -302,3 +302,39 @@ Continue the Builder Handover Portal from C:\Users\hunte\OneDrive\Desktop\TestWe
 
 - The real `/builder/projects` UI still needs to click through the failing
   dry-run retry flow with a running Worker/dev app.
+
+## 2026-06-20 - Cloudflare Live-Pilot Admission Guard
+
+### What Changed
+
+- Added Worker safety metadata for pipeline mode, live-pilot enablement,
+  candidate cap, and live-enrichment implementation state.
+- Added a default-closed live-pilot admission gate:
+  `PIPELINE_MODE=live_pilot` requires `LIVE_PILOT_ENABLED=true`.
+- Added `LIVE_PILOT_MAX_CANDIDATES`, defaulting to 1, before any live source
+  implementation exists.
+- Added `scripts/smoke-cloudflare-live-guard.mjs` and
+  `npm.cmd run cloudflare:smoke:live-guard`.
+- Updated the handoff, implementation phases, runbook, and testing log.
+
+### Files Changed
+
+- `cloudflare/handover-pipeline/src/index.js`
+- `scripts/smoke-cloudflare-live-guard.mjs`
+- `package.json`
+- `docs/cloudflare-pipeline-runbook.md`
+- `docs/implementation-phases.md`
+- `HANDOFF.md`
+- `TESTING_LOG.txt`
+- `docs/agent-handoff-log.md`
+
+### Checks Run
+
+- `npm.cmd run cloudflare:smoke:live-guard` - passed.
+- `npm.cmd run cloudflare:smoke:retry` - passed.
+
+### Unknowns/Risks
+
+- Live source enrichment is still not implemented and remains intentionally
+  disabled. The next live-pilot step needs a concrete per-job cost/search budget
+  before any OpenAI or web-search call is wired behind the gate.

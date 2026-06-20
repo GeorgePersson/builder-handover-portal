@@ -159,6 +159,18 @@ Object, forces batch 0 to fail once, retries exactly that failed batch with
 does not start Wrangler, call public Cloudflare, write R2, call OpenAI, or use
 web search.
 
+Run the local module smoke for the live-pilot admission guard:
+
+```powershell
+npm.cmd run cloudflare:smoke:live-guard
+```
+
+Expected result: `PIPELINE_MODE=live_pilot` returns 403 unless
+`LIVE_PILOT_ENABLED=true`, returns 413 when the candidate count exceeds
+`LIVE_PILOT_MAX_CANDIDATES`, and accepts a one-candidate job as dry-run only.
+This does not enable live source enrichment; the Worker still reports
+`liveEnrichmentEnabled: false`.
+
 Smoke test the synthetic R2 cache path locally:
 
 ```powershell

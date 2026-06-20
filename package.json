@@ -8,6 +8,7 @@
     "demo:generate-100-item-spec": "node scripts/generate-100-item-spec.mjs",
     "cloudflare:dev": "npx.cmd wrangler dev --config cloudflare/handover-pipeline/wrangler.jsonc",
     "cloudflare:deploy": "npx.cmd wrangler deploy --config cloudflare/handover-pipeline/wrangler.jsonc",
+    "cloudflare:smoke:live-guard": "node scripts/smoke-cloudflare-live-guard.mjs",
     "cloudflare:smoke:retry": "node scripts/smoke-cloudflare-retry.mjs",
     "start": "next start",
     "lint": "eslint"

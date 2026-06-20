@@ -343,9 +343,19 @@ Goal: enable one tightly capped live source-enrichment batch after dry-run,
 progress sync, context-first filtering, builder source-gap capture, and cost
 guards are working.
 
+Current status: guardrails started. The Worker rejects `PIPELINE_MODE=live_pilot`
+unless `LIVE_PILOT_ENABLED=true`, caps admission with
+`LIVE_PILOT_MAX_CANDIDATES` defaulting to 1, and still reports
+`liveEnrichmentEnabled: false` plus `dryRunEnrichment: true`. This means the
+gate can be tested before any live search/enrichment implementation exists.
+`npm.cmd run cloudflare:smoke:live-guard` verifies disabled live-pilot jobs are
+rejected, oversized jobs are rejected, and a one-candidate admitted job still
+queues dry-run work only.
+
 Tasks:
 
-- Add an explicit `PIPELINE_MODE=live_pilot` gate that defaults off.
+- Keep the explicit `PIPELINE_MODE=live_pilot` / `LIVE_PILOT_ENABLED=true` gate
+  default-off.
 - Require a max candidate count and per-job cost/search budget.
 - Run one source-ready candidate through official-source search.
 - Do not search builder-input-needed or generic/source-gap rows until the
@@ -356,6 +366,8 @@ Tasks:
 
 Exit criteria:
 
+- Live-pilot admission remains impossible unless the explicit enable flag is
+  present and the candidate cap is respected.
 - One live candidate can be enriched and reviewed.
 - Cost/search usage is recorded and visible.
 - No homeowner-facing data changes until the builder/admin approves it.

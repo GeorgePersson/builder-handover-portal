@@ -1,4 +1,5 @@
 const defaultBatchSize = 10;
+const defaultLivePilotMaxCandidates = 1;
 
 function jsonResponse(body, init = {}) {
   return new Response(JSON.stringify(body, null, 2), {
@@ -15,8 +16,69 @@ function getBatchSize(env) {
   return Number.isFinite(parsed) && parsed > 0 ? Math.min(25, Math.round(parsed)) : defaultBatchSize;
 }
 
+function getPipelineMode(env) {
+  return env.PIPELINE_MODE || "dry_run";
+}
+
+function getLivePilotMaxCandidates(env) {
+  const parsed = Number(env.LIVE_PILOT_MAX_CANDIDATES || defaultLivePilotMaxCandidates);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.min(10, Math.round(parsed)) : defaultLivePilotMaxCandidates;
+}
+
+function getPipelineSafety(env) {
+  const mode = getPipelineMode(env);
+  const livePilotEnabled = env.LIVE_PILOT_ENABLED === "true";
+  const livePilotMaxCandidates = getLivePilotMaxCandidates(env);
+
+  return {
+    mode,
+    dryRunEnrichment: true,
+    livePilotEnabled,
+    livePilotMaxCandidates,
+    liveEnrichmentEnabled: false,
+  };
+}
+
+function validateJobSafety(env, sourceCandidates) {
+  const safety = getPipelineSafety(env);
+  const validModes = new Set(["dry_run", "dry_run_failure_test", "live_pilot"]);
+
+  if (!validModes.has(safety.mode)) {
+    return {
+      ok: false,
+      status: 400,
+      error: `Unsupported PIPELINE_MODE '${safety.mode}'.`,
+      safety,
+    };
+  }
+
+  if (safety.mode !== "live_pilot") {
+    return { ok: true, safety };
+  }
+
+  if (!safety.livePilotEnabled) {
+    return {
+      ok: false,
+      status: 403,
+      error: "Live pilot mode is disabled. Set LIVE_PILOT_ENABLED=true before accepting live-pilot jobs.",
+      safety,
+    };
+  }
+
+  if (sourceCandidates.length > safety.livePilotMaxCandidates) {
+    return {
+      ok: false,
+      status: 413,
+      error: `Live pilot jobs are capped at ${safety.livePilotMaxCandidates} source candidate(s).`,
+      safety,
+    };
+  }
+
+  return { ok: true, safety };
+}
+
 function shouldSimulateFailure(env, payload) {
-  if (env.PIPELINE_MODE !== "dry_run_failure_test") {
+  if (getPipelineMode(env) !== "dry_run_failure_test") {
     return false;
   }
 
@@ -351,6 +413,15 @@ async function handleCreateJob(request, env) {
   const jobId = String(body.jobId || crypto.randomUUID());
   const projectId = typeof body.projectId === "string" ? body.projectId : undefined;
   const sourceCandidates = Array.isArray(body.sourceCandidates) ? body.sourceCandidates.slice(0, 250) : [];
+  const safetyResult = validateJobSafety(env, sourceCandidates);
+  if (!safetyResult.ok) {
+    return jsonResponse({
+      error: safetyResult.error,
+      safety: safetyResult.safety,
+    }, { status: safetyResult.status });
+  }
+
+  const safety = safetyResult.safety;
   const batches = chunkItems(sourceCandidates, getBatchSize(env));
   const status = batches.length ? "queued" : "waiting_for_candidates";
 
@@ -397,6 +468,7 @@ async function handleCreateJob(request, env) {
       candidateCount: sourceCandidates.length,
       batchCount: batches.length,
       dryRunEnrichment: true,
+      safety,
       d1State,
       statusUrl: `/jobs/${encodeURIComponent(jobId)}`,
     },
@@ -708,6 +780,7 @@ const worker = {
         ok: true,
         service: "builder-handover-pipeline",
         dryRunEnrichment: true,
+        safety: getPipelineSafety(env),
         d1Configured: hasPipelineDb(env),
       });
     }

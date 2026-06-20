@@ -950,6 +950,14 @@ Both passed after the latest changes.
   `retryAttempt=1`, and confirms the retry completes with two dry-run results.
   This smoke is local-only and does not touch public Cloudflare, R2, OpenAI, or
   web search.
+- Cloudflare live-pilot guard update: the Worker now rejects
+  `PIPELINE_MODE=live_pilot` jobs unless `LIVE_PILOT_ENABLED=true`; when enabled
+  it also caps admission with `LIVE_PILOT_MAX_CANDIDATES` defaulting to 1. The
+  current implementation still reports `liveEnrichmentEnabled: false` and
+  `dryRunEnrichment: true`, so this is an admission/cost guard only, not live
+  source enrichment. `npm.cmd run cloudflare:smoke:live-guard` verifies disabled
+  jobs return 403, over-cap jobs return 413, and a one-candidate admission still
+  queues dry-run work only.
 - Product direction update: prefer context-first extraction and builder
   source-gap capture before internet/source enrichment. The uploaded PDF/spec is
   parsed into a strict handover schema with document evidence, missing fields,
@@ -1044,23 +1052,27 @@ Both passed after the latest changes.
    only failed batches, and then persists the refreshed status after page
    reload. The module-level retry smoke now passes via
    `npm.cmd run cloudflare:smoke:retry`.
-7. Continue Hunter's desktop QA checklist in
+7. Before any one-candidate live source pilot, keep
+   `npm.cmd run cloudflare:smoke:live-guard` green and decide the exact per-job
+   cost/search budget that will sit behind the existing `LIVE_PILOT_ENABLED`
+   and `LIVE_PILOT_MAX_CANDIDATES` gates.
+8. Continue Hunter's desktop QA checklist in
    `docs/hunter-testing-checklist.md`, focusing on credentialed Supabase/OpenAI
    upload, review, publish, and homeowner visibility checks that cannot be
    completed from unauthenticated local smoke tests. Move passing/failing notes
    from `TESTING_LOG.txt` as real testing is completed.
-8. Apply `docs/supabase-schema.sql` to a Supabase project and add env vars to
+9. Apply `docs/supabase-schema.sql` to a Supabase project and add env vars to
    `.env.local`.
-9. Continue improving PDF extraction for long, table-heavy specification files:
+10. Continue improving PDF extraction for long, table-heavy specification files:
    tune table extraction and OCR limits against real builder specifications.
-10. Replace the deterministic source-enrichment scaffold with a real AI/search
+11. Replace the deterministic source-enrichment scaffold with a real AI/search
    workflow only after context-first filtering and builder source-gap capture:
    official source search, extraction, critic scoring, source storage, admin
    review for low-confidence records, and project-credit usage metering around
    unique source-ready identities/search depth rather than raw upload count.
-11. Tune the PDF intake progress and warning copy against real builder files,
+12. Tune the PDF intake progress and warning copy against real builder files,
    especially long scanned/image-only specifications and table-heavy schedules.
-12. Apply `docs/supabase-add-extracted-item-review-reason.sql` to existing
+13. Apply `docs/supabase-add-extracted-item-review-reason.sql` to existing
    Supabase projects so reviewer notes persist remotely, then remove the legacy
    no-column fallback once all environments have the field.
 13. Replace `POST /api/ai/product-draft` deterministic enrichment with the real
