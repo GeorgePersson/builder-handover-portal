@@ -953,11 +953,13 @@ Both passed after the latest changes.
 - Cloudflare live-pilot guard update: the Worker now rejects
   `PIPELINE_MODE=live_pilot` jobs unless `LIVE_PILOT_ENABLED=true`; when enabled
   it also caps admission with `LIVE_PILOT_MAX_CANDIDATES` defaulting to 1. The
-  current implementation still reports `liveEnrichmentEnabled: false` and
+  Worker also requires explicit `LIVE_PILOT_MAX_SEARCHES` and
+  `LIVE_PILOT_MAX_ESTIMATED_COST_USD` before admission. The current
+  implementation still reports `liveEnrichmentEnabled: false` and
   `dryRunEnrichment: true`, so this is an admission/cost guard only, not live
   source enrichment. `npm.cmd run cloudflare:smoke:live-guard` verifies disabled
-  jobs return 403, over-cap jobs return 413, and a one-candidate admission still
-  queues dry-run work only.
+  jobs return 403, over-cap jobs return 413, missing-budget jobs return 403, and
+  a budgeted one-candidate admission still queues dry-run work only.
 - Product direction update: prefer context-first extraction and builder
   source-gap capture before internet/source enrichment. The uploaded PDF/spec is
   parsed into a strict handover schema with document evidence, missing fields,
@@ -1053,9 +1055,10 @@ Both passed after the latest changes.
    reload. The module-level retry smoke now passes via
    `npm.cmd run cloudflare:smoke:retry`.
 7. Before any one-candidate live source pilot, keep
-   `npm.cmd run cloudflare:smoke:live-guard` green and decide the exact per-job
-   cost/search budget that will sit behind the existing `LIVE_PILOT_ENABLED`
-   and `LIVE_PILOT_MAX_CANDIDATES` gates.
+   `npm.cmd run cloudflare:smoke:live-guard` green and decide the exact live
+   source implementation that will sit behind the existing `LIVE_PILOT_ENABLED`,
+   `LIVE_PILOT_MAX_CANDIDATES`, `LIVE_PILOT_MAX_SEARCHES`, and
+   `LIVE_PILOT_MAX_ESTIMATED_COST_USD` gates.
 8. Continue Hunter's desktop QA checklist in
    `docs/hunter-testing-checklist.md`, focusing on credentialed Supabase/OpenAI
    upload, review, publish, and homeowner visibility checks that cannot be

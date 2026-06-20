@@ -887,13 +887,15 @@ Tested
     `PIPELINE_MODE=live_pilot`.
   - Live-pilot jobs now require `LIVE_PILOT_ENABLED=true` and respect
     `LIVE_PILOT_MAX_CANDIDATES`, which defaults to 1.
+  - Live-pilot jobs now also require explicit `LIVE_PILOT_MAX_SEARCHES` and
+    `LIVE_PILOT_MAX_ESTIMATED_COST_USD` before admission.
   - The Worker still reports `liveEnrichmentEnabled=false` and
     `dryRunEnrichment=true`; this is a guard only, not live source enrichment.
   - Added `scripts/smoke-cloudflare-live-guard.mjs` and
     `npm.cmd run cloudflare:smoke:live-guard`.
   - `npm.cmd run cloudflare:smoke:live-guard` passed: disabled live-pilot jobs
-    returned 403, over-cap jobs returned 413, and one-candidate admission
-    queued dry-run work only.
+    returned 403, over-cap jobs returned 413, missing-budget jobs returned 403,
+    and budgeted one-candidate admission queued dry-run work only.
   - `npm.cmd run cloudflare:smoke:retry` still passed after the guard change.
   - No public Cloudflare call, R2 write, OpenAI call, source search, source PDF
     fetch, or live enrichment ran.

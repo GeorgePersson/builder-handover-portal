@@ -112,11 +112,27 @@ async function main() {
   assert(capped.safety?.livePilotMaxCandidates === 1, "Expected live pilot cap to be reported.");
   assert(cappedQueue.messages.length === 0, "Expected capped live pilot to enqueue nothing.");
 
+  const unbudgetedQueue = new QueueMock();
+  const unbudgetedEnv = {
+    PIPELINE_MODE: "live_pilot",
+    LIVE_PILOT_ENABLED: "true",
+    LIVE_PILOT_MAX_CANDIDATES: "1",
+    JOB_STATUS: new JobStatusNamespace(HandoverPipelineJob),
+    SOURCE_ENRICHMENT_QUEUE: unbudgetedQueue,
+  };
+  const unbudgetedResponse = await postJob(worker, unbudgetedEnv, "live-guard-unbudgeted", [createCandidate(1)]);
+  const unbudgeted = await readJson(unbudgetedResponse);
+  assert(unbudgetedResponse.status === 403, "Expected live pilot admission to require explicit budgets.");
+  assert(unbudgeted.safety?.livePilotBudget?.configured === false, "Expected missing budget state to be reported.");
+  assert(unbudgetedQueue.messages.length === 0, "Expected unbudgeted live pilot to enqueue nothing.");
+
   const acceptedQueue = new QueueMock();
   const acceptedEnv = {
     PIPELINE_MODE: "live_pilot",
     LIVE_PILOT_ENABLED: "true",
     LIVE_PILOT_MAX_CANDIDATES: "1",
+    LIVE_PILOT_MAX_SEARCHES: "2",
+    LIVE_PILOT_MAX_ESTIMATED_COST_USD: "0.50",
     JOB_STATUS: new JobStatusNamespace(HandoverPipelineJob),
     SOURCE_ENRICHMENT_QUEUE: acceptedQueue,
   };
@@ -124,6 +140,9 @@ async function main() {
   const accepted = await readJson(acceptedResponse);
   assert(acceptedResponse.status === 202, "Expected one-candidate live pilot admission to be accepted.");
   assert(accepted.safety?.liveEnrichmentEnabled === false, "Expected live enrichment implementation to remain disabled.");
+  assert(accepted.safety?.livePilotBudget?.configured === true, "Expected explicit live pilot budgets to be recorded.");
+  assert(accepted.safety?.livePilotBudget?.maxSearches === 2, "Expected live pilot search budget to be recorded.");
+  assert(accepted.safety?.livePilotBudget?.maxEstimatedCostUsd === 0.5, "Expected live pilot cost budget to be recorded.");
   assert(accepted.dryRunEnrichment === true, "Expected accepted live pilot admission to remain dry-run only.");
   assert(acceptedQueue.messages.length === 1, "Expected accepted live pilot admission to enqueue one dry-run message.");
 
@@ -131,8 +150,10 @@ async function main() {
     ok: true,
     disabledStatus: disabledResponse.status,
     cappedStatus: cappedResponse.status,
+    unbudgetedStatus: unbudgetedResponse.status,
     acceptedStatus: acceptedResponse.status,
     acceptedDryRunOnly: accepted.dryRunEnrichment === true && accepted.safety.liveEnrichmentEnabled === false,
+    acceptedBudget: accepted.safety.livePilotBudget,
     queuedMessages: acceptedQueue.messages.length,
   }, null, 2));
 }

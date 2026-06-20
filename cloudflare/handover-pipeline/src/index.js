@@ -25,16 +25,37 @@ function getLivePilotMaxCandidates(env) {
   return Number.isFinite(parsed) && parsed > 0 ? Math.min(10, Math.round(parsed)) : defaultLivePilotMaxCandidates;
 }
 
+function getRequiredPositiveNumber(env, key) {
+  const raw = env[key];
+  const parsed = Number(raw);
+  return typeof raw === "string" && raw.trim() && Number.isFinite(parsed) && parsed > 0
+    ? parsed
+    : undefined;
+}
+
+function getLivePilotBudget(env) {
+  const maxSearches = getRequiredPositiveNumber(env, "LIVE_PILOT_MAX_SEARCHES");
+  const maxEstimatedCostUsd = getRequiredPositiveNumber(env, "LIVE_PILOT_MAX_ESTIMATED_COST_USD");
+
+  return {
+    maxSearches: maxSearches === undefined ? undefined : Math.min(5, Math.round(maxSearches)),
+    maxEstimatedCostUsd: maxEstimatedCostUsd === undefined ? undefined : Math.min(1, Number(maxEstimatedCostUsd.toFixed(4))),
+    configured: maxSearches !== undefined && maxEstimatedCostUsd !== undefined,
+  };
+}
+
 function getPipelineSafety(env) {
   const mode = getPipelineMode(env);
   const livePilotEnabled = env.LIVE_PILOT_ENABLED === "true";
   const livePilotMaxCandidates = getLivePilotMaxCandidates(env);
+  const livePilotBudget = getLivePilotBudget(env);
 
   return {
     mode,
     dryRunEnrichment: true,
     livePilotEnabled,
     livePilotMaxCandidates,
+    livePilotBudget,
     liveEnrichmentEnabled: false,
   };
 }
@@ -70,6 +91,15 @@ function validateJobSafety(env, sourceCandidates) {
       ok: false,
       status: 413,
       error: `Live pilot jobs are capped at ${safety.livePilotMaxCandidates} source candidate(s).`,
+      safety,
+    };
+  }
+
+  if (!safety.livePilotBudget.configured) {
+    return {
+      ok: false,
+      status: 403,
+      error: "Live pilot budgets are not configured. Set LIVE_PILOT_MAX_SEARCHES and LIVE_PILOT_MAX_ESTIMATED_COST_USD before accepting live-pilot jobs.",
       safety,
     };
   }

@@ -308,11 +308,14 @@ Continue the Builder Handover Portal from C:\Users\hunte\OneDrive\Desktop\TestWe
 ### What Changed
 
 - Added Worker safety metadata for pipeline mode, live-pilot enablement,
-  candidate cap, and live-enrichment implementation state.
+  candidate cap, search/cost budget state, and live-enrichment implementation
+  state.
 - Added a default-closed live-pilot admission gate:
   `PIPELINE_MODE=live_pilot` requires `LIVE_PILOT_ENABLED=true`.
 - Added `LIVE_PILOT_MAX_CANDIDATES`, defaulting to 1, before any live source
   implementation exists.
+- Added required `LIVE_PILOT_MAX_SEARCHES` and
+  `LIVE_PILOT_MAX_ESTIMATED_COST_USD` admission checks.
 - Added `scripts/smoke-cloudflare-live-guard.mjs` and
   `npm.cmd run cloudflare:smoke:live-guard`.
 - Updated the handoff, implementation phases, runbook, and testing log.
@@ -330,7 +333,8 @@ Continue the Builder Handover Portal from C:\Users\hunte\OneDrive\Desktop\TestWe
 
 ### Checks Run
 
-- `npm.cmd run cloudflare:smoke:live-guard` - passed.
+- `npm.cmd run cloudflare:smoke:live-guard` - passed, including missing-budget
+  rejection.
 - `npm.cmd run cloudflare:smoke:retry` - passed.
 
 ### Unknowns/Risks

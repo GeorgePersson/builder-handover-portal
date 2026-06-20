@@ -345,18 +345,19 @@ guards are working.
 
 Current status: guardrails started. The Worker rejects `PIPELINE_MODE=live_pilot`
 unless `LIVE_PILOT_ENABLED=true`, caps admission with
-`LIVE_PILOT_MAX_CANDIDATES` defaulting to 1, and still reports
-`liveEnrichmentEnabled: false` plus `dryRunEnrichment: true`. This means the
-gate can be tested before any live search/enrichment implementation exists.
+`LIVE_PILOT_MAX_CANDIDATES` defaulting to 1, requires explicit
+`LIVE_PILOT_MAX_SEARCHES` and `LIVE_PILOT_MAX_ESTIMATED_COST_USD`, and still
+reports `liveEnrichmentEnabled: false` plus `dryRunEnrichment: true`. This means
+the gate can be tested before any live search/enrichment implementation exists.
 `npm.cmd run cloudflare:smoke:live-guard` verifies disabled live-pilot jobs are
-rejected, oversized jobs are rejected, and a one-candidate admitted job still
-queues dry-run work only.
+rejected, oversized jobs are rejected, missing-budget jobs are rejected, and a
+budgeted one-candidate admitted job still queues dry-run work only.
 
 Tasks:
 
 - Keep the explicit `PIPELINE_MODE=live_pilot` / `LIVE_PILOT_ENABLED=true` gate
   default-off.
-- Require a max candidate count and per-job cost/search budget.
+- Keep the max candidate count plus explicit per-job search/cost budgets.
 - Run one source-ready candidate through official-source search.
 - Do not search builder-input-needed or generic/source-gap rows until the
   builder supplies enough identity detail.
@@ -367,7 +368,7 @@ Tasks:
 Exit criteria:
 
 - Live-pilot admission remains impossible unless the explicit enable flag is
-  present and the candidate cap is respected.
+  present, the candidate cap is respected, and search/cost budgets are set.
 - One live candidate can be enriched and reviewed.
 - Cost/search usage is recorded and visible.
 - No homeowner-facing data changes until the builder/admin approves it.
