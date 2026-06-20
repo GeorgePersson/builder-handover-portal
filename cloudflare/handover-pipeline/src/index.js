@@ -15,6 +15,17 @@ function getBatchSize(env) {
   return Number.isFinite(parsed) && parsed > 0 ? Math.min(25, Math.round(parsed)) : defaultBatchSize;
 }
 
+function shouldSimulateFailure(env, payload) {
+  if (env.PIPELINE_MODE !== "dry_run_failure_test") {
+    return false;
+  }
+
+  const parsed = Number(env.DRY_RUN_FAIL_BATCH_INDEX || 0);
+  const failBatchIndex = Number.isFinite(parsed) ? parsed : 0;
+  const retryAttempt = Number(payload.retryAttempt || 0);
+  return Number(payload.batchIndex || 0) === failBatchIndex && retryAttempt === 0;
+}
+
 function chunkItems(items, size) {
   const chunks = [];
 
@@ -47,6 +58,15 @@ async function sendJobUpdate(env, jobId, update) {
     method: "POST",
     body: JSON.stringify(update),
   });
+}
+
+async function getJobStatus(env, jobId) {
+  const response = await getJobStub(env, jobId).fetch("https://job-status/status");
+  if (!response.ok) {
+    return null;
+  }
+
+  return response.json();
 }
 
 async function runPipelineStateWrite(env, operation) {
@@ -232,6 +252,96 @@ async function writeBatchCompletedToD1(env, payload, results) {
   });
 }
 
+async function writeBatchFailedToD1(env, payload, errorMessage) {
+  const now = new Date().toISOString();
+  return runPipelineStateWrite(env, async (db) => {
+    await db.batch([
+      db.prepare(
+        `UPDATE pipeline_jobs
+         SET failed_batch_count = MIN(batch_count, failed_batch_count + 1),
+             status = CASE
+               WHEN completed_batch_count + MIN(batch_count, failed_batch_count + 1) >= batch_count THEN 'failed'
+               ELSE 'processing'
+             END,
+             updated_at = ?
+         WHERE job_id = ?`,
+      ).bind(now, payload.jobId),
+      db.prepare(
+        `UPDATE source_search_candidates
+         SET status = ?, review_reason = ?, updated_at = ?
+         WHERE job_id = ? AND batch_index = ?`,
+      ).bind(
+        "dry_run_failed",
+        errorMessage,
+        now,
+        payload.jobId,
+        payload.batchIndex,
+      ),
+      db.prepare(
+        `INSERT INTO pipeline_job_events (
+          event_id, job_id, event_type, batch_index, message, payload_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(
+        crypto.randomUUID(),
+        payload.jobId,
+        "batch_failed",
+        payload.batchIndex,
+        errorMessage,
+        JSON.stringify({ errorMessage, retryAttempt: payload.retryAttempt || 0 }),
+        now,
+      ),
+    ]);
+  });
+}
+
+async function writeBatchRetriedToD1(env, jobId, failedBatches) {
+  const now = new Date().toISOString();
+  return runPipelineStateWrite(env, async (db) => {
+    const statements = [
+      db.prepare(
+        `UPDATE pipeline_jobs
+         SET failed_batch_count = MAX(0, failed_batch_count - ?),
+             status = ?,
+             updated_at = ?
+         WHERE job_id = ?`,
+      ).bind(failedBatches.length, "queued", now, jobId),
+    ];
+
+    for (const batch of failedBatches) {
+      statements.push(
+        db.prepare(
+          `UPDATE source_search_candidates
+           SET status = ?, review_reason = ?, updated_at = ?
+           WHERE job_id = ? AND batch_index = ?`,
+        ).bind(
+          "queued",
+          "Failed dry-run batch was requeued for retry.",
+          now,
+          jobId,
+          batch.batchIndex,
+        ),
+      );
+      statements.push(
+        db.prepare(
+          `INSERT INTO pipeline_job_events (
+            event_id, job_id, event_type, batch_index, message, payload_json, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        ).bind(
+          crypto.randomUUID(),
+          jobId,
+          "batch_retry_queued",
+          batch.batchIndex,
+          "Failed dry-run batch requeued.",
+          JSON.stringify({ retryAttempt: batch.retryAttempt }),
+          now,
+        ),
+      );
+    }
+
+    await db.batch(statements);
+  });
+}
+
 async function handleCreateJob(request, env) {
   if (!isAuthorized(request, env)) {
     return jsonResponse({ error: "Unauthorized." }, { status: 401 });
@@ -252,6 +362,11 @@ async function handleCreateJob(request, env) {
       status,
       candidateCount: sourceCandidates.length,
       batchCount: batches.length,
+      batches: batches.map((candidates, batchIndex) => ({
+        batchIndex,
+        candidates,
+        candidateCount: candidates.length,
+      })),
       createdAt: new Date().toISOString(),
     }),
   });
@@ -270,6 +385,7 @@ async function handleCreateJob(request, env) {
       projectId,
       batchIndex,
       candidates,
+      retryAttempt: 0,
       createdAt: new Date().toISOString(),
     });
   }
@@ -300,6 +416,64 @@ async function handleGetJob(request, env, jobId) {
   });
 }
 
+async function handleRetryFailedBatches(request, env, jobId) {
+  if (!isAuthorized(request, env)) {
+    return jsonResponse({ error: "Unauthorized." }, { status: 401 });
+  }
+
+  const job = await getJobStatus(env, jobId);
+  if (!job) {
+    return jsonResponse({ error: "Job not found." }, { status: 404 });
+  }
+
+  const batches = job.batches && typeof job.batches === "object" ? job.batches : {};
+  const failedBatches = Object.entries(batches)
+    .filter(([, batch]) => batch && typeof batch === "object" && batch.status === "failed")
+    .map(([batchIndex, batch]) => ({
+      batchIndex: Number(batchIndex),
+      candidates: Array.isArray(batch.candidates) ? batch.candidates : [],
+      retryAttempt: Number(batch.retryAttempt || 0) + 1,
+    }))
+    .filter((batch) => Number.isFinite(batch.batchIndex) && batch.candidates.length > 0);
+
+  if (failedBatches.length === 0) {
+    return jsonResponse({
+      jobId,
+      status: "no_failed_batches",
+      requeuedBatchCount: 0,
+    });
+  }
+
+  for (const batch of failedBatches) {
+    await env.SOURCE_ENRICHMENT_QUEUE.send({
+      jobId,
+      projectId: job.projectId,
+      batchIndex: batch.batchIndex,
+      candidates: batch.candidates,
+      retryAttempt: batch.retryAttempt,
+      createdAt: new Date().toISOString(),
+    });
+  }
+
+  await sendJobUpdate(env, jobId, {
+    type: "batch_retry_queued",
+    batches: failedBatches.map((batch) => ({
+      batchIndex: batch.batchIndex,
+      candidateCount: batch.candidates.length,
+      retryAttempt: batch.retryAttempt,
+    })),
+    queuedAt: new Date().toISOString(),
+  });
+  const d1State = await writeBatchRetriedToD1(env, jobId, failedBatches);
+
+  return jsonResponse({
+    jobId,
+    status: "retry_queued",
+    requeuedBatchCount: failedBatches.length,
+    d1State,
+  });
+}
+
 async function handleQueueMessage(message, env) {
   const payload = message.body || {};
   const jobId = String(payload.jobId || "");
@@ -309,31 +483,52 @@ async function handleQueueMessage(message, env) {
   }
 
   const candidates = Array.isArray(payload.candidates) ? payload.candidates : [];
-  await writeBatchStartedToD1(env, payload, candidates.length);
+  try {
+    await writeBatchStartedToD1(env, payload, candidates.length);
 
-  await sendJobUpdate(env, jobId, {
-    type: "batch_started",
-    batchIndex: payload.batchIndex,
-    candidateCount: candidates.length,
-    startedAt: new Date().toISOString(),
-  });
+    await sendJobUpdate(env, jobId, {
+      type: "batch_started",
+      batchIndex: payload.batchIndex,
+      candidateCount: candidates.length,
+      retryAttempt: payload.retryAttempt || 0,
+      candidates,
+      startedAt: new Date().toISOString(),
+    });
 
-  const results = candidates.map((candidate) => ({
-    fingerprint: candidate.fingerprint,
-    productName: candidate.productName,
-    status: "dry_run_not_enriched",
-    reviewReason: "Cloudflare pipeline accepted this candidate without calling OpenAI or web search.",
-  }));
+    if (shouldSimulateFailure(env, payload)) {
+      throw new Error("Simulated dry-run batch failure.");
+    }
 
-  await writeBatchCompletedToD1(env, payload, results);
+    const results = candidates.map((candidate) => ({
+      fingerprint: candidate.fingerprint,
+      productName: candidate.productName,
+      status: "dry_run_not_enriched",
+      reviewReason: "Cloudflare pipeline accepted this candidate without calling OpenAI or web search.",
+    }));
 
-  await sendJobUpdate(env, jobId, {
-    type: "batch_completed",
-    batchIndex: payload.batchIndex,
-    candidateCount: results.length,
-    results,
-    completedAt: new Date().toISOString(),
-  });
+    await writeBatchCompletedToD1(env, payload, results);
+
+    await sendJobUpdate(env, jobId, {
+      type: "batch_completed",
+      batchIndex: payload.batchIndex,
+      candidateCount: results.length,
+      results,
+      completedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Dry-run batch failed.";
+    await writeBatchFailedToD1(env, payload, errorMessage);
+    await sendJobUpdate(env, jobId, {
+      type: "batch_failed",
+      batchIndex: payload.batchIndex,
+      candidateCount: candidates.length,
+      retryAttempt: payload.retryAttempt || 0,
+      candidates,
+      errorMessage,
+      failedAt: new Date().toISOString(),
+    });
+    throw error;
+  }
 }
 
 async function handleCacheSmoke(request, env) {
@@ -396,7 +591,17 @@ export class HandoverPipelineJob {
         ...job,
         completedBatchCount: 0,
         failedBatchCount: 0,
-        batches: {},
+        batches: Array.isArray(job.batches)
+          ? Object.fromEntries(job.batches.map((batch) => [
+              batch.batchIndex,
+              {
+                status: "queued",
+                candidateCount: batch.candidateCount,
+                candidates: Array.isArray(batch.candidates) ? batch.candidates : [],
+                retryAttempt: 0,
+              },
+            ]))
+          : {},
         results: [],
         updatedAt: new Date().toISOString(),
       });
@@ -415,8 +620,13 @@ export class HandoverPipelineJob {
 
       if (update.type === "batch_started") {
         batches[update.batchIndex] = {
+          ...batches[update.batchIndex],
           status: "processing",
           candidateCount: update.candidateCount,
+          candidates: Array.isArray(update.candidates)
+            ? update.candidates
+            : batches[update.batchIndex]?.candidates || [],
+          retryAttempt: update.retryAttempt || batches[update.batchIndex]?.retryAttempt || 0,
           startedAt: update.startedAt,
         };
       }
@@ -432,10 +642,43 @@ export class HandoverPipelineJob {
         job.completedBatchCount = (job.completedBatchCount || 0) + 1;
       }
 
+      if (update.type === "batch_failed") {
+        batches[update.batchIndex] = {
+          ...batches[update.batchIndex],
+          status: "failed",
+          candidateCount: update.candidateCount,
+          candidates: Array.isArray(update.candidates)
+            ? update.candidates
+            : batches[update.batchIndex]?.candidates || [],
+          retryAttempt: update.retryAttempt || batches[update.batchIndex]?.retryAttempt || 0,
+          errorMessage: update.errorMessage,
+          failedAt: update.failedAt,
+        };
+        job.failedBatchCount = (job.failedBatchCount || 0) + 1;
+      }
+
+      if (update.type === "batch_retry_queued") {
+        const retryBatches = Array.isArray(update.batches) ? update.batches : [];
+        for (const batch of retryBatches) {
+          batches[batch.batchIndex] = {
+            ...batches[batch.batchIndex],
+            status: "queued",
+            retryAttempt: batch.retryAttempt,
+            candidateCount: batch.candidateCount,
+            requeuedAt: update.queuedAt,
+          };
+        }
+        job.failedBatchCount = Math.max(0, (job.failedBatchCount || 0) - retryBatches.length);
+      }
+
       const batchCount = job.batchCount || 0;
       const completedBatchCount = job.completedBatchCount || 0;
       const failedBatchCount = job.failedBatchCount || 0;
-      const status = batchCount > 0 && completedBatchCount + failedBatchCount >= batchCount ? "completed" : "processing";
+      const status = failedBatchCount > 0
+        ? "failed"
+        : batchCount > 0 && completedBatchCount >= batchCount
+          ? "completed"
+          : "processing";
 
       await this.state.storage.put("job", {
         ...job,
@@ -471,6 +714,11 @@ const worker = {
 
     if (request.method === "POST" && url.pathname === "/jobs") {
       return handleCreateJob(request, env);
+    }
+
+    const retryMatch = url.pathname.match(/^\/jobs\/([^/]+)\/retry-failed$/);
+    if (request.method === "POST" && retryMatch) {
+      return handleRetryFailedBatches(request, env, decodeURIComponent(retryMatch[1]));
     }
 
     if ((request.method === "GET" || request.method === "POST") && url.pathname === "/cache/smoke") {

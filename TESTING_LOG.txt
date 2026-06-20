@@ -842,3 +842,16 @@ Tested
   - Updated `.env.local` with the public Worker URL and matching shared secret.
   - No OpenAI, LlamaCloud, web search, live enrichment, source PDF fetch, or R2
     object write ran.
+
+- 2026-06-20 Codex Cloudflare failed-batch retry primitive:
+  - Added Worker route `POST /jobs/<jobId>/retry-failed`.
+  - Failed dry-run batches now retain candidate payloads in Durable Object job
+    status and can be requeued with an incremented retry attempt.
+  - Added D1 mirror events/updates for `batch_failed` and `batch_retry_queued`.
+  - Direct Worker module mock verified a failed batch is requeued with
+    `retryAttempt=1` and no D1 binding.
+  - Redeployed public dry-run Worker; version `f390a04e-9895-47aa-91e5-2da9873b9299`.
+  - Public `POST /jobs/public-dry-run-d1-smoke-001/retry-failed` returned
+    `no_failed_batches` and `requeuedBatchCount=0`, as expected for a completed
+    job.
+  - No live enrichment, source search, source PDF fetch, or R2 object write ran.

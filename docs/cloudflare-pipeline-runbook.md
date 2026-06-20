@@ -135,6 +135,18 @@ Local queue delivery may wait for the configured `max_batch_timeout` before the
 consumer updates the Durable Object. In this scaffold that can mean waiting up
 to about 30 seconds before `/jobs/<jobId>` moves from `queued` to `completed`.
 
+Retry failed dry-run batches:
+
+```powershell
+Invoke-RestMethod `
+  -Method Post `
+  -Uri http://127.0.0.1:8787/jobs/local-test-001/retry-failed
+```
+
+Expected result: only failed batches are requeued, using the candidates already
+stored in the job status object. If no failed batches exist, the endpoint
+returns `no_failed_batches`.
+
 Smoke test the synthetic R2 cache path locally:
 
 ```powershell
@@ -218,7 +230,7 @@ default.
 
 1. Run the app workflow smoke from `/builder/projects` against the public
    dry-run Worker URL now stored in `.env.local`.
-2. Add a retry path for failed dry-run batches.
+2. Add a builder/admin surface for retrying failed dry-run batches from the app.
 3. Replace dry-run queue processing with a one-candidate live pilot only after
    cost guards are implemented.
 4. Add cost guards before enabling live OpenAI/web-search calls.

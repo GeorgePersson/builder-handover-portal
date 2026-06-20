@@ -277,6 +277,12 @@ job record in local mode. The builder project workspace exposes a refresh
 control for dispatched Worker jobs and displays completed/processing batch
 progress from the stored usage metrics.
 
+The Worker also has a dry-run batch retry primitive:
+`POST /jobs/<jobId>/retry-failed` requeues only failed batches using the
+candidates retained in Durable Object job status. The endpoint is authenticated
+with the same `PIPELINE_SHARED_SECRET` as the other Worker routes and does not
+call OpenAI, web search, R2 source writes, or live enrichment.
+
 Tasks:
 
 - Add Supabase columns or a companion table for pipeline job id, status,
@@ -300,6 +306,8 @@ Remaining setup:
 - Run a real local Worker smoke from `/builder/projects`, click the refresh
   control after queue completion, and confirm the persisted metrics survive page
   refresh in both local scaffold and Supabase modes.
+- Add the app-side button/action for retrying failed Worker batches from the
+  project workspace once a failing dry-run scenario is available.
 - Decide the publish-readiness blocking rule for incomplete pipeline work before
   live enrichment is enabled.
 

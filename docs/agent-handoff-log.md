@@ -205,3 +205,32 @@ Continue the Builder Handover Portal from C:\Users\hunte\OneDrive\Desktop\TestWe
 - The app upload flow has not yet dispatched to the public Worker from `/builder/projects`.
 - R2 bucket exists for binding, but no object write was performed in this pass.
 - Live source enrichment remains disabled.
+
+## 2026-06-20 - Cloudflare Failed-Batch Retry Primitive
+
+### What Changed
+
+- Added Worker route `POST /jobs/<jobId>/retry-failed`.
+- Failed dry-run queue batches now store candidate payloads in Durable Object job status.
+- Retry requeues only failed batches with incremented retry attempts.
+- D1 mirror writes now record failed batches and retry-queued events.
+
+### Files Changed
+
+- `cloudflare/handover-pipeline/src/index.js`
+- `docs/cloudflare-pipeline-runbook.md`
+- `docs/implementation-phases.md`
+- `HANDOFF.md`
+- `TESTING_LOG.txt`
+- `docs/agent-handoff-log.md`
+
+### Checks Run
+
+- `node --check cloudflare\handover-pipeline\src\index.js` - passed.
+- Direct Worker module mock for `POST /jobs/<jobId>/retry-failed` - passed.
+- `npx.cmd wrangler deploy --config cloudflare/handover-pipeline/wrangler.jsonc` - passed, version `f390a04e-9895-47aa-91e5-2da9873b9299`.
+- Public `POST /jobs/public-dry-run-d1-smoke-001/retry-failed` - passed with `no_failed_batches`.
+
+### Unknowns/Risks
+
+- No app-side retry button exists yet.
