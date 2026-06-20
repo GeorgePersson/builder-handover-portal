@@ -1,4 +1,29 @@
 # Agent Handoff Log
+## 2026-06-21 - Documentation Push Completed
+
+### What Changed
+
+- Pushed the cross-agent worksheet and setup-status documentation to GitHub on branch `codex/llamacloud-greenfield`.
+- Commit pushed: `ead6510`.
+- Left `.env.local` and `.codex/` uncommitted.
+
+### Files Changed
+
+- `WORKSHEET.md`
+- `docs/agent-handoff-log.md`
+
+### Checks Run
+
+- `git push origin HEAD` - passed.
+- `git status --short --branch` - branch is aligned with origin except existing untracked `.codex/`.
+
+### Unknowns/Risks
+
+- This entry records the push; it does not apply pending Supabase SQL migrations.
+
+### Suggested Next Task
+
+Apply missing Supabase add-migrations with DB migration access, then run a Supabase-mode upload/review smoke test using the provided scanned outline spec PDF and LlamaCloud/OCR-capable parsing when available.
 ## 2026-06-21 - Supabase Local Environment And Storage Check
 
 ### What Changed

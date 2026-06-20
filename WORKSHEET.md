@@ -54,6 +54,7 @@ After the push, update this worksheet and `docs/agent-handoff-log.md` with what 
 
 ## Last Updated
 
+- 2026-06-21: Pushed cross-agent worksheet/setup documentation to `codex/llamacloud-greenfield` at commit `ead6510`.
 - 2026-06-21: Added cross-agent ground-truth workflow and push/handoff discipline.
 - 2026-06-21: Verified Supabase service-role access, created/confirmed `handover-documents`, and documented remaining migration gaps.
 
