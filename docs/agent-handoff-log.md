@@ -1,4 +1,41 @@
 # Agent Handoff Log
+## 2026-06-21 - Quote Source-Gap Approval Guard
+
+### What Changed
+
+- Loaded quote-reference status and raw extraction metadata in the Supabase approve-as-correct guard so server-side source-gap checks use the same signals as the UI/local path.
+- Kept publish readiness strict for rows that somehow became `approved` while still carrying unresolved quote references, missing fields, or builder-info prompts.
+- Added explicit pending-resolution metadata to supporting evidence uploads so quote/evidence attachment is auditable without pretending the item is automatically resolved.
+- Updated the worksheet and handoff notes with the current behavior.
+
+### Files Changed
+
+- `src/lib/server/actions.ts`
+- `src/lib/workflow-readiness.ts`
+- `HANDOFF.md`
+- `WORKSHEET.md`
+- `docs/agent-handoff-log.md`
+
+### Checks Run
+
+- `npm.cmd run lint` - not available in this Linux container; used `npm run lint` instead.
+- `npm run lint` - passed.
+- `npm.cmd run supabase:smoke:readiness` - not available in this Linux container; used `npm run supabase:smoke:readiness` instead.
+- `npm run supabase:smoke:readiness` - failed because Supabase secrets are not configured in this environment.
+- `npm.cmd run build` - not available in this Linux container; used `npm run build` instead.
+- `npm run build` - failed because Next.js could not fetch Google-hosted Geist fonts from this environment.
+- `npx tsc --noEmit` - passed.
+
+### Unknowns/Risks
+
+- Supabase-mode smoke still needs an environment with Supabase URL, anon key, and service-role key.
+- Full Next build should be rerun where Google Fonts can be fetched or after switching to local fonts.
+- Browser smoke for edit/evidence/builder-supplied resolution paths remains a follow-up.
+
+### Suggested Next Task
+
+Run the Supabase-mode browser smoke with secrets available, then verify that quote-like source gaps cannot be approved as correct, supporting evidence creates an audit action, edited or builder-supplied rows can proceed, and publish remains blocked for unresolved approved-as-correct gaps.
+
 ## 2026-06-21 - Consolidation Push Completed
 
 ### What Changed

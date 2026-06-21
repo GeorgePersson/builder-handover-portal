@@ -51,11 +51,12 @@ After the push, update this worksheet and `docs/agent-handoff-log.md` with what 
 - Continue from `HANDOFF.md` and `docs/phased-work.md`; do not change product direction without documenting the decision.
 - Continue Phase 3 browser smoke testing: magic-link login, builder workspace bootstrap, project/spec upload, extraction/review queue creation, builder-supplied/source-gap handling, and publish-readiness behavior.
 - Verify current app checks before pushing meaningful app changes: usually `npm.cmd run lint` and `npm.cmd run build`.
-- Keep publish readiness strict: unresolved source gaps, quote references, or builder-context prompts should not silently become client-facing.
+- Keep publish readiness strict: unresolved source gaps, quote references, or builder-context prompts should not silently become client-facing. Approved-as-correct rows with lingering source-gap signals are now counted as publish blockers unless they are edited, excluded, or marked builder-supplied with a note.
 - Continue documenting any Cloudflare/LlamaCloud/Supabase production setup steps as they are actually verified.
 
 ## Last Updated
 
+- 2026-06-21: Hardened quote/source-gap approval and readiness checks so Supabase approvals load source-gap fields, approved-as-correct gaps remain publish blockers, and supporting-evidence uploads include audit metadata.
 - 2026-06-21: Pushed consolidated Supabase smoke/source-gap readiness work to `codex/llamacloud-greenfield` at commit `9d8ff14`.
 - 2026-06-21: Consolidated selected Codex cloud branches: Supabase readiness smoke plus source-gap/publish-readiness hardening; lint/build passed.
 - 2026-06-21: Added bedtime Codex cloud/mobile handoff prompt and clarified that local Hermes cannot continue after the computer is off.

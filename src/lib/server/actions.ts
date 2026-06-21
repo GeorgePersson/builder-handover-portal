@@ -1002,12 +1002,14 @@ async function insertWorkflowAuditLog(
   });
 }
 
-type WorkflowReviewItem = {
-  id: string;
-  projectId: string;
-  extractionJobId?: string;
-  reviewStatus: ExtractedItemReviewStatus;
-};
+type WorkflowReviewItem = Pick<ExtractedWorkflowItem,
+  "id"
+  | "projectId"
+  | "extractionJobId"
+  | "reviewStatus"
+  | "quoteReferenceStatus"
+  | "rawExtractedData"
+>;
 
 type WorkflowReviewMutation = {
   actionType: ItemReviewActionType;
@@ -1059,7 +1061,7 @@ async function getSupabaseWorkflowReviewItem(
 ): Promise<WorkflowReviewItem> {
   const { data: item, error: itemError } = await context.supabase
     .from("extracted_items")
-    .select("id,project_id,extraction_job_id,review_status")
+    .select("id,project_id,extraction_job_id,review_status,quote_reference_status,raw_extracted_data")
     .eq("id", itemId)
     .single();
 
@@ -1083,6 +1085,8 @@ async function getSupabaseWorkflowReviewItem(
     projectId: item.project_id,
     extractionJobId: item.extraction_job_id || undefined,
     reviewStatus: item.review_status,
+    quoteReferenceStatus: item.quote_reference_status || undefined,
+    rawExtractedData: item.raw_extracted_data && typeof item.raw_extracted_data === "object" ? item.raw_extracted_data : {},
   };
 }
 
@@ -3165,6 +3169,8 @@ export async function uploadWorkflowItemSupportingDocumentAction(formData: FormD
           }
         : undefined,
       metadata: {
+        source_gap_resolution_status: "supporting_evidence_uploaded_pending_builder_review",
+        quote_reference_status_after_upload: workflowRole === "quote" || workflowRole === "invoice" || workflowRole === "supplier_schedule" ? "quote_uploaded" : undefined,
         document_kind: documentKind,
         workflow_role: workflowRole,
         file_name: upload.fileName,
@@ -3236,6 +3242,8 @@ export async function uploadWorkflowItemSupportingDocumentAction(formData: FormD
           }
         : undefined,
       metadata: {
+        source_gap_resolution_status: "supporting_evidence_uploaded_pending_builder_review",
+        quote_reference_status_after_upload: workflowRole === "quote" || workflowRole === "invoice" || workflowRole === "supplier_schedule" ? "quote_uploaded" : undefined,
         document_kind: documentKind,
         workflow_role: workflowRole,
         file_name: upload.fileName,

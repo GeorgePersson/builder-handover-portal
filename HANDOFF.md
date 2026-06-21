@@ -86,6 +86,8 @@ legacy columns plus `raw_extracted_data` when older Supabase schemas are still
 in use. Local scaffold mode carries the richer fields and records edit-history
 snapshots in `.local-data/uploaded-documents.json`.
 
+Quote/source-gap hardening update: approval now checks Supabase review rows with `quote_reference_status` and raw extraction metadata loaded, so source-gap items cannot bypass the server guard just because the minimal review query omitted those fields. Publish readiness now still blocks any item that was approved-as-correct while retaining unresolved quote/missing-field/builder-info signals; explicit edit, exclusion, or builder-supplied review remains the path to resolution. Supporting evidence uploads now record pending source-gap resolution metadata in the review/audit trail.
+
 Async extraction workflow update: upload/extraction jobs now use durable states
 for `uploaded`, `processing`, `needs_review`, `partially_reviewed`,
 `package_ready`, and `failed` in both Supabase and local scaffold mode. OpenAI
