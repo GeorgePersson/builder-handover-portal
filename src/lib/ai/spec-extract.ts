@@ -39,8 +39,49 @@ export function getInitialExtractedItemStatus(item: Pick<ProposedSpecItem, "matc
   return "admin_review" as const;
 }
 
+const ocrPhraseFixes: Array<[RegExp, string]> = [
+  [/\bFinalpositionsofall\b/gi, "Final positions of all"],
+  [/\bInternalreticulation\b/gi, "Internal reticulation"],
+  [/\bBlockworkonfooting\b/gi, "Blockwork on footing"],
+  [/\bHollowcoreflushpanel\b/gi, "Hollow core flush panel"],
+  [/\bTo\s*iletroll\b/gi, "Toilet roll"],
+  [/\bTo\s*ilet\b/gi, "Toilet"],
+  [/\bHand\s*les\b/gi, "Handles"],
+  [/\bleverhand\s*les\b/gi, "lever handles"],
+  [/\bto\s*iletrollholder\b/gi, "toilet roll holder"],
+  [/\bTo\s*welwarmer\b/gi, "Towel warmer"],
+  [/\bTimberl\s*and\b/gi, "Timberland"],
+  [/\bwea\s*the\s*rboard\b/gi, "weatherboard"],
+  [/\bfloor\s*ing\b/gi, "flooring"],
+  [/\bsquote\b/gi, "s quote"],
+  [/\bKitchen\s+s\s+quote\b/gi, "Kitchens quote"],
+  [/\bTo\s*wel\b/gi, "Towel"],
+  [/\bGasheating\b/gi, "Gas heating"],
+  [/\bNZWool\b/g, "NZ Wool"],
+  [/\bmmx\b/gi, "mm x"],
+  [/\bbedroomorgarage\b/gi, "bedroom or garage"],
+  [/\bcabinetry,wardrobeorgarage\b/gi, "cabinetry, wardrobe or garage"],
+  [/\bwillbedeterminedonsiteby\b/gi, "will be determined onsite by"],
+  [/\bitemswillbedeterminedonsiteby\b/gi, "items will be determined onsite by"],
+  [/\bto\s*belocated\b/gi, "to be located"],
+  [/\bto\s*confirmpositionsonsite\b/gi, "to confirm positions onsite"],
+  [/\bSelectedst\s*and\s*ard\b/gi, "Selected standard"],
+  [/\bnewst\s*and\s*ard\b/gi, "new standard"],
+  [/\binresidential\b/gi, "in residential"],
+  [/\baccessoriesthatdelivers\b/gi, "accessories that deliver"],
+  [/\bRein\s*for\s*cedconcretefooting\b/gi, "Reinforced concrete footing"],
+  [/\bGaragecarpetgluefixed\b/gi, "Garage carpet glue fixed"],
+  [/\bgasfireplaceappliance\b/gi, "gas fireplace appliance"],
+  [/\bInsinkera\s*to\s*rmultitap\b/gi, "Insinkerator multitap"],
+  [/\birresistiblybeautiful\b/gi, "irresistibly beautiful"],
+];
+
+function applyOcrPhraseFixes(text: string) {
+  return ocrPhraseFixes.reduce((current, [pattern, replacement]) => current.replace(pattern, replacement), text);
+}
+
 function normalizeForMatching(text: string) {
-  return text
+  const normalized = applyOcrPhraseFixes(text)
     .replace(/<!--[^>]*-->/g, " ")
     .replace(/→/g, " ")
     .replace(/([a-z])([A-Z])/g, "$1 $2")
@@ -48,9 +89,9 @@ function normalizeForMatching(text: string) {
     .replace(/(\d)([a-zA-Z])/g, "$1 $2")
     .replace(/([a-z]{3,})(to|from|with|and|for|the|wall|floor|door|window|shower|bathroom|kitchen|client|builder|hardware|paint|finish|tiles|tiled|selected)/gi, "$1 $2")
     .replace(/(to|from|with|and|for|the|wall|floor|door|window|shower|bathroom|kitchen|client|builder|hardware|paint|finish|tiles|tiled|selected)([a-z]{3,})/gi, "$1 $2")
-    .replace(/[\t|]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+    .replace(/[\t|]+/g, " ");
+
+  return applyOcrPhraseFixes(normalized).replace(/\s+/g, " ").trim();
 }
 
 function cleanEvidenceText(text: string) {
@@ -69,6 +110,18 @@ function cleanEvidenceText(text: string) {
 
 function compactForMatching(text: string) {
   return normalizeForMatching(text).toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function normalizeExtractedTitle(title: string) {
+  return cleanEvidenceText(title)
+    .replace(/\bToiletroll\b/gi, "Toilet roll")
+    .replace(/\s+([:/&-])\s+/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function proposalKey(itemType: ProposedSpecItem["item_type"], title: string) {
+  return `${itemType}:${compactForMatching(title)}`;
 }
 
 function splitIntoEvidenceChunks(text: string) {
@@ -131,7 +184,8 @@ function findBestEvidence(rule: ExtractionRule, chunks: string[], fullText: stri
 }
 
 function addProposal(proposals: ProposedSpecItem[], seen: Set<string>, rule: ExtractionRule, evidence: string) {
-  const key = `${rule.item_type}:${rule.title.toLowerCase()}`;
+  const title = normalizeExtractedTitle(rule.title);
+  const key = proposalKey(rule.item_type, title);
 
   if (seen.has(key)) {
     return;
@@ -147,7 +201,7 @@ function addProposal(proposals: ProposedSpecItem[], seen: Set<string>, rule: Ext
   seen.add(key);
   proposals.push({
     item_type: rule.item_type,
-    title: rule.title,
+    title,
     category: rule.category,
     location: rule.location,
     extracted_text: extractedText || rule.fallbackEvidence,
@@ -329,18 +383,19 @@ function makeReadableTitle(cells: string[], rowText: string) {
     const productType =
       rowText.match(/\b(?:Kitchen Mixer|Basin Mixer|Vanity|Mirror|Toilet(?:Suite)?|Robe Hook|Waste|Shower|Door|Light(?: strip)?)\b/i)?.[0] ||
       label;
-    return `${brand} ${productType}`.replace(/\s+/g, " ").trim();
+    return normalizeExtractedTitle(`${brand} ${productType}`);
   }
 
   if (/^(type|model|size|finish|hardware|code)$/i.test(label) && cells[1]) {
-    return cells[1].slice(0, 80);
+    return normalizeExtractedTitle(cells[1].slice(0, 80));
   }
 
   if (compactLabel.length < 4 && cells[1]) {
-    return cells[1].slice(0, 80);
+    return normalizeExtractedTitle(cells[1].slice(0, 80));
   }
 
-  return label.length > 100 ? label.slice(0, 97) + "..." : label;
+  const title = label.length > 100 ? label.slice(0, 97) + "..." : label;
+  return normalizeExtractedTitle(title);
 }
 
 function buildStructuredEvidence(cells: string[], rowText: string) {
@@ -384,7 +439,7 @@ function addSchemaRowProposals(proposals: ProposedSpecItem[], seen: Set<string>,
     }
 
     const title = makeReadableTitle(cells, rowText);
-    const key = `product:${compactForMatching(title)}`;
+    const key = proposalKey("product", title);
 
     if (seen.has(key)) {
       continue;

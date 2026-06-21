@@ -1,4 +1,41 @@
 # Agent Handoff Log
+## 2026-06-22 - Docling OCR Readability and Title Dedupe Pass
+
+### Goal
+
+Continue the Docling local-first extraction work with slice A from the cloud-Codex prompt: improve OCR/readability normalization and collapse obvious duplicate title variants without making extraction conservative.
+
+### Changes
+
+- Added an OCR phrase-fix table in `src/lib/ai/spec-extract.ts` for recurring Docling/OCR artifacts.
+- Applied OCR fixes before and after generic spacing normalization so introduced split-word artifacts can be repaired.
+- Added title normalization for extracted row titles.
+- Changed proposal de-dupe keys to use compact normalized titles, collapsing obvious case/spacing variants like Garage carpet/Garage Carpet and Grohe kitchen mixer/Grohe Kitchen Mixer.
+
+### Examples Improved
+
+- `Blockworkonfooting` -> `Blockwork on footing`
+- `Cavity Slider Hand les` -> `Cavity Slider Handles`
+- `To ilet`/`To iletroll` cases now normalize into toilet/toilet-roll titles where matched.
+- `Heated To wel Rail` -> `Heated Towel Rail`
+- `Gasheating` -> `Gas heating`
+- Some source snippets now improve `Internalreticulation`, `Garagecarpetgluefixed`, `irresistiblybeautiful`, and related glued phrases.
+
+### Verification
+
+- Baseline smoke before this pass: 97 proposals.
+- After this pass: 96 proposals (90 products, 4 maintenance, 2 documents). The small count drop is from duplicate title collapse, not from conservative filtering.
+- `npm.cmd run spec-extract:smoke` passed.
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed with the known local Docling/Turbopack NFT tracing warnings.
+
+### Remaining Work
+
+- Continue expanding OCR/readability normalization based on fresh full-workflow rows.
+- Add richer `request more context` / `needs source document` workflow instead of all rows being simple `admin_review`.
+- Keep recall-first behavior: the spec may have 200-300 potential rows, so do not make extraction conservative merely to reduce noise.
+- Later build Azure Content Understanding comparison harness using the same schema as a benchmark only.
+
 ## 2026-06-21 - Full Docling Workflow Quality Assessment
 
 ### Fresh Run Observed
