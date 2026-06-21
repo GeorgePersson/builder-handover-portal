@@ -104,6 +104,17 @@ const ocrPhraseFixes: Array<[RegExp, string]> = [
   [/\bto\s*belocated\b/gi, "to be located"],
   [/\bto\s*confirmpositionsonsite\b/gi, "to confirm positions onsite"],
   [/\bSelectedst\s*and\s*ard\b/gi, "Selected standard"],
+  [/\bfree\s*stand\s*ing\b/gi, "freestanding"],
+  [/\bfreest\s*and\s*ing\b/gi, "freestanding"],
+  [/\bthe\s*Builder'?s\s*range\b/gi, "the Builder's range"],
+  [/\bBuilder'?s\s*range\b/gi, "Builder's range"],
+  [/\btiles\s*from\s*the\s*Builder'?s\s*range\b/gi, "tiles from the Builder's range"],
+  [/\bceramic\s*tiles\s*from\s*the\s*Builder'?s\s*range\b/gi, "ceramic tiles from the Builder's range"],
+  [/\bAll\s*walls\s*tiled\s*floor\s*to\s*ceiling\b/gi, "All walls tiled floor to ceiling"],
+  [/\btiled\s*shower\b/gi, "tiled shower"],
+  [/\btiled\s*feature\s*wall\b/gi, "tiled feature wall"],
+  [/\bTiled\s*into\s*window\s*recess\b/gi, "Tiled into window recess"],
+  [/\bwindow\s*jam\b/gi, "window jamb"],
   [/\bnewst\s*and\s*ard\b/gi, "new standard"],
   [/\binresidential\b/gi, "in residential"],
   [/\baccessoriesthatdelivers\b/gi, "accessories that deliver"],
@@ -137,11 +148,12 @@ function cleanEvidenceText(text: string) {
     .replace(/\bimage\b/gi, " ")
     .replace(/\bBuilder\s*\(Initial\)\b/gi, " ")
     .replace(/\bClient\s*\(Initial\)\b/gi, " ")
-    .replace(/\bBuilder_?\b/gi, " ")
     .replace(/\bClient\b/gi, " ")
     .replace(/\bqua?ity\s+home\s+oailder\b/gi, " ")
     .replace(/\(Initial\)/gi, " ")
     .replace(/\s*-{3,}\s*/g, " ")
+    .replace(/([.!?])(?=[A-Z0-9])/g, "$1 ")
+    .replace(/,\s*/g, ", ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -324,6 +336,24 @@ function isSeparatorRow(line: string) {
   return /^\|?[\s|:-]+\|?$/.test(line.trim());
 }
 
+function dedupeCells(cells: string[]) {
+  const unique: string[] = [];
+  const seen = new Set<string>();
+
+  for (const cell of cells) {
+    const key = compactForMatching(cell);
+
+    if (!key || seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    unique.push(cell);
+  }
+
+  return unique;
+}
+
 function hasRepeatedCells(cells: string[]) {
   if (cells.length < 2) {
     return false;
@@ -436,6 +466,10 @@ function makeReadableTitle(cells: string[], rowText: string) {
   return normalizeExtractedTitle(title);
 }
 
+function cleanStructuredDescription(cells: string[]) {
+  return dedupeCells(cells).join(" | ");
+}
+
 function inferContextAction(input: {
   itemType: ProposedSpecItem["item_type"];
   title: string;
@@ -454,12 +488,12 @@ function inferContextAction(input: {
     return "request_more_context" as const;
   }
 
-  if (input.itemType === "product" && !input.productCode && !/floor|tile|paint|cladding|concrete|gib|carpet|membrane|door|light|hardware/i.test(input.category)) {
-    return "needs_model_code" as const;
-  }
-
   if (input.itemType === "product" && /tbc|tba|to confirm|selected|builders range|builder's range|as per/i.test(text) && !input.productCode) {
     return "request_more_context" as const;
+  }
+
+  if (input.itemType === "product" && !input.productCode && !/floor|tile|paint|cladding|concrete|gib|carpet|membrane|door|light|hardware/i.test(input.category)) {
+    return "needs_model_code" as const;
   }
 
   return "review_new_product" as const;
@@ -473,7 +507,7 @@ function buildStructuredEvidence(cells: string[], rowText: string) {
   const size = extractSize(rowText);
   const category = inferCategory(rowText);
   const location = inferLocation(rowText);
-  const description = cells.join(" | ");
+  const description = cleanStructuredDescription(cells);
   const hasIdentifier = Boolean(manufacturer && (productCode || /model|series|range|essence|dante|allure|city|heiko|linfa/i.test(rowText)));
   const suggestedSearchQuery = hasIdentifier
     ? [manufacturer, productCode || title, "manual warranty specification"].filter(Boolean).join(" ")
@@ -499,13 +533,14 @@ function addSchemaRowProposals(proposals: ProposedSpecItem[], seen: Set<string>,
   const rows = extractMarkdownTableRows(extractedText);
 
   for (const cells of rows) {
-    const rowText = cleanEvidenceText(cells.join(" | "));
+    const uniqueCells = dedupeCells(cells);
+    const rowText = cleanEvidenceText(uniqueCells.join(" | "));
 
     if (rowText.length < 24 || rowText.length > 1_400 || !rowHasProductSignal(rowText) || shouldExcludeAsAdminNoise(rowText)) {
       continue;
     }
 
-    const title = makeReadableTitle(cells, rowText);
+    const title = makeReadableTitle(uniqueCells, rowText);
     const category = inferCategory(rowText);
     const manufacturer = findKnownBrand(rowText);
     const productCode = extractProductCodes(rowText);
@@ -529,7 +564,7 @@ function addSchemaRowProposals(proposals: ProposedSpecItem[], seen: Set<string>,
       title,
       category,
       location: inferLocation(rowText) || "Project",
-      extracted_text: buildStructuredEvidence(cells, rowText).slice(0, 1_500),
+      extracted_text: buildStructuredEvidence(uniqueCells, rowText).slice(0, 1_500),
       source_snippet: rowText.slice(0, 700),
       source_page: null,
       matched_existing_record: null,

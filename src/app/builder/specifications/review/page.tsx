@@ -3,7 +3,7 @@ import { Check, FileUp, Pencil, X } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { StatusBanner } from "@/components/status-banner";
 import { getExtractedHandoverItems, getSpecificationUploads } from "@/lib/server/queries";
-import { acceptExtractedItemAction, rejectExtractedItemAction, requestMoreContextForExtractedItemAction } from "@/lib/server/actions";
+import { acceptExtractedItemAction, rejectExtractedItemAction } from "@/lib/server/actions";
 import { describeExtractedItemStatus, formatStatus } from "@/lib/status-labels";
 
 export default async function SpecificationReviewPage({
@@ -125,6 +125,7 @@ export default async function SpecificationReviewPage({
                   <p className="mt-2 text-xs font-medium text-slate-500">
                     {describeExtractedItemStatus(item.status)}
                   </p>
+                  <ContextFlag status={item.status} reviewReason={item.reviewReason} />
                   <h2 className="mt-3 text-lg font-semibold text-slate-950">{item.title}</h2>
                   <p className="mt-1 text-sm text-slate-600">
                     {item.category} - {item.location || "No location captured"}
@@ -165,20 +166,6 @@ export default async function SpecificationReviewPage({
                     <Pencil className="size-3.5" />
                     Edit
                   </Link>
-                  {![
-                    "auto_approved",
-                    "builder_approved",
-                    "global_approved",
-                    "accepted",
-                    "request_more_context",
-                  ].includes(item.status) ? (
-                    <form action={requestMoreContextForExtractedItemAction}>
-                      <input name="itemId" type="hidden" value={item.id} />
-                      <button className="inline-flex h-9 w-full items-center gap-2 rounded-md border border-amber-200 px-3 text-xs font-semibold text-amber-700">
-                        Request context
-                      </button>
-                    </form>
-                  ) : null}
                   {item.status !== "rejected" ? (
                     <form action={rejectExtractedItemAction}>
                       <input name="itemId" type="hidden" value={item.id} />
@@ -196,6 +183,36 @@ export default async function SpecificationReviewPage({
       </div>
     </main>
   );
+}
+
+function ContextFlag({ status, reviewReason }: { status: string; reviewReason?: string }) {
+  const label = getContextFlagLabel(status, reviewReason);
+
+  if (!label) {
+    return null;
+  }
+
+  return (
+    <div className="mt-3 inline-flex max-w-3xl rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold leading-5 text-amber-900">
+      {label}
+    </div>
+  );
+}
+
+function getContextFlagLabel(status: string, reviewReason?: string) {
+  if (status === "needs_model_code" || reviewReason?.startsWith("Request model/code")) {
+    return "Needs brand, model, supplier, or code before source search.";
+  }
+
+  if (status === "needs_source_document" || reviewReason?.startsWith("Request source document")) {
+    return "Needs quote, manual, warranty, certificate, or source document before approval.";
+  }
+
+  if (status === "request_more_context" || reviewReason?.startsWith("Request more context")) {
+    return "Needs builder context before source search.";
+  }
+
+  return "";
 }
 
 function Metric({ label, value }: { label: string; value: number }) {

@@ -1,4 +1,29 @@
 # Agent Handoff Log
+## 2026-06-22 - Context Flags and Tiling Row Cleanup
+
+### Goal
+
+Respond to fresh PDF review feedback: context classification should be a flag explaining what the system needs before source search, not a builder-facing "Request context" button. Also clean the duplicated/poorly spaced Docling tiling rows seen in review.
+
+### Changes
+
+- Removed the manual "Request context" button and its unused server action.
+- Added non-clickable amber context flags to the builder review queue for:
+  - missing brand/model/supplier/code before source search
+  - missing quote/manual/warranty/certificate/source document
+  - missing builder context before source search
+- Added duplicate table-cell cleanup so Docling rows with repeated columns only persist one copy in `extracted_text` and `source_snippet`.
+- Stopped stripping the word `Builder` from evidence text so `Builder's range` remains readable.
+- Added OCR/readability fixes for Builder's-range tiling phrases, `freestanding`, tiled shower/feature-wall/window-jamb text, punctuation spacing, and comma spacing.
+- Prioritized `selected` / `Builder's range` rows into `request_more_context` before falling back to `needs_model_code`.
+
+### Verification
+
+- `npm.cmd run spec-extract:smoke` passed: 96 proposals, preserving recall.
+- Spot-check for the reported row now returns title `Wall Tiling- Bathroom(freestanding bath)`, action `request_more_context`, and a single clean source snippet: `Selected ceramic tiles from the Builder's range. All walls tiled floor to ceiling, tiled shower. 1 x tiled feature wall. Tiled into window recess. Tiled into window jamb, sills`.
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed with the known Docling/Turbopack NFT tracing warnings.
+
 ## 2026-06-22 - Request-More-Context Review Classification
 
 ### Goal
@@ -17,7 +42,7 @@ Add a first-pass workflow so over-extracted Docling rows are not all just "needs
 - Added optional enum statuses in code/docs for `request_more_context`, `needs_source_document`, and `needs_model_code`.
 - Added `docs/supabase-add-extracted-item-context-statuses.sql` for the enum migration.
 - `/api/specifications/process-pdf` now attempts the richer statuses, but falls back to `admin_review` plus the explicit review note if the database enum has not been migrated yet.
-- Builder review UI now includes a Context requests metric and a manual "Request context" action button.
+- Builder review UI now includes a Context requests metric and non-clickable context flags that explain what is missing before source search.
 - Builder dashboard/product awaiting counts include the new context-request statuses.
 
 ### Verification
