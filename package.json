@@ -16,7 +16,8 @@
     "lint": "eslint",
     "supabase:smoke:readiness": "node scripts/smoke-supabase-readiness.mjs",
     "document-context:readiness": "node scripts/check-document-context-readiness.mjs",
-    "docling:smoke:local": "node scripts/smoke-docling-local.mjs"
+    "docling:smoke:local": "node scripts/smoke-docling-local.mjs",
+    "spec-extract:smoke": "node scripts/smoke-spec-extract.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",

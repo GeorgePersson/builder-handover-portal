@@ -1,4 +1,40 @@
 # Agent Handoff Log
+## 2026-06-21 - Docling-Aware Extraction Breadth Implemented
+
+### What Changed
+
+- Replaced the tiny keyword-only `buildSpecificationProposals()` stub with a broader deterministic extractor that normalizes Docling markdown, chunks evidence, applies product/maintenance/document rules, deduplicates rows, and preserves source snippets.
+- Added `scripts/smoke-spec-extract.mjs` plus `npm.cmd run spec-extract:smoke` to test proposal breadth against the local Docling markdown artifact without re-running Docling.
+- Kept the existing review workflow contract and status behavior: known maintenance matches can auto-approve, while most new/uncertain product rows remain review/source-gap candidates.
+
+### Verification
+
+- `npm.cmd run spec-extract:smoke` passed against `.local-artifacts/docling/2074-legal-signed-outline-spec.md`.
+- Smoke output: 27 proposals total: 21 product, 4 maintenance, 2 document.
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed with the known local Docling Turbopack NFT warnings.
+
+### Next Task
+
+Restart/reload the dev server and process the PDF again through `/builder/specifications/new`. The new upload should insert about 27 review rows instead of the previous 5; then inspect `/builder/specifications/review` for row quality/noise and tune the rule list.
+
+## 2026-06-21 - Docling Parse Complete, Extraction Breadth Bottleneck
+
+### Evidence
+
+- The real scanned spec upload completed and inserted a `specification_uploads` row.
+- Latest upload `1a05e070-a4e2-46bf-9aea-142e4b6cae68` produced exactly 5 `extracted_handover_items`.
+- Process inspection showed no active Docling child process; parsing was finished, not still running.
+- Inserted items were limited to the existing canned keyword outputs: Linea Weatherboard, gutters/downpipes cleaning, exterior cladding washing, kitchen appliances, and heat pump system.
+
+### Root Cause
+
+The parser is no longer the main bottleneck. The current proposal builder in `src/lib/ai/spec-extract.ts` is still a small deterministic stub that only emits a handful of canned rows when keywords are present.
+
+### Active Next Task
+
+Build a broader Docling-aware deterministic extractor that chunks/labels Docling markdown and creates more source-grounded proposal rows while keeping admin-noise and source-gap guardrails strict. Local plan saved at `.hermes/plans/2026-06-21_204900-docling-extraction-breadth.md`.
+
 ## 2026-06-21 - Specification Process Storage Upload Fix
 
 ### What Changed
