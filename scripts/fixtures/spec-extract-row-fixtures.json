@@ -1,0 +1,28 @@
+[
+  {
+    "name": "interior flush panel doors uses real row not heading",
+    "markdown": "| INTERIOR DOORS | INTERIOR DOORS | INTERIOR DOORS |\n| Doors Type Size Finish Frames | Hollowcore flushpanelpre-hungdoors 2200mm Semi-glosspaintfinish 19mmpineflushjambforarchitraveswith semi-glosspaintfinish | Interior Door Flush Panel |",
+    "expectedTitle": "Interior flush panel doors",
+    "expectedAction": "review_new_product",
+    "expectedReviewReasonIncludes": "General finish item",
+    "expectedSourceIncludes": ["Hollow core", "flush panel pre-hung doors"],
+    "forbiddenSourceIncludes": ["INTERIOR DOORS INTERIOR DOORS"]
+  },
+  {
+    "name": "builder range wall tiling is context before search",
+    "markdown": "| Wall Tiling- Bathroom(free standing bath) | SelectedceramictilesfromtheBuilder'srange.Allwallstiledfloortoceiling,tiled shower.1x tiledfeaturewall.Tiled intowindowrecess.Tiled intowindowjam,sills | SelectedceramictilesfromtheBuilder'srange.Allwallstiledfloortoceiling,tiled shower.1x tiledfeaturewall.Tiled intowindowrecess.Tiled intowindowjam,sills |",
+    "expectedTitle": "Wall Tiling- Bathroom(freestanding bath)",
+    "expectedAction": "request_more_context",
+    "expectedSourceIncludes": ["Builder's range", "All walls tiled floor to ceiling"],
+    "forbiddenSourceIncludes": ["Selected ceramic tiles from the Builder's range. All walls tiled floor to ceiling, tiled shower. 1 x tiled feature wall. Tiled into window recess. Tiled into window jamb, sills Selected ceramic tiles"]
+  },
+  {
+    "name": "paint scheme is general finish",
+    "markdown": "| Paint | Interiorcolourschemefourcolours,colour1walls,skirting,doors,door&window frames,ceiling&cornice,colour2WC,colour3FireplaceSurround | Interiorcolourschemefourcolours,colour1walls,skirting,doors,door&window frames,ceiling&cornice,colour2WC,colour3FireplaceSurround |",
+    "expectedTitle": "Interior paint finish and colour scheme",
+    "expectedAction": "review_new_product",
+    "expectedReviewReasonIncludes": "General finish item",
+    "expectedSourceIncludes": ["Interior colour scheme", "colour 1 walls"],
+    "forbiddenSourceIncludes": ["Interior colour scheme four colours, colour 1 walls, skirting, doors, door&window frames, ceiling&cornice, colour 2 WC, colour 3 Fireplace Surround Interior colour scheme"]
+  }
+]

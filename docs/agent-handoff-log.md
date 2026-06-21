@@ -1,4 +1,37 @@
 # Agent Handoff Log
+## 2026-06-22 - Systemic Docling Extraction Rework Started
+
+### Goal
+
+Stop fixing individual Docling rows one at a time. Move extraction toward a deployable staged system with fixture coverage for known row classes.
+
+### Changes
+
+- Added a fixture-based regression harness:
+  - `scripts/fixtures/spec-extract-row-fixtures.json`
+  - `scripts/check-spec-extract-fixtures.mjs`
+  - package script: `npm.cmd run spec-extract:fixtures`
+- Refactored extraction helpers out of `src/lib/ai/spec-extract.ts` into staged modules:
+  - `src/lib/ai/spec-normalize.ts` for OCR/text/table cleanup and cell dedupe.
+  - `src/lib/ai/spec-evidence.ts` for evidence matching and scoring.
+  - `src/lib/ai/spec-classify.ts` for review lanes and recommended action mapping.
+- Updated `scripts/smoke-spec-extract.mjs` so smoke tests transpile the new helper modules as well as `spec-extract.ts`.
+- Current fixtures cover:
+  - interior flush panel doors must use the real door row instead of repeated headings.
+  - Builder's-range tiling must collapse duplicated table cells and become context-before-search.
+  - paint colour scheme must be treated as a general finish item and avoid duplicated evidence tails.
+
+### Verification
+
+- `npm.cmd run spec-extract:fixtures` passed: 3 fixtures.
+- `npm.cmd run spec-extract:smoke` passed: 96 proposals, preserving broad recall.
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed with known Docling/Turbopack NFT tracing warnings.
+
+### Next Rule
+
+For any future bad extraction row, add a fixture first in `scripts/fixtures/spec-extract-row-fixtures.json`, then change normalization/evidence/classification logic so the fixture passes. Do not patch single titles directly in the main extractor.
+
 ## 2026-06-22 - General Finish Items and Door Evidence Cleanup
 
 ### Goal

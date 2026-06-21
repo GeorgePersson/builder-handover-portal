@@ -1,4 +1,16 @@
 import { shouldExcludeAsAdminNoise } from "@/lib/ai/extraction-guardrails";
+import { classifySpecRow, getReviewReasonForLane, reviewLaneToRecommendedAction } from "@/lib/ai/spec-classify";
+import { chooseBestEvidence, patternMatches } from "@/lib/ai/spec-evidence";
+import {
+  cleanEvidenceText,
+  compactForMatching,
+  dedupeCells,
+  hasRepeatedCells,
+  isSeparatorRow,
+  normalizeExtractedTitle,
+  normalizeSpecText,
+  splitTableCells,
+} from "@/lib/ai/spec-normalize";
 
 export type ProposedSpecItem = {
   item_type: "product" | "maintenance" | "document";
@@ -58,146 +70,7 @@ export function getInitialExtractedItemStatus(
 }
 
 export function getInitialExtractedItemReviewReason(item: ProposedSpecItem) {
-  if (item.matched_existing_record) {
-    return `Matched existing record ${item.matched_existing_record}.`;
-  }
-
-  if (item.recommended_action === "needs_source_document" || item.recommended_action === "request_document") {
-    return "Request source document: this row references a quote, warranty, manual, certificate, or supporting document that should be uploaded or linked before approval.";
-  }
-
-  if (item.recommended_action === "needs_model_code") {
-    return "Request model/code: the item appears real, but needs brand, supplier, model, product code, or clearer identifier before matching manuals/warranties.";
-  }
-
-  if (item.recommended_action === "request_more_context") {
-    return "Request more context: keep this source-backed candidate in review, but ask the builder to confirm whether it is a true handover item, location, or project-specific selection.";
-  }
-
-  if (/tiles|paint|flooring|doors and hardware/i.test(item.category)) {
-    return "General finish item: confirm the supplier/range, colour, location, or project selection where available. Warranty documents may not be required before this can be included as builder-reviewed handover context.";
-  }
-
-  return "Needs review because no reusable source-backed record matched this extracted item.";
-}
-
-const ocrPhraseFixes: Array<[RegExp, string]> = [
-  [/\bFinalpositionsofall\b/gi, "Final positions of all"],
-  [/\bInternalreticulation\b/gi, "Internal reticulation"],
-  [/\bBlockworkonfooting\b/gi, "Blockwork on footing"],
-  [/\bHollowcoreflushpanel\b/gi, "Hollow core flush panel"],
-  [/\bTo\s*iletroll\b/gi, "Toilet roll"],
-  [/\bTo\s*ilet\b/gi, "Toilet"],
-  [/\bHand\s*les\b/gi, "Handles"],
-  [/\bleverhand\s*les\b/gi, "lever handles"],
-  [/\bto\s*iletrollholder\b/gi, "toilet roll holder"],
-  [/\bTo\s*welwarmer\b/gi, "Towel warmer"],
-  [/\bTimberl\s*and\b/gi, "Timberland"],
-  [/\bwea\s*the\s*rboard\b/gi, "weatherboard"],
-  [/\bfloor\s*ing\b/gi, "flooring"],
-  [/\bsquote\b/gi, "s quote"],
-  [/\bKitchen\s+s\s+quote\b/gi, "Kitchens quote"],
-  [/\bTo\s*wel\b/gi, "Towel"],
-  [/\bGasheating\b/gi, "Gas heating"],
-  [/\bNZWool\b/g, "NZ Wool"],
-  [/\bmmx\b/gi, "mm x"],
-  [/\bbedroomorgarage\b/gi, "bedroom or garage"],
-  [/\bcabinetry,wardrobeorgarage\b/gi, "cabinetry, wardrobe or garage"],
-  [/\bwillbedeterminedonsiteby\b/gi, "will be determined onsite by"],
-  [/\bitemswillbedeterminedonsiteby\b/gi, "items will be determined onsite by"],
-  [/\bto\s*belocated\b/gi, "to be located"],
-  [/\bto\s*confirmpositionsonsite\b/gi, "to confirm positions onsite"],
-  [/Interiorcolourscheme/gi, "Interior colour scheme "],
-  [/\bfourcolours\b/gi, "four colours"],
-  [/\bcolour(\d+)/gi, "colour $1"],
-  [/\bwaterbornesemi-gloss\b/gi, "waterborne semi-gloss"],
-  [/\bSemi-glosspaintfinish\b/gi, "Semi-gloss paint finish"],
-  [/\bflushpanelpre-hungdoors\b/gi, "flush panel pre-hung doors"],
-  [/\bHollowcore\b/gi, "Hollow core"],
-  [/\bmmpineflushjamb\b/gi, "mm pine flush jamb"],
-  [/\bforarchitraves\b/gi, "for architraves"],
-  [/\bSelectedst\s*and\s*ard\b/gi, "Selected standard"],
-  [/\bfree\s*stand\s*ing\b/gi, "freestanding"],
-  [/\bfreest\s*and\s*ing\b/gi, "freestanding"],
-  [/\bthe\s*Builder'?s\s*range\b/gi, "the Builder's range"],
-  [/\bBuilder'?s\s*range\b/gi, "Builder's range"],
-  [/\btiles\s*from\s*the\s*Builder'?s\s*range\b/gi, "tiles from the Builder's range"],
-  [/\bceramic\s*tiles\s*from\s*the\s*Builder'?s\s*range\b/gi, "ceramic tiles from the Builder's range"],
-  [/\bAll\s*walls\s*tiled\s*floor\s*to\s*ceiling\b/gi, "All walls tiled floor to ceiling"],
-  [/\btiled\s*shower\b/gi, "tiled shower"],
-  [/\btiled\s*feature\s*wall\b/gi, "tiled feature wall"],
-  [/\bTiled\s*into\s*window\s*recess\b/gi, "Tiled into window recess"],
-  [/\bwindow\s*jam\b/gi, "window jamb"],
-  [/\bnewst\s*and\s*ard\b/gi, "new standard"],
-  [/\binresidential\b/gi, "in residential"],
-  [/\baccessoriesthatdelivers\b/gi, "accessories that deliver"],
-  [/\bRein\s*for\s*cedconcretefooting\b/gi, "Reinforced concrete footing"],
-  [/\bGaragecarpetgluefixed\b/gi, "Garage carpet glue fixed"],
-  [/\bgasfireplaceappliance\b/gi, "gas fireplace appliance"],
-  [/\bInsinkera\s*to\s*rmultitap\b/gi, "Insinkerator multitap"],
-  [/\birresistiblybeautiful\b/gi, "irresistibly beautiful"],
-];
-
-function applyOcrPhraseFixes(text: string) {
-  return ocrPhraseFixes.reduce((current, [pattern, replacement]) => current.replace(pattern, replacement), text);
-}
-
-function normalizeForMatching(text: string) {
-  const normalized = applyOcrPhraseFixes(text)
-    .replace(/<!--[^>]*-->/g, " ")
-    .replace(/→/g, " ")
-    .replace(/([a-z])([A-Z])/g, "$1 $2")
-    .replace(/([a-zA-Z])(\d)/g, "$1 $2")
-    .replace(/(\d)([a-zA-Z])/g, "$1 $2")
-    .replace(/([a-z]{3,})(to|from|with|and|for|the|wall|floor|door|window|shower|bathroom|kitchen|client|builder|hardware|paint|finish|tiles|tiled|selected)/gi, "$1 $2")
-    .replace(/(to|from|with|and|for|the|wall|floor|door|window|shower|bathroom|kitchen|client|builder|hardware|paint|finish|tiles|tiled|selected)([a-z]{3,})/gi, "$1 $2")
-    .replace(/[\t|]+/g, " ");
-
-  return applyOcrPhraseFixes(normalized).replace(/\s+/g, " ").trim();
-}
-
-function collapseRepeatedTail(text: string) {
-  const words = text.split(/\s+/).filter(Boolean);
-
-  for (let size = Math.floor(words.length / 2); size >= 5; size -= 1) {
-    const tail = words.slice(-size).join(" ").toLowerCase();
-    const beforeTail = words.slice(-size * 2, -size).join(" ").toLowerCase();
-
-    if (tail && tail === beforeTail) {
-      return words.slice(0, -size).join(" ");
-    }
-  }
-
-  return text;
-}
-
-function cleanEvidenceText(text: string) {
-  const cleaned = normalizeForMatching(text)
-    .replace(/\bimage\b/gi, " ")
-    .replace(/\bBuilder\s*\(Initial\)\b/gi, " ")
-    .replace(/\bClient\s*\(Initial\)\b/gi, " ")
-    .replace(/\bClient\b/gi, " ")
-    .replace(/\bqua?ity\s+home\s+oailder\b/gi, " ")
-    .replace(/\(Initial\)/gi, " ")
-    .replace(/\s*-{3,}\s*/g, " ")
-    .replace(/([.!?])(?=[A-Z0-9])/g, "$1 ")
-    .replace(/,\s*/g, ", ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  return collapseRepeatedTail(cleaned);
-}
-
-function compactForMatching(text: string) {
-  return normalizeForMatching(text).toLowerCase().replace(/[^a-z0-9]+/g, "");
-}
-
-function normalizeExtractedTitle(title: string) {
-  return cleanEvidenceText(title)
-    .replace(/\bToiletroll\b/gi, "Toilet roll")
-    .replace(/\s+([:/&-])\s+/g, "$1")
-    .replace(/\s+/g, " ")
-    .trim();
+  return getReviewReasonForLane(item);
 }
 
 function proposalKey(itemType: ProposedSpecItem["item_type"], title: string) {
@@ -207,7 +80,7 @@ function proposalKey(itemType: ProposedSpecItem["item_type"], title: string) {
 function splitIntoEvidenceChunks(text: string) {
   const lines = text
     .split(/\r?\n/)
-    .map((line) => normalizeForMatching(line))
+    .map((line) => normalizeSpecText(line))
     .filter((line) => line.length > 0);
 
   const chunks: string[] = [];
@@ -232,48 +105,7 @@ function splitIntoEvidenceChunks(text: string) {
   // Prefer original table/markdown lines as evidence before broader chunks.
   // Docling table rows often contain the cleanest source sentence/cell; merged
   // chunks can accidentally pull in adjacent rows, footers, or image placeholders.
-  return lines.length > 0 ? [...lines, ...chunks] : [normalizeForMatching(text)];
-}
-
-function patternMatches(rule: ExtractionRule, searchableText: string, compactText: string) {
-  return rule.patterns.some((pattern) => pattern.test(searchableText) || pattern.test(compactText));
-}
-
-function isLowInformationEvidence(text: string) {
-  const words = text.toLowerCase().match(/[a-z0-9]+/g) || [];
-  return words.length <= 6 && new Set(words).size <= 2;
-}
-
-function findBestEvidence(rule: ExtractionRule, chunks: string[], fullText: string) {
-  const cleanedChunks = chunks
-    .map((chunk) => cleanEvidenceText(chunk))
-    .filter((chunk) => chunk.length > 0 && !isLowInformationEvidence(chunk));
-
-  const termEvidenceChunk = rule.evidenceTerms
-    .map((candidate) => cleanedChunks.find((chunk) => chunk.toLowerCase().includes(candidate.toLowerCase())))
-    .find(Boolean);
-
-  const patternEvidenceChunk = cleanedChunks.find((chunk) => {
-    const normal = chunk.toLowerCase();
-    const compact = compactForMatching(chunk);
-    return patternMatches(rule, normal, compact);
-  });
-
-  const source = termEvidenceChunk || patternEvidenceChunk || fullText;
-  const normalSource = cleanEvidenceText(source);
-  const lowerSource = normalSource.toLowerCase();
-  const term = rule.evidenceTerms.find((candidate) => lowerSource.includes(candidate.toLowerCase()));
-
-  if (!term || normalSource.length <= 360) {
-    return normalSource.slice(0, 360) || rule.fallbackEvidence;
-  }
-
-  const index = lowerSource.indexOf(term.toLowerCase());
-  const start = Math.max(0, index - 120);
-  const end = Math.min(normalSource.length, index + term.length + 240);
-  const prefix = start > 0 ? "..." : "";
-  const suffix = end < normalSource.length ? "..." : "";
-  return `${prefix}${normalSource.slice(start, end)}${suffix}`;
+  return lines.length > 0 ? [...lines, ...chunks] : [normalizeSpecText(text)];
 }
 
 function addProposal(proposals: ProposedSpecItem[], seen: Set<string>, rule: ExtractionRule, evidence: string) {
@@ -364,47 +196,6 @@ const productRowTerms = [
   "waste",
   "window",
 ];
-
-function splitTableCells(line: string) {
-  return line
-    .trim()
-    .replace(/^\|/, "")
-    .replace(/\|$/, "")
-    .split("|")
-    .map((cell) => cleanEvidenceText(cell))
-    .filter(Boolean);
-}
-
-function isSeparatorRow(line: string) {
-  return /^\|?[\s|:-]+\|?$/.test(line.trim());
-}
-
-function dedupeCells(cells: string[]) {
-  const unique: string[] = [];
-  const seen = new Set<string>();
-
-  for (const cell of cells) {
-    const key = compactForMatching(cell);
-
-    if (!key || seen.has(key)) {
-      continue;
-    }
-
-    seen.add(key);
-    unique.push(cell);
-  }
-
-  return unique;
-}
-
-function hasRepeatedCells(cells: string[]) {
-  if (cells.length < 2) {
-    return false;
-  }
-
-  const compacted = cells.map((cell) => compactForMatching(cell));
-  return compacted.every((cell) => cell === compacted[0]);
-}
 
 function extractMarkdownTableRows(text: string) {
   return text
@@ -513,35 +304,6 @@ function cleanStructuredDescription(cells: string[]) {
   return dedupeCells(cells).join(" | ");
 }
 
-function inferContextAction(input: {
-  itemType: ProposedSpecItem["item_type"];
-  title: string;
-  rowText: string;
-  manufacturer: string;
-  productCode: string;
-  category: string;
-}) {
-  const text = `${input.title} ${input.rowText}`.toLowerCase();
-
-  if (input.itemType === "document" || /quote|manual|warrant|certificate|producer statement|ps\d|ccc|source document/.test(text)) {
-    return "needs_source_document" as const;
-  }
-
-  if (input.itemType === "product" && !input.manufacturer && !input.productCode && /^(fittings|pipe work|kitchen|scullery|laundry|bathroom&|please note:?|doors tops)$/i.test(input.title.trim())) {
-    return "request_more_context" as const;
-  }
-
-  if (input.itemType === "product" && /tbc|tba|to confirm|selected|builders range|builder's range|as per/i.test(text) && !input.productCode) {
-    return "request_more_context" as const;
-  }
-
-  if (input.itemType === "product" && !input.productCode && !/floor|tile|paint|cladding|concrete|gib|carpet|membrane|door|light|hardware/i.test(input.category)) {
-    return "needs_model_code" as const;
-  }
-
-  return "review_new_product" as const;
-}
-
 function buildStructuredEvidence(cells: string[], rowText: string) {
   const title = makeReadableTitle(cells, rowText);
   const manufacturer = findKnownBrand(rowText);
@@ -587,7 +349,7 @@ function addSchemaRowProposals(proposals: ProposedSpecItem[], seen: Set<string>,
     const category = inferCategory(rowText);
     const manufacturer = findKnownBrand(rowText);
     const productCode = extractProductCodes(rowText);
-    const recommendedAction = inferContextAction({
+    const reviewLane = classifySpecRow({
       itemType: "product",
       title,
       rowText,
@@ -595,6 +357,7 @@ function addSchemaRowProposals(proposals: ProposedSpecItem[], seen: Set<string>,
       productCode,
       category,
     });
+    const recommendedAction = reviewLaneToRecommendedAction(reviewLane);
     const key = proposalKey("product", title);
 
     if (seen.has(key)) {
@@ -956,7 +719,7 @@ const fallbackRules: ExtractionRule[] = [
 ];
 
 export function buildSpecificationProposals(extractedText: string): ProposedSpecItem[] {
-  const normalizedText = normalizeForMatching(extractedText);
+  const normalizedText = normalizeSpecText(extractedText);
   const searchableText = normalizedText.toLowerCase();
   const compactText = compactForMatching(extractedText);
   const chunks = splitIntoEvidenceChunks(extractedText);
@@ -974,7 +737,7 @@ export function buildSpecificationProposals(extractedText: string): ProposedSpec
       continue;
     }
 
-    addProposal(proposals, seen, rule, findBestEvidence(rule, chunks, normalizedText));
+    addProposal(proposals, seen, rule, chooseBestEvidence(rule, chunks, normalizedText));
   }
 
   for (const rule of fallbackRules) {
@@ -982,7 +745,7 @@ export function buildSpecificationProposals(extractedText: string): ProposedSpec
       continue;
     }
 
-    addProposal(proposals, seen, rule, findBestEvidence(rule, chunks, normalizedText));
+    addProposal(proposals, seen, rule, chooseBestEvidence(rule, chunks, normalizedText));
   }
 
   addSchemaRowProposals(proposals, seen, extractedText);

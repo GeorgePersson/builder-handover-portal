@@ -16,13 +16,22 @@ if (!fs.existsSync(inputPath)) {
 }
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "handover-spec-extract-"));
-const guardrailsSource = fs.readFileSync(path.join(repoRoot, "src", "lib", "ai", "extraction-guardrails.ts"), "utf-8");
-const specExtractSource = fs
-  .readFileSync(path.join(repoRoot, "src", "lib", "ai", "spec-extract.ts"), "utf-8")
-  .replace('from "@/lib/ai/extraction-guardrails"', 'from "./extraction-guardrails.mjs"');
 
-function transpileToMjs(source, outfile) {
-  const result = ts.transpileModule(source, {
+function readSource(relativePath) {
+  return fs.readFileSync(path.join(repoRoot, relativePath), "utf-8");
+}
+
+function rewriteAliases(source) {
+  return source
+    .replaceAll('from "@/lib/ai/extraction-guardrails"', 'from "./extraction-guardrails.mjs"')
+    .replaceAll('from "@/lib/ai/spec-normalize"', 'from "./spec-normalize.mjs"')
+    .replaceAll('from "@/lib/ai/spec-evidence"', 'from "./spec-evidence.mjs"')
+    .replaceAll('from "@/lib/ai/spec-classify"', 'from "./spec-classify.mjs"')
+    .replaceAll('from "@/lib/ai/spec-extract"', 'from "./spec-extract.mjs"');
+}
+
+function transpileToMjs(relativePath, outfile) {
+  const result = ts.transpileModule(rewriteAliases(readSource(relativePath)), {
     compilerOptions: {
       module: ts.ModuleKind.ES2022,
       target: ts.ScriptTarget.ES2022,
@@ -34,8 +43,11 @@ function transpileToMjs(source, outfile) {
   fs.writeFileSync(path.join(tmpDir, outfile), result.outputText, "utf-8");
 }
 
-transpileToMjs(guardrailsSource, "extraction-guardrails.mjs");
-transpileToMjs(specExtractSource, "spec-extract.mjs");
+transpileToMjs("src/lib/ai/extraction-guardrails.ts", "extraction-guardrails.mjs");
+transpileToMjs("src/lib/ai/spec-normalize.ts", "spec-normalize.mjs");
+transpileToMjs("src/lib/ai/spec-evidence.ts", "spec-evidence.mjs");
+transpileToMjs("src/lib/ai/spec-classify.ts", "spec-classify.mjs");
+transpileToMjs("src/lib/ai/spec-extract.ts", "spec-extract.mjs");
 
 const { buildSpecificationProposals } = await import(pathToFileURL(path.join(tmpDir, "spec-extract.mjs")));
 const markdown = fs.readFileSync(inputPath, "utf-8");
