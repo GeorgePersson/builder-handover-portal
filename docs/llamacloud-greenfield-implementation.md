@@ -74,9 +74,42 @@ LLAMA_CLOUD_POLL_ATTEMPTS=12
 LLAMA_CLOUD_POLL_INTERVAL_MS=2500
 ```
 
-If `DOCUMENT_CONTEXT_PROVIDER` is omitted and `LLAMA_CLOUD_API_KEY` is present,
-the app will attempt LlamaCloud. Set `DOCUMENT_CONTEXT_PROVIDER=local_pdf` to
-force local parsing.
+`LLAMA_CLOUD_API_KEY` is the canonical secret name. Do not use alternate names
+and do not commit the key. Keep it in `.env.local` for local development, in the
+cloud host secret store for deployed environments, or in the Codex/CI secret
+configuration when a real provider smoke is intentionally being run.
+
+Provider selection is secret-safe and default-closed to local fallback:
+
+- `DOCUMENT_CONTEXT_PROVIDER=local_pdf` forces the local PDF/OCR extractor even
+  if `LLAMA_CLOUD_API_KEY` is present.
+- `DOCUMENT_CONTEXT_PROVIDER=llamacloud` or `llamacloud_parse` uses LlamaCloud
+  only when `LLAMA_CLOUD_API_KEY` is present.
+- If `DOCUMENT_CONTEXT_PROVIDER` is omitted and `LLAMA_CLOUD_API_KEY` is
+  present, the app will try LlamaCloud first.
+- If LlamaCloud is selected but not configured, or if a parse request fails or
+  returns no text, the app falls back to local PDF/OCR and records a warning in
+  the extraction diagnostics.
+
+Secret-safe readiness checks:
+
+```bash
+npm.cmd run document-context:readiness
+```
+
+The command loads Next.js `.env*` files when present, never prints the API key,
+and reports `selectedProvider`, `llamaCloudConfigured`, `willUseLlamaCloud`, and
+fallback reasons. A running app also exposes the same redacted report at:
+
+```txt
+GET /api/specifications/document-context-readiness
+```
+
+Before testing a real scanned PDF locally or in cloud, verify the report shows
+`selectedProvider: "llamacloud_parse"` and `willUseLlamaCloud: true`. If Codex
+Cloud or CI lacks `LLAMA_CLOUD_API_KEY`, the expected report is local fallback;
+that is not a secret/config failure unless the environment was meant to exercise
+real LlamaCloud parsing.
 
 ## Workflow To Build
 

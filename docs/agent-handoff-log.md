@@ -1,4 +1,133 @@
 # Agent Handoff Log
+## 2026-06-21 - Phone Codex Cloud Consolidation Anchored
+
+### What Changed
+
+- Fetched and consolidated the four new Codex cloud/mobile branches into `codex/llamacloud-greenfield`:
+  - `be5640b` docs: Cloudflare-first Next.js deployment plan.
+  - `8f57b8a` LlamaCloud/document-context readiness check.
+  - `43aad2a` extraction admin-noise guardrails.
+  - `8f3f1db` quote/source-gap approval and publish-readiness hardening.
+- Resolved worksheet/handoff-log conflicts by keeping all relevant cloud entries and updating the current next-work plan.
+- Updated `docs/architecture.md` so the app host target is Cloudflare Workers/Pages with OpenNext, with Vercel only as fallback for a documented blocker.
+- Anchored the next work around LlamaCloud configuration and a full Supabase-mode browser/user workflow test.
+
+### Files Changed
+
+- `HANDOFF.md`
+- `WORKSHEET.md`
+- `docs/agent-handoff-log.md`
+- `docs/architecture.md`
+- `docs/cloudflare-nextjs-deployment-plan.md`
+- `docs/context-first-extraction-and-source-gap-strategy.md`
+- `docs/llamacloud-greenfield-implementation.md`
+- `package.json`
+- `scripts/check-document-context-readiness.mjs`
+- `src/app/api/specifications/document-context-readiness/route.ts`
+- `src/lib/ai/extraction-guardrails.ts`
+- `src/lib/ai/outline-spec-normalize.ts`
+- `src/lib/ai/spec-extract.ts`
+- `src/lib/extraction/outline-spec-schema.ts`
+- `src/lib/server/actions.ts`
+- `src/lib/server/document-context-readiness.ts`
+- `src/lib/server/document-context.ts`
+- `src/lib/server/document-extraction.ts`
+- `src/lib/workflow-readiness.ts`
+
+### Checks Run
+
+- `npm.cmd run document-context:readiness` - passed; currently reports `local_pdf` fallback because `LLAMA_CLOUD_API_KEY` is not configured locally yet.
+- `npm.cmd run supabase:smoke:readiness` - passed.
+- `npm.cmd run lint` - passed.
+- `npm.cmd run build` - passed locally.
+
+### Current Plan
+
+1. Add `LLAMA_CLOUD_API_KEY` locally and set `DOCUMENT_CONTEXT_PROVIDER=llamacloud` for the realistic extraction pass.
+2. Run `npm.cmd run document-context:readiness` and confirm it reports LlamaCloud will be used without printing the key.
+3. Run the real scanned outline spec through the app and confirm LlamaCloud-backed extraction quality plus admin-noise guardrails.
+4. Run the full Supabase-mode browser workflow: login, workspace/project, upload, extraction/review, source-gap/builder-supplied/supporting evidence, publish readiness, publish, and client portal visibility.
+5. Fix only blockers found in that workflow, then revisit Cloudflare/OpenNext app deploy implementation.
+
+### Unknowns/Risks
+
+- LlamaCloud API key is still not configured locally in this anchored state, so realistic scanned-PDF extraction is not proven yet.
+- Browser-level workflow smoke has not run after the merge.
+- OpenNext/Cloudflare app hosting is planned but not configured yet.
+
+### Suggested Next Task
+
+Configure LlamaCloud locally, confirm document-context readiness, and start the full Supabase-mode workflow smoke with the real scanned outline spec.
+
+## 2026-06-21 - Quote Source-Gap Approval Guard
+
+### What Changed
+
+- Loaded quote-reference status and raw extraction metadata in the Supabase approve-as-correct guard so server-side source-gap checks use the same signals as the UI/local path.
+- Kept publish readiness strict for rows that somehow became `approved` while still carrying unresolved quote references, missing fields, or builder-info prompts.
+- Added explicit pending-resolution metadata to supporting evidence uploads so quote/evidence attachment is auditable without pretending the item is automatically resolved.
+- Updated the worksheet and handoff notes with the current behavior.
+
+### Files Changed
+
+- `src/lib/server/actions.ts`
+- `src/lib/workflow-readiness.ts`
+- `HANDOFF.md`
+- `WORKSHEET.md`
+- `docs/agent-handoff-log.md`
+
+### Checks Run
+
+- `npm run lint` - passed in Codex cloud.
+- `npm run supabase:smoke:readiness` - failed in Codex cloud because Supabase secrets were not configured there.
+- `npm run build` - failed in Codex cloud because Next.js could not fetch Google-hosted Geist fonts from that environment.
+- `npx tsc --noEmit` - passed in Codex cloud.
+
+### Unknowns/Risks
+
+- Supabase-mode smoke still needs an environment with Supabase URL, anon key, and service-role key.
+- Full Next build should be rerun locally where Google Fonts can be fetched or after switching to local fonts.
+- Browser smoke for edit/evidence/builder-supplied resolution paths remains a follow-up.
+
+### Suggested Next Task
+
+Run the Supabase-mode browser smoke with secrets available, then verify that quote-like source gaps cannot be approved as correct, supporting evidence creates an audit action, edited or builder-supplied rows can proceed, and publish remains blocked for unresolved approved-as-correct gaps.
+
+## 2026-06-21 - LlamaCloud Readiness Check
+
+### What Changed
+
+- Added a secret-safe document-context readiness helper and API route that reports whether uploads will use LlamaCloud Parse or local PDF/OCR fallback without printing `LLAMA_CLOUD_API_KEY`.
+- Added `npm.cmd run document-context:readiness` for local/cloud checklist verification of provider selection.
+- Updated LlamaCloud implementation docs and the worksheet with canonical `LLAMA_CLOUD_API_KEY` setup and fallback behavior.
+
+### Files Changed
+
+- `src/lib/server/document-context-readiness.ts`
+- `src/lib/server/document-context.ts`
+- `src/app/api/specifications/document-context-readiness/route.ts`
+- `scripts/check-document-context-readiness.mjs`
+- `package.json`
+- `docs/llamacloud-greenfield-implementation.md`
+- `WORKSHEET.md`
+- `docs/agent-handoff-log.md`
+
+### Checks Run
+
+- `npm run document-context:readiness` - passed and reported local fallback because no LlamaCloud key was present in Codex cloud.
+- `DOCUMENT_CONTEXT_PROVIDER=llamacloud LLAMA_CLOUD_API_KEY=<redacted> npm run document-context:readiness` - passed and confirmed the command reports `llamacloud_parse` without printing the key.
+- `npm run lint` - passed in Codex cloud.
+- `npm run build` - failed in Codex cloud because Next.js could not fetch Google-hosted Geist fonts during the production build.
+
+### Unknowns/Risks
+
+- No real LlamaCloud parse was run because Codex cloud did not expose a `LLAMA_CLOUD_API_KEY` or the real scanned PDF.
+- The readiness check proves provider selection only; a real OCR-quality smoke still needs a configured key and representative PDF.
+
+### Suggested Next Task
+
+Configure `LLAMA_CLOUD_API_KEY` in a local or cloud secret store, run `npm.cmd run document-context:readiness`, then process a representative scanned specification PDF and confirm extraction diagnostics show `provider: llamacloud_parse` before continuing source-search work.
+
 ## 2026-06-21 - Consolidation Push Completed
 
 ### What Changed
@@ -793,3 +922,67 @@ Continue the Builder Handover Portal from C:\Users\hunte\OneDrive\Desktop\TestWe
   binding smoke is still useful before relying on local dev behavior, but no
   public Cloudflare, R2, OpenAI, source search, source PDF fetch, or live
   enrichment ran here.
+
+## 2026-06-21 - Cloudflare-first Next.js App Deployment Plan
+
+### What Changed
+
+- Added a docs-only deployment plan for hosting the Next.js 16 product app on Cloudflare Workers with the OpenNext Cloudflare adapter.
+- Documented current compatibility findings from repo inspection and current Cloudflare/OpenNext/Supabase docs.
+- Identified likely package/config additions, required app and secret environment variables, Supabase key handling rules, routes/server actions needing workerd compatibility review, deployment commands, validation steps, risks, and blockers.
+- Updated `WORKSHEET.md` with the completed planning item and next recommended implementation task.
+
+### Files Changed
+
+- `docs/cloudflare-nextjs-deployment-plan.md`
+- `WORKSHEET.md`
+- `docs/agent-handoff-log.md`
+
+### Checks Run
+
+- `npm.cmd run lint` - not available in Codex cloud's Linux shell; reran as `npm run lint`.
+- `npm run lint` - passed in Codex cloud.
+
+### Unknowns/Risks
+
+- This was intentionally docs/config planning only; no OpenNext packages or root app Wrangler config were added yet.
+- The largest expected blockers remain PDF/OCR compatibility under workerd, accidental local filesystem fallback in production, large upload limits, and Supabase auth/proxy behavior in Workers preview.
+- A real `opennextjs-cloudflare build`/preview smoke is still required before declaring the Next.js app production-ready on Cloudflare.
+
+### Suggested Next Task
+
+Implement the smallest OpenNext/Wrangler product-app config PR, then run Cloudflare preview against Supabase + LlamaCloud configuration before any custom-domain cutover.
+
+## 2026-06-21 - Extraction Admin-Noise Guardrails
+
+### What Changed
+
+- Added shared extraction guardrails that identify pure admin/legal/contract/preliminaries/site setup/scaffolding/temporary works/council/insurance/health-and-safety/generic workmanship noise while preserving homeowner-relevant warranties, manuals, certificates, producer statements, appliances, fixtures/fittings, flooring, cladding, roofing, paint/finish selections, and maintenance requirements.
+- Applied the guardrails to deterministic spec preview extraction and outline-spec workflow normalization so pure admin noise is filtered before review/package rows are created.
+- Tightened the OpenAI extraction prompt and outline-spec schema description to avoid promoting admin noise and to use the current `source_ready_unknown` classification name.
+- Documented the guardrail policy in the context-first extraction/source-gap strategy.
+
+### Files Changed
+
+- `src/lib/ai/extraction-guardrails.ts`
+- `src/lib/ai/spec-extract.ts`
+- `src/lib/ai/outline-spec-normalize.ts`
+- `src/lib/extraction/outline-spec-schema.ts`
+- `src/lib/server/document-extraction.ts`
+- `docs/context-first-extraction-and-source-gap-strategy.md`
+- `WORKSHEET.md`
+- `docs/agent-handoff-log.md`
+
+### Checks Run
+
+- `npm run lint` - passed in Codex cloud.
+- `npm run build` - failed in Codex cloud because `next/font` could not fetch Geist and Geist Mono from Google Fonts in that environment.
+
+### Unknowns/Risks
+
+- Guardrails are intentionally conservative and may drop pure admin-only rows entirely; if the business wants rejected/noise audit rows, add a separate non-handover extraction log instead of putting them into homeowner package candidates.
+- Build should be rerun locally where Google Fonts can be fetched or after switching to vendored/local fonts.
+
+### Suggested Next Task
+
+Run a real/scanned outline spec through LlamaCloud or OCR-backed extraction and confirm the review queue contains homeowner-relevant products/documents/maintenance only, with admin/preliminaries/site setup noise absent from package candidates.

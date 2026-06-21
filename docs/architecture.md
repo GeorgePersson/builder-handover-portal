@@ -5,7 +5,7 @@ This is the compact architecture entrypoint for future agents. Use `docs/technic
 ## Confirmed Stack
 
 - Product app: Next.js 16 App Router, React, TypeScript, Tailwind CSS, lucide-react.
-- App host target: Vercel.
+- App host target: Cloudflare Workers/Pages with OpenNext adapter; Vercel is fallback only if a documented Cloudflare blocker appears.
 - System of record: Supabase Postgres, Auth, RLS, Storage, and RPCs.
 - Local fallback: `.local-data/` JSON stores and `.local-uploads/` files.
 - AI: OpenAI structured extraction and selective source summarisation when configured.

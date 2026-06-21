@@ -45,17 +45,29 @@ After the push, update this worksheet and `docs/agent-handoff-log.md` with what 
 - Agent startup and handoff rules are now documented in `AGENTS.md` and this worksheet.
 - Supabase readiness smoke script is available as `npm.cmd run supabase:smoke:readiness` and passed locally against the configured Supabase project.
 - Source-gap approval hardening is ported from Codex cloud work: source-gap items cannot be approved as correct until missing fields/quote references/builder-info prompts are resolved, and builder-supplied approval requires a project-specific note.
+- Extraction admin-noise guardrails now filter pure contract/payment/preliminaries/site setup/scaffolding/temporary works/council/insurance/health-and-safety/generic workmanship text before it becomes homeowner handover candidates while preserving warranties/manuals/certificates/products/finishes/maintenance.
+
+- Extraction admin-noise guardrails and quote/source-gap hardening from Codex cloud/mobile have been consolidated locally and pass smoke/lint/build checks.
+
+- LlamaCloud/document-context readiness check exists as `npm.cmd run document-context:readiness`; current local check reports fallback to `local_pdf` until `LLAMA_CLOUD_API_KEY` is configured.
+
+- Cloudflare-first deployment plan exists at `docs/cloudflare-nextjs-deployment-plan.md`; app host target is Cloudflare Workers/Pages via OpenNext, with Vercel fallback only for a proven blocker.
 
 ## Needs Doing / Next Work
 
-- Continue from `HANDOFF.md` and `docs/phased-work.md`; do not change product direction without documenting the decision.
-- Continue Phase 3 browser smoke testing: magic-link login, builder workspace bootstrap, project/spec upload, extraction/review queue creation, builder-supplied/source-gap handling, and publish-readiness behavior.
-- Verify current app checks before pushing meaningful app changes: usually `npm.cmd run lint` and `npm.cmd run build`.
-- Keep publish readiness strict: unresolved source gaps, quote references, or builder-context prompts should not silently become client-facing.
-- Continue documenting any Cloudflare/LlamaCloud/Supabase production setup steps as they are actually verified.
+- Configure `LLAMA_CLOUD_API_KEY` locally, set `DOCUMENT_CONTEXT_PROVIDER=llamacloud` for the realistic PDF pass, and run `npm.cmd run document-context:readiness` until it reports `willUseLlamaCloud: true`.
+- Run the real scanned outline spec extraction smoke using `C:\Users\hunte\Downloads\2074 legal signed outline spec.pdf.pdf`; confirm extraction diagnostics use LlamaCloud and that admin/legal/preliminaries/site setup noise stays out of homeowner package candidates.
+- Run the Supabase-mode browser workflow: login, builder workspace/project, upload, extraction/review queue, source-gap handling, builder-supplied note, supporting evidence/quote path, publish readiness, publish, and client portal visibility.
+- Keep publish readiness strict: unresolved source gaps, quote references, or builder-context prompts should not silently become client-facing. Approved-as-correct rows with lingering source-gap signals are counted as publish blockers unless edited, excluded, or marked builder-supplied with a note.
+- After the workflow smoke, fix only blockers discovered in the run, then consider the Cloudflare/OpenNext app deploy config from `docs/cloudflare-nextjs-deployment-plan.md`.
+- Verify current app checks before pushing meaningful app changes: `npm.cmd run document-context:readiness`, `npm.cmd run supabase:smoke:readiness`, `npm.cmd run lint`, and `npm.cmd run build`.
 
 ## Last Updated
 
+- 2026-06-21: Anchored after phone/Codex cloud consolidation: merged Cloudflare deployment plan, LlamaCloud readiness, extraction guardrails, and quote/source-gap hardening; local readiness, Supabase smoke, lint, and build passed.
+- 2026-06-21: Hardened quote/source-gap approval and readiness checks so Supabase approvals load source-gap fields, approved-as-correct gaps remain publish blockers, and supporting-evidence uploads include audit metadata.
+- 2026-06-21: Hardened extraction guardrails for admin/legal/contract/preliminaries/site setup noise; lint passed in Codex cloud and local verification is pending.
+- 2026-06-21: Added secret-safe LlamaCloud/document-context readiness reporting and documented the LLAMA_CLOUD_API_KEY configuration path.
 - 2026-06-21: Pushed consolidated Supabase smoke/source-gap readiness work to `codex/llamacloud-greenfield` at commit `9d8ff14`.
 - 2026-06-21: Consolidated selected Codex cloud branches: Supabase readiness smoke plus source-gap/publish-readiness hardening; lint/build passed.
 - 2026-06-21: Added bedtime Codex cloud/mobile handoff prompt and clarified that local Hermes cannot continue after the computer is off.
@@ -104,3 +116,9 @@ Next best task: run or prepare the Supabase-mode app smoke test for magic-link l
 
 Before any git push, write a detailed explanation of what changed, why, files touched, checks run, and remaining risks. After pushing, update WORKSHEET.md and docs/agent-handoff-log.md.
 ```
+
+## 2026-06-21 - Cloudflare-first Next.js app deployment plan
+
+- Completed a docs-only Cloudflare-first deployment plan for hosting the Next.js 16 product app on Cloudflare Workers with the OpenNext Cloudflare adapter.
+- Added compatibility findings, package/config changes, environment variable handling, Supabase key guidance, routes needing workerd review, deployment commands, validation steps, and risks in `docs/cloudflare-nextjs-deployment-plan.md`.
+- Next recommended task: implement the smallest OpenNext/Wrangler product-app config PR, then run `npm run preview` against Supabase + LlamaCloud configuration before any custom-domain cutover.

@@ -95,7 +95,7 @@ function isPublishRequiredPipeline(pipeline: Record<string, unknown>) {
 }
 
 export function hasUnresolvedSourceGap(item: ExtractedWorkflowItem) {
-  if (item.reviewStatus === "excluded" || approvedReviewStatuses.has(item.reviewStatus)) {
+  if (item.reviewStatus === "excluded" || item.reviewStatus === "builder_supplied" || item.reviewStatus === "edited_by_builder") {
     return false;
   }
 

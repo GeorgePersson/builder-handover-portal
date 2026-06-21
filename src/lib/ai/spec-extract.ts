@@ -1,3 +1,5 @@
+import { shouldExcludeAsAdminNoise } from "@/lib/ai/extraction-guardrails";
+
 export type ProposedSpecItem = {
   item_type: "product" | "maintenance" | "document";
   title: string;
@@ -30,6 +32,8 @@ export function buildSpecificationProposals(extractedText: string): ProposedSpec
   const text = extractedText.toLowerCase();
   const proposals: ProposedSpecItem[] = [];
 
+  const containsOnlyAdminNoise = shouldExcludeAsAdminNoise(extractedText);
+
   if (includesAny(text, ["linea", "weatherboard", "cladding", "james hardie"])) {
     const isKnownLinea = includesAny(text, ["linea", "james hardie"]);
 
@@ -45,7 +49,7 @@ export function buildSpecificationProposals(extractedText: string): ProposedSpec
     });
   }
 
-  if (includesAny(text, ["heat pump", "heating", "cooling", "hvac"])) {
+  if (!containsOnlyAdminNoise && includesAny(text, ["heat pump", "heating", "cooling", "hvac"])) {
     proposals.push({
       item_type: "product",
       title: "Heat pump system",
@@ -84,7 +88,7 @@ export function buildSpecificationProposals(extractedText: string): ProposedSpec
     });
   }
 
-  if (includesAny(text, ["ccc", "code compliance", "producer statement", "ps3", "ps4"])) {
+  if (includesAny(text, ["ccc", "code compliance", "producer statement", "ps3", "ps4", "warranty", "manual"])) {
     const isProducerStatement = includesAny(text, ["producer statement", "ps3", "ps4"]);
 
     proposals.push({
@@ -114,6 +118,10 @@ export function buildSpecificationProposals(extractedText: string): ProposedSpec
 
   if (proposals.length > 0) {
     return proposals;
+  }
+
+  if (containsOnlyAdminNoise) {
+    return [];
   }
 
   return [

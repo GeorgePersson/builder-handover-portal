@@ -1,5 +1,6 @@
 import { extractPdfText, type ExtractedPdf } from "@/lib/server/pdf-extract";
-import { hasLlamaCloudConfig, parseDocumentWithLlamaCloud } from "@/lib/server/llamacloud";
+import { parseDocumentWithLlamaCloud } from "@/lib/server/llamacloud";
+import { shouldUseLlamaCloudProvider } from "@/lib/server/document-context-readiness";
 
 export type DocumentContextProvider = "local_pdf" | "llamacloud_parse";
 
@@ -27,16 +28,7 @@ type ExtractDocumentContextInput = {
 };
 
 function shouldUseLlamaCloud() {
-  const provider = process.env.DOCUMENT_CONTEXT_PROVIDER?.trim().toLowerCase();
-  if (provider === "local_pdf") {
-    return false;
-  }
-
-  if (provider === "llamacloud") {
-    return true;
-  }
-
-  return hasLlamaCloudConfig();
+  return shouldUseLlamaCloudProvider();
 }
 
 function toLocalResult(parsed: ExtractedPdf, warnings: string[] = []): DocumentContextResult {
