@@ -74,6 +74,10 @@ export function getInitialExtractedItemReviewReason(item: ProposedSpecItem) {
     return "Request more context: keep this source-backed candidate in review, but ask the builder to confirm whether it is a true handover item, location, or project-specific selection.";
   }
 
+  if (/tiles|paint|flooring|doors and hardware/i.test(item.category)) {
+    return "General finish item: confirm the supplier/range, colour, location, or project selection where available. Warranty documents may not be required before this can be included as builder-reviewed handover context.";
+  }
+
   return "Needs review because no reusable source-backed record matched this extracted item.";
 }
 
@@ -103,6 +107,15 @@ const ocrPhraseFixes: Array<[RegExp, string]> = [
   [/\bitemswillbedeterminedonsiteby\b/gi, "items will be determined onsite by"],
   [/\bto\s*belocated\b/gi, "to be located"],
   [/\bto\s*confirmpositionsonsite\b/gi, "to confirm positions onsite"],
+  [/Interiorcolourscheme/gi, "Interior colour scheme "],
+  [/\bfourcolours\b/gi, "four colours"],
+  [/\bcolour(\d+)/gi, "colour $1"],
+  [/\bwaterbornesemi-gloss\b/gi, "waterborne semi-gloss"],
+  [/\bSemi-glosspaintfinish\b/gi, "Semi-gloss paint finish"],
+  [/\bflushpanelpre-hungdoors\b/gi, "flush panel pre-hung doors"],
+  [/\bHollowcore\b/gi, "Hollow core"],
+  [/\bmmpineflushjamb\b/gi, "mm pine flush jamb"],
+  [/\bforarchitraves\b/gi, "for architraves"],
   [/\bSelectedst\s*and\s*ard\b/gi, "Selected standard"],
   [/\bfree\s*stand\s*ing\b/gi, "freestanding"],
   [/\bfreest\s*and\s*ing\b/gi, "freestanding"],
@@ -143,8 +156,23 @@ function normalizeForMatching(text: string) {
   return applyOcrPhraseFixes(normalized).replace(/\s+/g, " ").trim();
 }
 
+function collapseRepeatedTail(text: string) {
+  const words = text.split(/\s+/).filter(Boolean);
+
+  for (let size = Math.floor(words.length / 2); size >= 5; size -= 1) {
+    const tail = words.slice(-size).join(" ").toLowerCase();
+    const beforeTail = words.slice(-size * 2, -size).join(" ").toLowerCase();
+
+    if (tail && tail === beforeTail) {
+      return words.slice(0, -size).join(" ");
+    }
+  }
+
+  return text;
+}
+
 function cleanEvidenceText(text: string) {
-  return normalizeForMatching(text)
+  const cleaned = normalizeForMatching(text)
     .replace(/\bimage\b/gi, " ")
     .replace(/\bBuilder\s*\(Initial\)\b/gi, " ")
     .replace(/\bClient\s*\(Initial\)\b/gi, " ")
@@ -156,6 +184,8 @@ function cleanEvidenceText(text: string) {
     .replace(/,\s*/g, ", ")
     .replace(/\s+/g, " ")
     .trim();
+
+  return collapseRepeatedTail(cleaned);
 }
 
 function compactForMatching(text: string) {
@@ -209,19 +239,32 @@ function patternMatches(rule: ExtractionRule, searchableText: string, compactTex
   return rule.patterns.some((pattern) => pattern.test(searchableText) || pattern.test(compactText));
 }
 
+function isLowInformationEvidence(text: string) {
+  const words = text.toLowerCase().match(/[a-z0-9]+/g) || [];
+  return words.length <= 6 && new Set(words).size <= 2;
+}
+
 function findBestEvidence(rule: ExtractionRule, chunks: string[], fullText: string) {
-  const evidenceChunk = chunks.find((chunk) => {
+  const cleanedChunks = chunks
+    .map((chunk) => cleanEvidenceText(chunk))
+    .filter((chunk) => chunk.length > 0 && !isLowInformationEvidence(chunk));
+
+  const termEvidenceChunk = rule.evidenceTerms
+    .map((candidate) => cleanedChunks.find((chunk) => chunk.toLowerCase().includes(candidate.toLowerCase())))
+    .find(Boolean);
+
+  const patternEvidenceChunk = cleanedChunks.find((chunk) => {
     const normal = chunk.toLowerCase();
     const compact = compactForMatching(chunk);
     return patternMatches(rule, normal, compact);
   });
 
-  const source = evidenceChunk || fullText;
+  const source = termEvidenceChunk || patternEvidenceChunk || fullText;
   const normalSource = cleanEvidenceText(source);
   const lowerSource = normalSource.toLowerCase();
   const term = rule.evidenceTerms.find((candidate) => lowerSource.includes(candidate.toLowerCase()));
 
-  if (!term) {
+  if (!term || normalSource.length <= 360) {
     return normalSource.slice(0, 360) || rule.fallbackEvidence;
   }
 

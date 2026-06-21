@@ -1,4 +1,28 @@
 # Agent Handoff Log
+## 2026-06-22 - General Finish Items and Door Evidence Cleanup
+
+### Goal
+
+Incorporate review feedback that finish-style items such as tiles, paint, carpet/flooring, and doors often do not need warranty documents. These rows should usually be treated as general builder-reviewed handover context: supplier/range/colour/location/selection matters more than forcing a source-document/manual search.
+
+### Changes
+
+- `getInitialExtractedItemReviewReason()` now gives tiles, paint, flooring/carpet, and doors a general finish review note: confirm supplier/range/colour/location/selection where available; warranty docs may not be required before inclusion.
+- Evidence selection now prefers chunks containing higher-priority evidence terms before looser pattern matches, so rule rows do not get captured by repeated section headings.
+- Low-information repeated headings such as `INTERIOR DOORS INTERIOR DOORS` are ignored as evidence candidates.
+- Short evidence rows are no longer cropped around the matched term, which keeps the full door row visible.
+- Added OCR/readability fixes for interior door and paint rows, including `Hollow core`, `flush panel pre-hung doors`, `Semi-gloss paint finish`, `Interior colour scheme`, and paint colour spacing.
+- Added repeated-tail cleanup so duplicated Docling table columns collapse in rule-based snippets as well as schema row snippets.
+
+### Verification
+
+- Current `Interior flush panel doors` proposal now uses the actual row: `Doors Type Size Finish Frames Hollow core flush panel pre-hung doors 2200 mm Semi-gloss paint finish 19 mm pine flush jamb for architraves with Semi-gloss paint finish Interior Door Flush Panel`.
+- Current paint and wall-tile evidence no longer duplicates the repeated table column.
+- Backfilled current Supabase rows for `Interior flush panel doors`, `Interior paint finish and colour scheme`, `Bathroom and wet-area ceramic wall tiles`, and `Garage carpet` with the cleaned evidence and general finish review reason.
+- `npm.cmd run spec-extract:smoke` passed: 96 proposals.
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed with known Docling/Turbopack NFT tracing warnings.
+
 ## 2026-06-22 - Context Flags and Tiling Row Cleanup
 
 ### Goal
