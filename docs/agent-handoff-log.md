@@ -793,3 +793,29 @@ Continue the Builder Handover Portal from C:\Users\hunte\OneDrive\Desktop\TestWe
   binding smoke is still useful before relying on local dev behavior, but no
   public Cloudflare, R2, OpenAI, source search, source PDF fetch, or live
   enrichment ran here.
+
+## 2026-06-21 - Cloudflare-first Next.js App Deployment Plan
+
+### What Changed
+
+- Added a docs-only deployment plan for hosting the Next.js 16 product app on Cloudflare Workers with the OpenNext Cloudflare adapter.
+- Documented current compatibility findings from repo inspection and current Cloudflare/OpenNext/Supabase docs.
+- Identified likely package/config additions, required app and secret environment variables, Supabase key handling rules, routes/server actions needing workerd compatibility review, deployment commands, validation steps, risks, and blockers.
+- Updated `WORKSHEET.md` with the completed planning item and next recommended implementation task.
+
+### Files Changed
+
+- `docs/cloudflare-nextjs-deployment-plan.md`
+- `WORKSHEET.md`
+- `docs/agent-handoff-log.md`
+
+### Checks Run
+
+- `npm.cmd run lint` - not available in this Linux shell (`npm.cmd: command not found`); reran as `npm run lint`.
+- `npm run lint` - passed.
+
+### Unknowns/Risks
+
+- This was intentionally docs/config planning only; no OpenNext packages or root app Wrangler config were added yet.
+- The largest expected blockers remain PDF/OCR compatibility under workerd, accidental local filesystem fallback in production, large upload limits, and Supabase auth/proxy behavior in Workers preview.
+- A real `opennextjs-cloudflare build`/preview smoke is still required before declaring the Next.js app production-ready on Cloudflare.

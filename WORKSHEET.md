@@ -104,3 +104,9 @@ Next best task: run or prepare the Supabase-mode app smoke test for magic-link l
 
 Before any git push, write a detailed explanation of what changed, why, files touched, checks run, and remaining risks. After pushing, update WORKSHEET.md and docs/agent-handoff-log.md.
 ```
+
+## 2026-06-21 - Cloudflare-first Next.js app deployment plan
+
+- Completed a docs-only Cloudflare-first deployment plan for hosting the Next.js 16 product app on Cloudflare Workers with the OpenNext Cloudflare adapter.
+- Added compatibility findings, package/config changes, environment variable handling, Supabase key guidance, routes needing workerd review, deployment commands, validation steps, and risks in `docs/cloudflare-nextjs-deployment-plan.md`.
+- Next recommended task: implement the smallest OpenNext/Wrangler product-app config PR, then run `npm run preview` against Supabase + LlamaCloud configuration before any custom-domain cutover.
