@@ -71,6 +71,7 @@ After the push, update this worksheet and `docs/agent-handoff-log.md` with what 
 
 ## Last Updated
 
+- 2026-06-21: Full fresh Docling workflow produced upload `96386625-c705-4895-9f89-40c09a899d04` with 100 review rows (95 product, 3 maintenance, 2 document). Assessment: keep refining Docling for now because it is local/PAYG-friendly and now finds useful breadth, but add an Azure Content Understanding comparison spike for quality benchmarking before committing to a provider switch.
 - 2026-06-21: Pivoted Docling extraction toward the provided Azure Context Understanding schema: added table-row item extraction with structured evidence fields (Name, Manufacturer/Supplier, ProductCode, Finish, Size, Category, Location, Description, HasIdentifier, SuggestedSearchQuery). Smoke now finds 97 proposals; latest upload backfilled from 25 to 95 review rows.
 - 2026-06-21: User provided prior Azure Context Understanding nested item schema; key lesson is extraction should be exhaustive item-centric structured rows (Name, Manufacturer/Supplier, Range/Model/Code, Finish/Colour/Size/Qty, Category/Location, Description/Notes, HasIdentifier/SearchQuery), not a small hard-coded rule list.
 - 2026-06-21: Tightened Docling evidence snippets to prefer original table rows over merged chunks; Grohe mixer now backfills as `Grohe,Essence Kitchen Mixer with pullout spray-brushed warm sunset 30270 DLO Kitchen Mixer` instead of adjacent shower/footer noise.

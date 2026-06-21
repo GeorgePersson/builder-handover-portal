@@ -1,4 +1,40 @@
 # Agent Handoff Log
+## 2026-06-21 - Full Docling Workflow Quality Assessment
+
+### Fresh Run Observed
+
+Full UI upload -> Docling parse -> schema-inspired extraction -> Supabase review queue produced upload `96386625-c705-4895-9f89-40c09a899d04`.
+
+Counts:
+
+- Total rows: 100
+- Products: 95
+- Maintenance: 3
+- Documents: 2
+- Status: all `admin_review`
+- No rows missing `source_snippet`
+
+Category distribution was strongest in bathroom fixtures, tapware, doors/hardware, flooring, electrical, and tiles. Many rows are genuinely useful and include manufacturer/code/search-query details, especially bathroom fixtures and tapware.
+
+### Quality Issues
+
+- OCR spacing remains the largest quality problem: examples include `Finalpositionsofall`, `Internalreticulation`, `To ilet`, `Hand les`, `squote`, etc.
+- Some false positives/generic rows remain: `Please Note:`, `Doors tops`, `Pipe work`, generic `Kitchen`/`Scullery` quote rows, etc.
+- Duplicate normalization still needs work: e.g. Garage carpet and Grohe kitchen mixer case variants.
+- All rows currently go to `admin_review`; UX needs a separate "request more context" workflow instead of only review/approve/reject.
+
+### Recommendation
+
+Keep refining Docling as the default local-first path for now. The fresh run proves the local pipeline can reach useful breadth without paying a managed extractor for every run. However, run Azure Content Understanding as a benchmark/comparison spike, not an immediate replacement. If Azure is materially better on spacing, item identity, page evidence, and structured fields after using the same schema, then decide whether its quality justifies provider cost/lock-in or whether it should remain an optional paid extraction tier.
+
+### Next Engineering Steps
+
+1. Add OCR/readability normalization pass before persistence.
+2. Add duplicate/title normalization.
+3. Add false-positive filters for generic note rows.
+4. Add "request more context" review action and status.
+5. Add an Azure comparison harness using the same schema and same PDF, storing outputs side-by-side for evaluation.
+
 ## 2026-06-21 - Azure-Schema-Inspired Table Extraction
 
 ### User Feedback
