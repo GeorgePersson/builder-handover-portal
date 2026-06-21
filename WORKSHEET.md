@@ -45,17 +45,20 @@ After the push, update this worksheet and `docs/agent-handoff-log.md` with what 
 - Agent startup and handoff rules are now documented in `AGENTS.md` and this worksheet.
 - Supabase readiness smoke script is available as `npm.cmd run supabase:smoke:readiness` and passed locally against the configured Supabase project.
 - Source-gap approval hardening is ported from Codex cloud work: source-gap items cannot be approved as correct until missing fields/quote references/builder-info prompts are resolved, and builder-supplied approval requires a project-specific note.
+- Extraction admin-noise guardrails now filter pure contract/payment/preliminaries/site setup/scaffolding/temporary works/council/insurance/health-and-safety/generic workmanship text before it becomes homeowner handover candidates while preserving warranties/manuals/certificates/products/finishes/maintenance.
 
 ## Needs Doing / Next Work
 
 - Continue from `HANDOFF.md` and `docs/phased-work.md`; do not change product direction without documenting the decision.
 - Continue Phase 3 browser smoke testing: magic-link login, builder workspace bootstrap, project/spec upload, extraction/review queue creation, builder-supplied/source-gap handling, and publish-readiness behavior.
+- Run a real/scanned outline spec extraction smoke with LlamaCloud/OCR and confirm admin/legal/preliminaries/site setup noise does not enter homeowner package candidates.
 - Verify current app checks before pushing meaningful app changes: usually `npm.cmd run lint` and `npm.cmd run build`.
 - Keep publish readiness strict: unresolved source gaps, quote references, or builder-context prompts should not silently become client-facing.
 - Continue documenting any Cloudflare/LlamaCloud/Supabase production setup steps as they are actually verified.
 
 ## Last Updated
 
+- 2026-06-21: Hardened extraction guardrails for admin/legal/contract/preliminaries/site setup noise; lint passed and build was blocked by Google Fonts fetch failure.
 - 2026-06-21: Pushed consolidated Supabase smoke/source-gap readiness work to `codex/llamacloud-greenfield` at commit `9d8ff14`.
 - 2026-06-21: Consolidated selected Codex cloud branches: Supabase readiness smoke plus source-gap/publish-readiness hardening; lint/build passed.
 - 2026-06-21: Added bedtime Codex cloud/mobile handoff prompt and clarified that local Hermes cannot continue after the computer is off.

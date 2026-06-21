@@ -793,3 +793,39 @@ Continue the Builder Handover Portal from C:\Users\hunte\OneDrive\Desktop\TestWe
   binding smoke is still useful before relying on local dev behavior, but no
   public Cloudflare, R2, OpenAI, source search, source PDF fetch, or live
   enrichment ran here.
+
+## 2026-06-21 - Extraction Admin-Noise Guardrails
+
+### What Changed
+
+- Added shared extraction guardrails that identify pure admin/legal/contract/preliminaries/site setup/scaffolding/temporary works/council/insurance/health-and-safety/generic workmanship noise while preserving homeowner-relevant warranties, manuals, certificates, producer statements, appliances, fixtures/fittings, flooring, cladding, roofing, paint/finish selections, and maintenance requirements.
+- Applied the guardrails to deterministic spec preview extraction and outline-spec workflow normalization so pure admin noise is filtered before review/package rows are created.
+- Tightened the OpenAI extraction prompt and outline-spec schema description to avoid promoting admin noise and to use the current `source_ready_unknown` classification name.
+- Documented the guardrail policy in the context-first extraction/source-gap strategy.
+- Attempted to inspect prior commit `78e500e`, but it was not present in this local repository and no remote is configured in this checkout, so the safe changes were implemented by comparing the current extractor paths directly against the requested behavior.
+
+### Files Changed
+
+- `src/lib/ai/extraction-guardrails.ts`
+- `src/lib/ai/spec-extract.ts`
+- `src/lib/ai/outline-spec-normalize.ts`
+- `src/lib/extraction/outline-spec-schema.ts`
+- `src/lib/server/document-extraction.ts`
+- `docs/context-first-extraction-and-source-gap-strategy.md`
+- `WORKSHEET.md`
+- `docs/agent-handoff-log.md`
+
+### Checks Run
+
+- `npm run lint` - passed.
+- `npm run build` - failed because `next/font` could not fetch Geist and Geist Mono from Google Fonts in this environment.
+
+### Unknowns/Risks
+
+- The old cloud commit `78e500e` still needs comparison in an environment where that commit or its remote branch is available.
+- Guardrails are intentionally conservative and may drop pure admin-only rows entirely; if the business wants rejected/noise audit rows, add a separate non-handover extraction log instead of putting them into homeowner package candidates.
+- Build should be rerun once Google Fonts fetches are available or the app moves to vendored/local fonts.
+
+### Suggested Next Task
+
+Run a real/scanned outline spec through LlamaCloud or OCR-backed extraction and confirm the review queue contains homeowner-relevant products/documents/maintenance only, with admin/preliminaries/site setup noise absent from package candidates.

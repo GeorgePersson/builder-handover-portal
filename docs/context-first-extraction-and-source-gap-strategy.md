@@ -34,12 +34,17 @@ Upload spec/supporting document
 -> extract text, tables, OCR, and section context
 -> strict context schema extraction
 -> classify rows:
-   source_ready
+   known_match_candidate
+   source_ready_unknown
    builder_input_needed
    project_document
    generic_allowance
    admin_or_contract
    not_handover_relevant
+-> drop pure admin/legal/contract/preliminaries/site setup/scaffolding/
+   temporary works/council/insurance/health-and-safety/generic workmanship
+   noise unless the same row clearly names homeowner-relevant products,
+   documents, finishes, certificates, warranties, manuals, or maintenance
 -> match against approved/local product database
 -> ask builder for missing identity/warranty/care/source details
 -> store builder-supplied project information with review metadata
@@ -61,6 +66,14 @@ Each extracted workflow item should preserve:
 - `contextClassification`: whether this is source-ready, builder-input-needed,
   a project document, generic allowance, admin/contract text, or not relevant.
 - `classificationReason`: why it landed in that path.
+
+Extraction guardrails should be conservative: contract clauses, payment terms,
+preliminaries, site setup, scaffolding, temporary works, council/admin
+obligations, insurance/health-and-safety text, and generic trade workmanship
+requirements should not become homeowner handover products. The same guardrails
+must still preserve homeowner-relevant warranties, manuals, certificates,
+producer statements, appliances, fixtures/fittings, flooring, cladding, roofing,
+paint/finish selections, and maintenance requirements.
 
 ## Builder-Supplied And Unfindable Items
 

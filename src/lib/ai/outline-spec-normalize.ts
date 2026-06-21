@@ -1,4 +1,5 @@
 import type { ProposedSpecItem } from "@/lib/ai/spec-extract";
+import { hasHomeownerRelevance, shouldExcludeAsAdminNoise } from "@/lib/ai/extraction-guardrails";
 import type { ExtractedWorkflowItem } from "@/lib/document-workflow";
 import {
   getStrongestIdentity,
@@ -83,8 +84,47 @@ function getExtractedText(item: OutlineSpecExtractedItem) {
     .join("\n");
 }
 
+function getGuardrailText(item: OutlineSpecExtractedItem) {
+  return [
+    item.ItemName.Name,
+    item.ItemName.Manufacturer,
+    item.ItemName.Supplier,
+    item.ItemName.ProductRange,
+    item.ItemName.ModelName,
+    item.ItemName.ProductCode,
+    item.ItemName.Sku,
+    item.ItemName.Finish,
+    item.ItemName.Colour,
+    item.ItemName.Size,
+    item.ItemName.Quantity,
+    item.ItemName.Category,
+    item.ItemName.Location,
+    item.ItemName.Description,
+    item.ItemName.Notes,
+    item.ItemName.SuggestedSearchQuery,
+    item.Evidence?.SourceSection,
+    item.Evidence?.SourceSnippet,
+    item.Review?.SourceGapReason,
+    ...(item.Review?.MissingFields || []),
+    ...(item.Review?.BuilderQuestions || []),
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function isExcludedByGuardrails(item: OutlineSpecExtractedItem) {
+  const classification = item.Review?.ContextClassification;
+  const guardrailText = getGuardrailText(item);
+
+  if ((classification === "admin_or_contract" || classification === "not_handover_relevant") && !hasHomeownerRelevance(guardrailText)) {
+    return true;
+  }
+
+  return shouldExcludeAsAdminNoise(guardrailText);
+}
+
 export function normalizeOutlineSpecExtraction(extraction: OutlineSpecExtraction): ProposedSpecItem[] {
-  return extraction.Items.map((item) => ({
+  return extraction.Items.filter((item) => !isExcludedByGuardrails(item)).map((item) => ({
     item_type: getItemType(item),
     title: getTitle(item),
     category: item.ItemName.Category || "To review",
@@ -155,7 +195,7 @@ export function normalizeOutlineSpecExtractionToWorkflowItems(input: {
   parentExtractedItemId?: string;
   sourceQuoteDocumentId?: string;
 }): Array<Omit<ExtractedWorkflowItem, "id" | "createdAt" | "updatedAt">> {
-  return input.extraction.Items.map((item) => {
+  return input.extraction.Items.filter((item) => !isExcludedByGuardrails(item)).map((item) => {
     const itemType = getItemType(item);
     const title = getTitle(item);
     const aiSuggestedCategory = item.ItemName.Category || "To review";
