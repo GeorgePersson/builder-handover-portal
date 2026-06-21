@@ -42,6 +42,9 @@ dev-server.*.log
 .local-uploads/
 .local-data/
 
+# local generated artifacts from parser spikes and manual smoke tests
+.local-artifacts/
+
 # local Cloudflare/Wrangler state
 .wrangler/
 cloudflare/**/.wrangler/

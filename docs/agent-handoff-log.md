@@ -1,4 +1,53 @@
 # Agent Handoff Log
+## 2026-06-21 - Docling Local Parser Smoke Implemented
+
+### What Changed
+
+- Added `.local-artifacts/` to `.gitignore` for local parser outputs.
+- Added `scripts/docling-convert.py`, a local Docling conversion CLI that writes markdown, JSON, and diagnostics artifacts.
+- Added `scripts/smoke-docling-local.mjs` and `npm.cmd run docling:smoke:local` for the real scanned spec smoke.
+- Installed `docling==2.104.0` in the local Hermes Python environment only; no Python environment files were committed.
+- Extended document-context provider types/readiness to support `docling_local` and `docling_http` provider names while keeping LlamaCloud intact.
+- Wired `DOCUMENT_CONTEXT_PROVIDER=docling_local` into `extractDocumentContext()` with fallback to `local_pdf` if Docling fails.
+- Updated Docling plan/phased-work/worksheet docs with the local parse result.
+
+### Files Changed
+
+- `.gitignore`
+- `package.json`
+- `scripts/docling-convert.py`
+- `scripts/smoke-docling-local.mjs`
+- `scripts/check-document-context-readiness.mjs`
+- `src/lib/server/docling.ts`
+- `src/lib/server/document-context.ts`
+- `src/lib/server/document-context-readiness.ts`
+- `src/lib/server/specification-response.ts`
+- `docs/docling-local-context-plan.md`
+- `docs/docling-phased-work.md`
+- `WORKSHEET.md`
+- `docs/agent-handoff-log.md`
+
+### Checks Run
+
+- `python -m pip show docling` - passed; local Hermes Python has `docling 2.104.0`.
+- `npm.cmd run docling:smoke:local` - passed; warm run parsed 34 pages into 89,871 markdown characters and 16 table-like structures in 167.537 seconds.
+- `npm.cmd run document-context:readiness` - passed; default remains `local_pdf`.
+- `DOCUMENT_CONTEXT_PROVIDER=docling_local npm.cmd run document-context:readiness` - passed; reports `selectedProvider: docling_local` and `willUseDocling: true`.
+- `npm.cmd run supabase:smoke:readiness` - passed.
+- `npm.cmd run lint` - passed.
+- `npm.cmd run build` - passed. Turbopack emitted NFT tracing warnings for the local Docling child-process path; this is acceptable for the local spike but should be addressed before Cloudflare/OpenNext deployment.
+
+### Unknowns/Risks
+
+- The actual browser upload workflow has not yet been run with `DOCUMENT_CONTEXT_PROVIDER=docling_local`.
+- Docling output is much richer than plain pdf-parse but still has OCR spacing/word-join artifacts, so extraction prompt/normalization may need tuning after the browser smoke.
+- CPU parse time is a few minutes for the 34-page scanned PDF; future VPS sizing and caching need consideration.
+- Turbopack tracing warnings around local Docling should be revisited before production hosting.
+
+### Suggested Next Task
+
+Set `DOCUMENT_CONTEXT_PROVIDER=docling_local`, start the app, upload the real scanned outline spec through `/builder/specifications/new`, and verify that extraction diagnostics show Docling without fallback and that the review queue contains useful homeowner-relevant rows while admin/source-gap guardrails still hold.
+
 ## 2026-06-21 - Docling Planning Branch Push Completed
 
 ### What Changed

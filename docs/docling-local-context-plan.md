@@ -203,6 +203,20 @@ Inspect the generated markdown/JSON and answer:
 - **Cloudflare Worker mismatch:** do not run Docling in normal Workers; use Worker/Queue only to orchestrate a service.
 - **Provider sprawl:** keep all providers behind `DocumentContextResult` and readiness reporting.
 
+
+## Local spike result - 2026-06-21
+
+Docling local parsing is validated enough to wire through the app:
+
+- Installed `docling==2.104.0` in the local Hermes Python environment; no Python environment files were committed.
+- Added `scripts/docling-convert.py` and `npm.cmd run docling:smoke:local`.
+- Parsed `C:\Users\hunte\Downloads\2074 legal signed outline spec.pdf.pdf`.
+- Output artifacts are ignored under `.local-artifacts/docling/`.
+- Diagnostics from the warm smoke run: 34 pages, 89,871 markdown characters, 16 table-like structures, 167.537 seconds on CPU. The first run took 266.421 seconds because RapidOCR/Docling model files were downloaded.
+- Quality readout: output is not perfectly spaced, but it recovers far more useful content than the prior plain `pdf-parse` result and includes many schedule/table rows suitable for the next extraction smoke.
+- App wiring status: `DOCUMENT_CONTEXT_PROVIDER=docling_local` readiness works and the provider contract is implemented with local-PDF fallback on failure. Browser upload smoke is next.
+- Known build watchpoint: `next build` passes, but Turbopack emits NFT tracing warnings around the local Docling child-process path. This is acceptable for the local spike but should be revisited before Cloudflare/OpenNext deployment.
+
 ## Recommendation
 
 Build Docling as a branch-local spike now. If the local parse quality is good, finish `docling_local` and keep `docling_http` ready for a VPS. Only return to LlamaCloud or Azure if Docling quality, speed, or operations are not good enough.

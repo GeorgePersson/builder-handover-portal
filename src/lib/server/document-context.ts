@@ -1,8 +1,8 @@
 import { extractPdfText, type ExtractedPdf } from "@/lib/server/pdf-extract";
 import { parseDocumentWithLlamaCloud } from "@/lib/server/llamacloud";
-import { shouldUseLlamaCloudProvider } from "@/lib/server/document-context-readiness";
+import { shouldUseDoclingLocalProvider, shouldUseLlamaCloudProvider } from "@/lib/server/document-context-readiness";
 
-export type DocumentContextProvider = "local_pdf" | "llamacloud_parse";
+export type DocumentContextProvider = "local_pdf" | "llamacloud_parse" | "docling_local" | "docling_http";
 
 export type DocumentContextResult = {
   provider: DocumentContextProvider;
@@ -27,10 +27,6 @@ type ExtractDocumentContextInput = {
   mimeType: string;
 };
 
-function shouldUseLlamaCloud() {
-  return shouldUseLlamaCloudProvider();
-}
-
 function toLocalResult(parsed: ExtractedPdf, warnings: string[] = []): DocumentContextResult {
   return {
     provider: "local_pdf",
@@ -52,11 +48,37 @@ async function extractLocalPdfContext(input: ExtractDocumentContextInput, warnin
   return toLocalResult(parsed, warnings);
 }
 
-export async function extractDocumentContext(input: ExtractDocumentContextInput): Promise<DocumentContextResult> {
-  if (!shouldUseLlamaCloud()) {
-    return extractLocalPdfContext(input);
-  }
+async function extractDoclingContext(input: ExtractDocumentContextInput): Promise<DocumentContextResult> {
+  try {
+    const { parseDocumentWithDoclingLocal } = await import("@/lib/server/docling");
+    const parsed = await parseDocumentWithDoclingLocal(input);
 
+    if (!parsed.text.trim()) {
+      return extractLocalPdfContext(input, ["Docling returned no text or markdown, so the local PDF extractor was used."]);
+    }
+
+    return {
+      provider: "docling_local",
+      text: parsed.text,
+      markdown: parsed.markdown,
+      diagnostics: {
+        pageCount: parsed.diagnostics.pageCount,
+        tableCount: parsed.diagnostics.tableCount,
+        characterCount: parsed.diagnostics.characterCount,
+        warnings: parsed.diagnostics.warnings,
+        fallbackUsed: false,
+      },
+    };
+  } catch (error) {
+    return extractLocalPdfContext(input, [
+      error instanceof Error
+        ? `Docling parse failed and local PDF extraction was used: ${error.message}`
+        : "Docling parse failed and local PDF extraction was used.",
+    ]);
+  }
+}
+
+async function extractLlamaCloudContext(input: ExtractDocumentContextInput): Promise<DocumentContextResult> {
   try {
     const parsed = await parseDocumentWithLlamaCloud(input);
     const text = parsed.markdown || parsed.text;
@@ -86,4 +108,16 @@ export async function extractDocumentContext(input: ExtractDocumentContextInput)
         : "LlamaCloud parse failed and local PDF extraction was used.",
     ]);
   }
+}
+
+export async function extractDocumentContext(input: ExtractDocumentContextInput): Promise<DocumentContextResult> {
+  if (shouldUseDoclingLocalProvider()) {
+    return extractDoclingContext(input);
+  }
+
+  if (shouldUseLlamaCloudProvider()) {
+    return extractLlamaCloudContext(input);
+  }
+
+  return extractLocalPdfContext(input);
 }

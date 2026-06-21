@@ -55,11 +55,15 @@ After the push, update this worksheet and `docs/agent-handoff-log.md` with what 
 
 - New Docling local-first parser spike branch is `codex/docling-local-context`; plan docs are `docs/docling-local-context-plan.md` and `docs/docling-phased-work.md`. LlamaCloud stays in the architecture for later comparison.
 
+- Docling local parser spike is implemented enough for local testing: `npm.cmd run docling:smoke:local` parsed the 34-page scanned spec into 89,871 markdown characters and 16 table-like structures.
+
+- `DOCUMENT_CONTEXT_PROVIDER=docling_local` readiness now works and the app document-context contract can call the local Docling script with local-PDF fallback on failure.
+
 ## Needs Doing / Next Work
 
-- Build the Docling local spike from `docs/docling-phased-work.md` before adding any new paid parser dependency.
-- First run Docling locally against `C:\Users\hunte\Downloads\2074 legal signed outline spec.pdf.pdf` and save ignored artifacts under `.local-artifacts/docling/`.
-- Add `DOCUMENT_CONTEXT_PROVIDER=docling_local` only after the CLI spike proves useful output, then wire it through the existing document-context provider boundary.
+- Run the browser upload smoke with `DOCUMENT_CONTEXT_PROVIDER=docling_local` and the real scanned spec; confirm extraction diagnostics show `provider: docling_local`, `fallbackUsed: false`, and useful review queue rows.
+- Inspect/tune extraction prompts/guardrails only after the Docling-backed browser smoke shows real workflow output.
+- Keep `.local-artifacts/docling/` ignored; do not commit parsed customer PDF outputs.
 - Keep LlamaCloud code/docs available for a later quality comparison; do not remove the existing LlamaCloud architecture while adding Docling.
 - Run the Supabase-mode browser workflow after Docling is wired: login, builder workspace/project, upload, extraction/review queue, source-gap handling, builder-supplied note, supporting evidence/quote path, publish readiness, publish, and client portal visibility.
 - Keep publish readiness strict: unresolved source gaps, quote references, or builder-context prompts should not silently become client-facing. Approved-as-correct rows with lingering source-gap signals are counted as publish blockers unless edited, excluded, or marked builder-supplied with a note.
@@ -67,6 +71,7 @@ After the push, update this worksheet and `docs/agent-handoff-log.md` with what 
 
 ## Last Updated
 
+- 2026-06-21: Implemented Docling local CLI smoke and `docling_local` provider wiring; real scanned spec parsed to 89,871 markdown chars / 16 tables, readiness/supabase/lint/build passed, with Turbopack NFT tracing warnings to revisit.
 - 2026-06-21: Pushed Docling planning branch `codex/docling-local-context` at commit `8565528`; next task is local Docling install/CLI conversion against the real scanned spec.
 - 2026-06-21: Started Docling local-first parser branch `codex/docling-local-context`; next work is a local Docling CLI spike, then `docling_local` provider wiring and real scanned-PDF smoke.
 - 2026-06-21: Pushed phone/Codex cloud consolidation to `codex/llamacloud-greenfield` at commit `e3bfe66`; next step is LlamaCloud config plus full Supabase workflow smoke.

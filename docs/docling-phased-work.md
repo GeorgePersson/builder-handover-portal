@@ -9,7 +9,7 @@ This is the fast build path for adding Docling as a local-first document context
 
 Goal: make the Docling direction explicit before code work begins.
 
-Status: started on `codex/docling-local-context`.
+Status: completed and pushed on `codex/docling-local-context`; implementation continued into D1-D3.
 
 Tasks:
 
@@ -24,6 +24,8 @@ Done when:
 ## Phase D1 - Local Docling CLI Spike
 
 Goal: prove whether Docling can parse the real scanned spec well enough before app integration.
+
+Status: completed locally. `npm.cmd run docling:smoke:local` parsed the 34-page scanned PDF with Docling 2.104.0, produced 89,871 markdown characters and 16 table-like structures, and saved ignored artifacts under `.local-artifacts/docling/`. First run took 266.421s while downloading models; warm run took 167.537s on CPU.
 
 Tasks:
 
@@ -75,6 +77,8 @@ Done when:
 
 Goal: add Docling to the provider contract without disrupting existing upload behavior.
 
+Status: implemented for `docling_local`. The app can select `DOCUMENT_CONTEXT_PROVIDER=docling_local`; Docling failure falls back to `local_pdf` with warnings. `docling_http` remains planned for a future VPS/container service.
+
 Tasks:
 
 1. Extend `DocumentContextProvider` in `src/lib/server/document-context.ts`:
@@ -114,6 +118,8 @@ Done when:
 ## Phase D3 - Readiness And Smoke Commands
 
 Goal: make provider status obvious before expensive or slow parsing runs.
+
+Status: implemented for local mode. `DOCUMENT_CONTEXT_PROVIDER=docling_local npm.cmd run document-context:readiness` now reports `selectedProvider: docling_local` and `willUseDocling: true`.
 
 Tasks:
 
@@ -165,6 +171,8 @@ Done when:
 ## Phase D4 - App Upload Integration Test
 
 Goal: prove the actual app upload path can use Docling context.
+
+Status: next active task. Build passes, but the browser upload path has not yet been run with `DOCUMENT_CONTEXT_PROVIDER=docling_local`.
 
 Tasks:
 

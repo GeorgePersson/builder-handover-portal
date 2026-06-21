@@ -19,6 +19,20 @@ function isDocumentContextResult(parsed: ExtractedPdf | DocumentContextResult): 
   return "provider" in parsed;
 }
 
+function getProviderLabel(provider: DocumentContextResult["provider"]) {
+  switch (provider) {
+    case "llamacloud_parse":
+      return "LlamaCloud";
+    case "docling_local":
+      return "local Docling";
+    case "docling_http":
+      return "Docling service";
+    case "local_pdf":
+    default:
+      return "local PDF extraction";
+  }
+}
+
 export function buildSpecificationExtractionResponse({
   parsed,
   proposedItems,
@@ -37,7 +51,7 @@ export function buildSpecificationExtractionResponse({
   const warnings = isContext ? parsed.diagnostics.warnings : parsed.diagnostics.warnings;
   const notes = [
     isContext
-      ? `Parsed with ${parsed.provider === "llamacloud_parse" ? "LlamaCloud" : "local PDF extraction"}.`
+      ? `Parsed with ${getProviderLabel(parsed.provider)}.`
       : `Parsed locally from ${parsed.pages} PDF page${parsed.pages === 1 ? "" : "s"}.`,
     `Prepared ${chunkCount} analysis chunk${chunkCount === 1 ? "" : "s"} and ${tableCount} table extract${tableCount === 1 ? "" : "s"}.`,
   ];
