@@ -1,4 +1,24 @@
 # Agent Handoff Log
+## 2026-06-21 - HMR Origin And File Input Resync
+
+### What Changed
+
+- Added `allowedDevOrigins` for `127.0.0.1` and `localhost` in `next.config.ts` to stop the local HMR websocket from being blocked when the browser and dev server hostnames differ.
+- Added a mount-time native file-input resync in `SpecExtractPanel` so a selected browser file is copied back into React state after Fast Refresh/HMR preserves the input control but resets component state.
+
+### Why
+
+The user saw `WebSocket connection to ws://127.0.0.1:3000/_next/webpack-hmr failed` and the screenshot showed the native file chooser had a PDF while the app status still said `No PDF selected`. That is consistent with dev HMR/origin trouble plus native file input state surviving while React state reset.
+
+### Checks Run
+
+- `npm.cmd run lint` - passed.
+- `npm.cmd run build` - passed, with known local Docling Turbopack NFT tracing warnings.
+
+### Next Task
+
+Restart the dev server because `next.config.ts` changed, open one canonical URL (`http://localhost:3000` or `http://127.0.0.1:3000`, not both), hard-refresh, select the PDF again, and click `Process to review`.
+
 ## 2026-06-21 - Spec Upload Button UX Fix
 
 ### What Changed

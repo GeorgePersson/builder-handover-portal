@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -141,6 +141,15 @@ export function SpecExtractPanel({ projects }: { projects: ProjectOption[] }) {
       setSourceFileName(file.name);
     }
   }
+
+  useEffect(() => {
+    const file = pdfInputRef.current?.files?.[0] || null;
+
+    if (file) {
+      setSelectedPdf(file);
+      setSourceFileName(file.name);
+    }
+  }, []);
 
   async function runExtraction() {
     setActiveOperation("preview-text");

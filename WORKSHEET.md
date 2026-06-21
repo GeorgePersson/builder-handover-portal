@@ -71,6 +71,7 @@ After the push, update this worksheet and `docs/agent-handoff-log.md` with what 
 
 ## Last Updated
 
+- 2026-06-21: Added Next dev origin allowlist for `127.0.0.1`/`localhost` and native file-input resync on mount to recover after Fast Refresh/HMR.
 - 2026-06-21: Fixed spec upload UX so Process to review no longer stays greyed out when the browser/file input state gets out of sync; click now validates missing PDF with an inline error.
 - 2026-06-21: Added Windows-friendly `npm.cmd run dev:docling` script after PowerShell rejected POSIX-style inline env syntax.
 - 2026-06-21: Pushed Docling local parser implementation to `codex/docling-local-context` at commit `1a79f03`; next task is browser upload smoke with `DOCUMENT_CONTEXT_PROVIDER=docling_local`.
