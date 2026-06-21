@@ -1,4 +1,28 @@
 # Agent Handoff Log
+## 2026-06-21 - Azure-Schema-Inspired Table Extraction
+
+### User Feedback
+
+User shared the Azure Context Understanding schema that performed better: exhaustive `Items[]` with item-centric fields including Name, Manufacturer, Supplier, ProductRange, ModelName, ProductCode/SKU, Finish/Colour/Size/Quantity, Category/Location, Description/Notes, HasIdentifier, and SuggestedSearchQuery.
+
+### Implementation
+
+- Kept Docling as the local parser/OCR layer.
+- Added schema-inspired extraction from Docling markdown table rows in `src/lib/ai/spec-extract.ts`.
+- Table-row candidates now preserve structured detail inside `extracted_text` using fields such as Name, Manufacturer/Supplier, ProductCode, Finish, Size, Category, Location, Description, HasIdentifier, and SuggestedSearchQuery.
+- Source snippets are original row text rather than large merged chunks where possible.
+
+### Verification / Data Repair
+
+- `npm.cmd run spec-extract:smoke` now returns 97 proposals from the real Docling artifact.
+- Latest upload `f8eb73cd-3359-404f-b708-63d1681df522` was repaired: existing 25 rows updated and 70 missing rows inserted, leaving 95 review rows after de-dupe.
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed with known local Docling Turbopack NFT warnings.
+
+### Caution / Next Tuning
+
+This is a deterministic schema-inspired extractor, not Azure semantic extraction yet. It is intentionally more exhaustive and will include noisy/generic rows. Next pass should tune false positives, improve title generation, and map the structured fields to first-class DB columns if the review UI proves useful.
+
 ## 2026-06-21 - Table-Row Evidence Snippet Tightening
 
 ### Issue

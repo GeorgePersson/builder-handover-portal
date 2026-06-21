@@ -159,6 +159,253 @@ function addProposal(proposals: ProposedSpecItem[], seen: Set<string>, rule: Ext
   });
 }
 
+const knownBrands = [
+  "Accoya",
+  "Art Ceram",
+  "Bosch",
+  "Escea",
+  "Fisher & Paykel",
+  "Grohe",
+  "Heirloom",
+  "Insinkerator",
+  "Newline",
+  "Panasonic",
+  "Parisi",
+  "PDL",
+  "Robertson",
+  "Robertsons",
+  "Schlage",
+  "St Michel",
+  "Superior Kitchens",
+  "Victoria + Albert",
+  "Windsor",
+];
+
+const productRowTerms = [
+  "accoya",
+  "aluminium",
+  "appliance",
+  "basin",
+  "bath",
+  "carpet",
+  "cladding",
+  "concrete",
+  "cooktop",
+  "door",
+  "downpipe",
+  "floor",
+  "garage",
+  "gib",
+  "handle",
+  "hardware",
+  "hook",
+  "joinery",
+  "light",
+  "membrane",
+  "mirror",
+  "mixer",
+  "oven",
+  "paint",
+  "rangehood",
+  "shower",
+  "slab",
+  "splashback",
+  "tap",
+  "tile",
+  "toilet",
+  "vanity",
+  "waste",
+  "window",
+];
+
+function splitTableCells(line: string) {
+  return line
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map((cell) => cleanEvidenceText(cell))
+    .filter(Boolean);
+}
+
+function isSeparatorRow(line: string) {
+  return /^\|?[\s|:-]+\|?$/.test(line.trim());
+}
+
+function hasRepeatedCells(cells: string[]) {
+  if (cells.length < 2) {
+    return false;
+  }
+
+  const compacted = cells.map((cell) => compactForMatching(cell));
+  return compacted.every((cell) => cell === compacted[0]);
+}
+
+function extractMarkdownTableRows(text: string) {
+  return text
+    .split(/\r?\n/)
+    .filter((line) => line.trim().startsWith("|") && line.trim().endsWith("|") && !isSeparatorRow(line))
+    .map((line) => splitTableCells(line))
+    .filter((cells) => cells.length >= 2 && !hasRepeatedCells(cells));
+}
+
+function findKnownBrand(text: string) {
+  const compact = compactForMatching(text);
+  return knownBrands.find((brand) => compact.includes(compactForMatching(brand))) || "";
+}
+
+function extractProductCodes(text: string) {
+  const matches = text.match(/\b[A-Z]{1,5}\s?\d{2,6}[A-Z0-9.-]*\b|\b\d{4,6}[A-Z]{0,3}\d?\b/g) || [];
+  return Array.from(new Set(matches)).slice(0, 4).join(", ");
+}
+
+function extractSize(text: string) {
+  return text.match(/\b\d{2,4}\s*[×x]\s*\d{2,4}(?:\s*[×x]\s*\d{2,4})?\s*(?:mm|m)?\b/i)?.[0] || "";
+}
+
+function extractFinish(text: string) {
+  return (
+    text.match(/\b(?:brushed warm sunset|brushed nickel|satin nickel|blackened teak|dark grey|chrome|black|white gloss|powdercoat|powder coat|semi-gloss|stainless steel|copper terazzo)\b/i)?.[0] || ""
+  );
+}
+
+function inferCategory(text: string) {
+  const lower = text.toLowerCase();
+
+  if (/mixer|tap|waste/.test(lower)) return "Tapware";
+  if (/vanity|basin|toilet|bath|robe hook|mirror|shower/.test(lower)) return "Bathroom fixtures";
+  if (/tile|splashback|hearth/.test(lower)) return "Tiles";
+  if (/floor|carpet/.test(lower)) return "Flooring";
+  if (/door|handle|hinge|hardware/.test(lower)) return "Doors and hardware";
+  if (/window|joinery/.test(lower)) return "Joinery";
+  if (/paint|finish|colour/.test(lower)) return "Paint and finishes";
+  if (/gib|ceiling|lining/.test(lower)) return "Linings";
+  if (/light|pdl|power|switch/.test(lower)) return "Electrical";
+  if (/cladding|weatherboard/.test(lower)) return "Cladding";
+  if (/slab|concrete|membrane/.test(lower)) return "Structural/foundation";
+  if (/appliance|cooktop|oven|dishwasher|rangehood/.test(lower)) return "Appliance";
+
+  return "Product to review";
+}
+
+function inferLocation(text: string) {
+  const locations = [
+    "Master Ensuite",
+    "Main Bathroom",
+    "Bathroom",
+    "Powder Room",
+    "Ensuite Bed 1 & 2",
+    "Ensuite Bed 1&2",
+    "Ensuite Bed 1",
+    "Ensuite Bed 2",
+    "Kitchen",
+    "Scullery",
+    "Laundry",
+    "Garage",
+    "Exterior",
+    "Level 1",
+    "Level 2",
+    "Level 3",
+  ];
+  const compact = compactForMatching(text);
+  return locations.find((location) => compact.includes(compactForMatching(location))) || "";
+}
+
+function rowHasProductSignal(rowText: string) {
+  const lower = rowText.toLowerCase();
+  return Boolean(
+    findKnownBrand(rowText) ||
+      extractProductCodes(rowText) ||
+      productRowTerms.some((term) => lower.includes(term)),
+  );
+}
+
+function makeReadableTitle(cells: string[], rowText: string) {
+  const label = cells[0] || "Specification item";
+  const brand = findKnownBrand(rowText);
+  const compactLabel = compactForMatching(label);
+
+  if (brand && /mixer|basin|vanity|mirror|toilet|hook|waste|shower|door|light/.test(rowText.toLowerCase())) {
+    const productType =
+      rowText.match(/\b(?:Kitchen Mixer|Basin Mixer|Vanity|Mirror|Toilet(?:Suite)?|Robe Hook|Waste|Shower|Door|Light(?: strip)?)\b/i)?.[0] ||
+      label;
+    return `${brand} ${productType}`.replace(/\s+/g, " ").trim();
+  }
+
+  if (/^(type|model|size|finish|hardware|code)$/i.test(label) && cells[1]) {
+    return cells[1].slice(0, 80);
+  }
+
+  if (compactLabel.length < 4 && cells[1]) {
+    return cells[1].slice(0, 80);
+  }
+
+  return label.length > 100 ? label.slice(0, 97) + "..." : label;
+}
+
+function buildStructuredEvidence(cells: string[], rowText: string) {
+  const title = makeReadableTitle(cells, rowText);
+  const manufacturer = findKnownBrand(rowText);
+  const productCode = extractProductCodes(rowText);
+  const finish = extractFinish(rowText);
+  const size = extractSize(rowText);
+  const category = inferCategory(rowText);
+  const location = inferLocation(rowText);
+  const description = cells.join(" | ");
+  const hasIdentifier = Boolean(manufacturer && (productCode || /model|series|range|essence|dante|allure|city|heiko|linfa/i.test(rowText)));
+  const suggestedSearchQuery = hasIdentifier
+    ? [manufacturer, productCode || title, "manual warranty specification"].filter(Boolean).join(" ")
+    : "";
+
+  return [
+    `Name: ${title}`,
+    manufacturer ? `Manufacturer/Supplier: ${manufacturer}` : "",
+    productCode ? `ProductCode: ${productCode}` : "",
+    finish ? `Finish: ${finish}` : "",
+    size ? `Size: ${size}` : "",
+    `Category: ${category}`,
+    location ? `Location: ${location}` : "",
+    `Description: ${description}`,
+    `HasIdentifier: ${hasIdentifier ? "true" : "false"}`,
+    suggestedSearchQuery ? `SuggestedSearchQuery: ${suggestedSearchQuery}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function addSchemaRowProposals(proposals: ProposedSpecItem[], seen: Set<string>, extractedText: string) {
+  const rows = extractMarkdownTableRows(extractedText);
+
+  for (const cells of rows) {
+    const rowText = cleanEvidenceText(cells.join(" | "));
+
+    if (rowText.length < 24 || rowText.length > 1_400 || !rowHasProductSignal(rowText) || shouldExcludeAsAdminNoise(rowText)) {
+      continue;
+    }
+
+    const title = makeReadableTitle(cells, rowText);
+    const key = `product:${compactForMatching(title)}`;
+
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    proposals.push({
+      item_type: "product",
+      title,
+      category: inferCategory(rowText),
+      location: inferLocation(rowText) || "Project",
+      extracted_text: buildStructuredEvidence(cells, rowText).slice(0, 1_500),
+      source_snippet: rowText.slice(0, 700),
+      source_page: null,
+      matched_existing_record: null,
+      confidence_score: findKnownBrand(rowText) || extractProductCodes(rowText) ? 72 : 55,
+      recommended_action: "review_new_product",
+    });
+  }
+}
+
 const extractionRules: ExtractionRule[] = [
   {
     item_type: "product",
@@ -526,6 +773,8 @@ export function buildSpecificationProposals(extractedText: string): ProposedSpec
 
     addProposal(proposals, seen, rule, findBestEvidence(rule, chunks, normalizedText));
   }
+
+  addSchemaRowProposals(proposals, seen, extractedText);
 
   if (proposals.length > 0) {
     return proposals;

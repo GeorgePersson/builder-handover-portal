@@ -71,6 +71,8 @@ After the push, update this worksheet and `docs/agent-handoff-log.md` with what 
 
 ## Last Updated
 
+- 2026-06-21: Pivoted Docling extraction toward the provided Azure Context Understanding schema: added table-row item extraction with structured evidence fields (Name, Manufacturer/Supplier, ProductCode, Finish, Size, Category, Location, Description, HasIdentifier, SuggestedSearchQuery). Smoke now finds 97 proposals; latest upload backfilled from 25 to 95 review rows.
+- 2026-06-21: User provided prior Azure Context Understanding nested item schema; key lesson is extraction should be exhaustive item-centric structured rows (Name, Manufacturer/Supplier, Range/Model/Code, Finish/Colour/Size/Qty, Category/Location, Description/Notes, HasIdentifier/SearchQuery), not a small hard-coded rule list.
 - 2026-06-21: Tightened Docling evidence snippets to prefer original table rows over merged chunks; Grohe mixer now backfills as `Grohe,Essence Kitchen Mixer with pullout spray-brushed warm sunset 30270 DLO Kitchen Mixer` instead of adjacent shower/footer noise.
 - 2026-06-21: Fixed review-source issue from the 25-row Docling run: future extracted rows now persist `source_snippet`, Docling image/comment artifacts are stripped from evidence text, and the latest upload rows were backfilled with real snippets.
 - 2026-06-21: Pushed broader Docling extraction implementation to `codex/docling-local-context` at `214872f`; next retry should reprocess the PDF and inspect the ~27-row review queue.
