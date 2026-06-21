@@ -3,7 +3,7 @@ import { Check, FileUp, Pencil, X } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { StatusBanner } from "@/components/status-banner";
 import { getExtractedHandoverItems, getSpecificationUploads } from "@/lib/server/queries";
-import { acceptExtractedItemAction, rejectExtractedItemAction } from "@/lib/server/actions";
+import { acceptExtractedItemAction, rejectExtractedItemAction, requestMoreContextForExtractedItemAction } from "@/lib/server/actions";
 import { describeExtractedItemStatus, formatStatus } from "@/lib/status-labels";
 
 export default async function SpecificationReviewPage({
@@ -21,19 +21,26 @@ export default async function SpecificationReviewPage({
     ["accepted", "auto_approved", "builder_approved", "global_approved"].includes(item.status),
   ).length;
   const rejectedCount = items.filter((item) => item.status === "rejected").length;
+  const contextRequestCount = items.filter((item) =>
+    ["request_more_context", "needs_source_document", "needs_model_code"].includes(item.status) ||
+    item.reviewReason?.startsWith("Request "),
+  ).length;
   const adminReviewCount = items.filter((item) =>
     ["admin_review", "edited", "proposed"].includes(item.status),
   ).length;
   const sortedItems = [...items].sort((a, b) => {
     const statusRank = {
       admin_review: 0,
-      proposed: 1,
-      edited: 2,
-      auto_approved: 3,
-      builder_approved: 4,
-      global_approved: 5,
-      accepted: 6,
-      rejected: 7,
+      request_more_context: 1,
+      needs_source_document: 2,
+      needs_model_code: 3,
+      proposed: 4,
+      edited: 5,
+      auto_approved: 6,
+      builder_approved: 7,
+      global_approved: 8,
+      accepted: 9,
+      rejected: 10,
     } as Record<string, number>;
     return (statusRank[a.status] ?? 0) - (statusRank[b.status] ?? 0);
   });
@@ -65,9 +72,10 @@ export default async function SpecificationReviewPage({
         />
         <StatusBanner draft={params.draft === "accepted" || params.draft === "rejected" ? "saved" : params.draft} error={params.error} storage={params.storage} />
 
-        <section className="mt-6 grid gap-4 md:grid-cols-4">
+        <section className="mt-6 grid gap-4 md:grid-cols-5">
           <Metric label="Review items" value={items.length} />
           <Metric label="Admin/new item review" value={adminReviewCount} />
+          <Metric label="Context requests" value={contextRequestCount} />
           <Metric label="Package-ready" value={packageReadyCount} />
           <Metric label="Rejected" value={rejectedCount} />
         </section>
@@ -157,6 +165,20 @@ export default async function SpecificationReviewPage({
                     <Pencil className="size-3.5" />
                     Edit
                   </Link>
+                  {![
+                    "auto_approved",
+                    "builder_approved",
+                    "global_approved",
+                    "accepted",
+                    "request_more_context",
+                  ].includes(item.status) ? (
+                    <form action={requestMoreContextForExtractedItemAction}>
+                      <input name="itemId" type="hidden" value={item.id} />
+                      <button className="inline-flex h-9 w-full items-center gap-2 rounded-md border border-amber-200 px-3 text-xs font-semibold text-amber-700">
+                        Request context
+                      </button>
+                    </form>
+                  ) : null}
                   {item.status !== "rejected" ? (
                     <form action={rejectExtractedItemAction}>
                       <input name="itemId" type="hidden" value={item.id} />

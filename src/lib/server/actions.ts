@@ -3705,6 +3705,41 @@ export async function rejectAdminReviewItemAction(formData: FormData) {
   redirect(`/admin/review?draft=rejected&storage=${hasSupabaseConfig() ? "supabase" : "local"}`);
 }
 
+export async function requestMoreContextForExtractedItemAction(formData: FormData) {
+  const itemId = getRequired(formData, "itemId");
+  const context = await getBuilderContext();
+  const reviewReason =
+    "Request more context: builder should confirm whether this source-backed candidate is a true handover item and provide missing brand/model/source details before approval.";
+
+  if (context) {
+    const { error } = await context.supabase
+      .from("extracted_handover_items")
+      .update({
+        status: "request_more_context",
+        review_reason: reviewReason,
+      })
+      .eq("id", itemId);
+
+    if (error) {
+      const { error: fallbackError } = await context.supabase
+        .from("extracted_handover_items")
+        .update({
+          status: "admin_review",
+          review_reason: reviewReason,
+        })
+        .eq("id", itemId);
+
+      if (fallbackError) {
+        redirect("/builder/specifications/review?error=request-context-failed");
+      }
+    }
+  } else {
+    await updateLocalExtractedItemStatus(itemId, "request_more_context");
+  }
+
+  redirect(`/builder/specifications/review?draft=saved&storage=${hasSupabaseConfig() ? "supabase" : "stub"}`);
+}
+
 export async function rejectExtractedItemAction(formData: FormData) {
   const itemId = getRequired(formData, "itemId");
   const context = await getBuilderContext();

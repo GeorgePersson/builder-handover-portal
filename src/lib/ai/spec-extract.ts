@@ -15,6 +15,9 @@ export type ProposedSpecItem = {
     | "attach_existing_task"
     | "manual_review"
     | "request_document"
+    | "request_more_context"
+    | "needs_source_document"
+    | "needs_model_code"
     | "review_new_product";
 };
 
@@ -31,12 +34,47 @@ type ExtractionRule = {
   fallbackEvidence: string;
 };
 
-export function getInitialExtractedItemStatus(item: Pick<ProposedSpecItem, "matched_existing_record" | "confidence_score">) {
+export function getInitialExtractedItemStatus(
+  item: Pick<ProposedSpecItem, "matched_existing_record" | "confidence_score"> &
+    Partial<Pick<ProposedSpecItem, "recommended_action">>,
+) {
   if (item.matched_existing_record && item.confidence_score >= 75) {
     return "auto_approved" as const;
   }
 
+  if (item.recommended_action === "needs_source_document" || item.recommended_action === "request_document") {
+    return "needs_source_document" as const;
+  }
+
+  if (item.recommended_action === "needs_model_code") {
+    return "needs_model_code" as const;
+  }
+
+  if (item.recommended_action === "request_more_context") {
+    return "request_more_context" as const;
+  }
+
   return "admin_review" as const;
+}
+
+export function getInitialExtractedItemReviewReason(item: ProposedSpecItem) {
+  if (item.matched_existing_record) {
+    return `Matched existing record ${item.matched_existing_record}.`;
+  }
+
+  if (item.recommended_action === "needs_source_document" || item.recommended_action === "request_document") {
+    return "Request source document: this row references a quote, warranty, manual, certificate, or supporting document that should be uploaded or linked before approval.";
+  }
+
+  if (item.recommended_action === "needs_model_code") {
+    return "Request model/code: the item appears real, but needs brand, supplier, model, product code, or clearer identifier before matching manuals/warranties.";
+  }
+
+  if (item.recommended_action === "request_more_context") {
+    return "Request more context: keep this source-backed candidate in review, but ask the builder to confirm whether it is a true handover item, location, or project-specific selection.";
+  }
+
+  return "Needs review because no reusable source-backed record matched this extracted item.";
 }
 
 const ocrPhraseFixes: Array<[RegExp, string]> = [
@@ -398,6 +436,35 @@ function makeReadableTitle(cells: string[], rowText: string) {
   return normalizeExtractedTitle(title);
 }
 
+function inferContextAction(input: {
+  itemType: ProposedSpecItem["item_type"];
+  title: string;
+  rowText: string;
+  manufacturer: string;
+  productCode: string;
+  category: string;
+}) {
+  const text = `${input.title} ${input.rowText}`.toLowerCase();
+
+  if (input.itemType === "document" || /quote|manual|warrant|certificate|producer statement|ps\d|ccc|source document/.test(text)) {
+    return "needs_source_document" as const;
+  }
+
+  if (input.itemType === "product" && !input.manufacturer && !input.productCode && /^(fittings|pipe work|kitchen|scullery|laundry|bathroom&|please note:?|doors tops)$/i.test(input.title.trim())) {
+    return "request_more_context" as const;
+  }
+
+  if (input.itemType === "product" && !input.productCode && !/floor|tile|paint|cladding|concrete|gib|carpet|membrane|door|light|hardware/i.test(input.category)) {
+    return "needs_model_code" as const;
+  }
+
+  if (input.itemType === "product" && /tbc|tba|to confirm|selected|builders range|builder's range|as per/i.test(text) && !input.productCode) {
+    return "request_more_context" as const;
+  }
+
+  return "review_new_product" as const;
+}
+
 function buildStructuredEvidence(cells: string[], rowText: string) {
   const title = makeReadableTitle(cells, rowText);
   const manufacturer = findKnownBrand(rowText);
@@ -439,6 +506,17 @@ function addSchemaRowProposals(proposals: ProposedSpecItem[], seen: Set<string>,
     }
 
     const title = makeReadableTitle(cells, rowText);
+    const category = inferCategory(rowText);
+    const manufacturer = findKnownBrand(rowText);
+    const productCode = extractProductCodes(rowText);
+    const recommendedAction = inferContextAction({
+      itemType: "product",
+      title,
+      rowText,
+      manufacturer,
+      productCode,
+      category,
+    });
     const key = proposalKey("product", title);
 
     if (seen.has(key)) {
@@ -449,14 +527,14 @@ function addSchemaRowProposals(proposals: ProposedSpecItem[], seen: Set<string>,
     proposals.push({
       item_type: "product",
       title,
-      category: inferCategory(rowText),
+      category,
       location: inferLocation(rowText) || "Project",
       extracted_text: buildStructuredEvidence(cells, rowText).slice(0, 1_500),
       source_snippet: rowText.slice(0, 700),
       source_page: null,
       matched_existing_record: null,
-      confidence_score: findKnownBrand(rowText) || extractProductCodes(rowText) ? 72 : 55,
-      recommended_action: "review_new_product",
+      confidence_score: manufacturer || productCode ? 72 : 55,
+      recommended_action: recommendedAction,
     });
   }
 }

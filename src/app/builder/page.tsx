@@ -19,7 +19,14 @@ import {
 import { formatDate } from "@/lib/utils";
 
 const packageReadyStatuses = new Set(["accepted", "auto_approved", "builder_approved", "global_approved"]);
-const adminReviewStatuses = new Set(["admin_review", "edited", "proposed"]);
+const adminReviewStatuses = new Set([
+  "admin_review",
+  "edited",
+  "proposed",
+  "request_more_context",
+  "needs_source_document",
+  "needs_model_code",
+]);
 
 export default async function BuilderPortalPage() {
   const [projects, specifications, extractedItems, maintenanceTasks, clientRequests] =

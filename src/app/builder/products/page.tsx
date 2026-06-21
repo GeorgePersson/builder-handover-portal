@@ -29,7 +29,9 @@ export default async function ProductsPage({
     getProjects(),
   ]);
   const activeFilter = filters.some((filter) => filter.value === params.filter) ? params.filter || "all" : "all";
-  const awaitingItems = extractedItems.filter((item) => ["admin_review", "edited", "proposed"].includes(item.status));
+  const awaitingItems = extractedItems.filter((item) =>
+    ["admin_review", "edited", "proposed", "request_more_context", "needs_source_document", "needs_model_code"].includes(item.status),
+  );
   const visibleProducts = productVersions.filter((product) => {
     if (activeFilter === "approved") {
       return product.status === "approved";

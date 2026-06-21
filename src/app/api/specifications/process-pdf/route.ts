@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { buildSpecificationProposals, getInitialExtractedItemStatus } from "@/lib/ai/spec-extract";
+import {
+  buildSpecificationProposals,
+  getInitialExtractedItemReviewReason,
+  getInitialExtractedItemStatus,
+} from "@/lib/ai/spec-extract";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { extractDocumentContext } from "@/lib/server/document-context";
@@ -15,6 +19,10 @@ function hasSupabaseConfig() {
 
 function isMissingReviewReasonColumn(error: { message?: string } | null) {
   return Boolean(error?.message?.includes("review_reason"));
+}
+
+function isUnsupportedContextStatus(error: { message?: string } | null) {
+  return Boolean(error?.message?.includes("invalid input value for enum") && error.message.includes("extracted_item_status"));
 }
 
 function getStorageErrorMessage(error: { message?: string; name?: string; statusCode?: string | number } | null) {
@@ -136,9 +144,7 @@ export async function POST(request: Request) {
     extracted_text: item.extracted_text,
     source_snippet: item.source_snippet || item.extracted_text,
     source_page: item.source_page || null,
-    review_reason: item.matched_existing_record
-      ? `Matched existing record ${item.matched_existing_record}.`
-      : "Needs review because no reusable source-backed record matched this extracted item.",
+    review_reason: getInitialExtractedItemReviewReason(item),
     matched_existing_record: item.matched_existing_record,
     confidence_score: item.confidence_score,
     status: getInitialExtractedItemStatus(item),
@@ -146,7 +152,7 @@ export async function POST(request: Request) {
   const { error: itemsError } = await supabase.from("extracted_handover_items").insert(itemRows);
 
   if (itemsError) {
-    if (isMissingReviewReasonColumn(itemsError)) {
+    if (isMissingReviewReasonColumn(itemsError) || isUnsupportedContextStatus(itemsError)) {
       const legacyRows = itemRows.map((item) => ({
         specification_upload_id: item.specification_upload_id,
         item_type: item.item_type,
@@ -156,9 +162,10 @@ export async function POST(request: Request) {
         extracted_text: item.extracted_text,
         source_snippet: item.source_snippet,
         source_page: item.source_page,
+        review_reason: isMissingReviewReasonColumn(itemsError) ? undefined : item.review_reason,
         matched_existing_record: item.matched_existing_record,
         confidence_score: item.confidence_score,
-        status: item.status,
+        status: item.status === "auto_approved" ? "auto_approved" : "admin_review",
       }));
       const { error: legacyItemsError } = await supabase.from("extracted_handover_items").insert(legacyRows);
 

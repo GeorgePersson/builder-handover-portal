@@ -1,4 +1,46 @@
 # Agent Handoff Log
+## 2026-06-22 - Request-More-Context Review Classification
+
+### Goal
+
+Add a first-pass workflow so over-extracted Docling rows are not all just "needs review". Keep recall-first extraction intact while classifying uncertainty into actionable builder/admin follow-up buckets.
+
+### Changes
+
+- `src/lib/ai/spec-extract.ts` now classifies extracted proposals into:
+  - `review_new_product`
+  - `needs_model_code`
+  - `needs_source_document`
+  - `request_more_context`
+  - existing document/task actions
+- Added `getInitialExtractedItemReviewReason()` so inserted rows carry clear reviewer notes such as "Request model/code", "Request source document", or "Request more context".
+- Added optional enum statuses in code/docs for `request_more_context`, `needs_source_document`, and `needs_model_code`.
+- Added `docs/supabase-add-extracted-item-context-statuses.sql` for the enum migration.
+- `/api/specifications/process-pdf` now attempts the richer statuses, but falls back to `admin_review` plus the explicit review note if the database enum has not been migrated yet.
+- Builder review UI now includes a Context requests metric and a manual "Request context" action button.
+- Builder dashboard/product awaiting counts include the new context-request statuses.
+
+### Verification
+
+- `npm.cmd run spec-extract:smoke` passed: 96 proposals, preserving the current broad recall.
+- Action breakdown from the smoke artifact: 50 standard product review, 25 needs model/code, 8 request more context, 7 needs source document, 2 request document, 3 manual review, 1 attach existing task.
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed with known local Docling/Turbopack NFT tracing warnings.
+
+### Data Backfill
+
+- Latest full Docling upload `96386625-c705-4895-9f89-40c09a899d04` was backfilled by title where possible.
+- 75 of 100 rows matched the current proposal titles and had review notes refreshed.
+- Current visible review-note grouping on that upload: 68 standard review, 9 needs source document, 16 needs model/code, 7 request more context.
+- The DB enum migration could not be applied from this machine because direct Supabase Postgres access on port 5432 was blocked, so backfill used `admin_review` status with explicit review notes.
+
+### Remaining Work
+
+- Apply `docs/supabase-add-extracted-item-context-statuses.sql` from an environment with direct Supabase DB access or via Supabase SQL editor if we want true status values instead of review-note fallback.
+- Add dedicated UI filters/tabs for context buckets.
+- Add a builder-facing request workflow that creates assignable prompts/tasks rather than just a review note.
+- Keep recall-first tuning toward 200-300 possible rows; do not suppress uncertain source-backed candidates just to reduce noise.
+
 ## 2026-06-22 - Docling OCR Readability and Title Dedupe Pass
 
 ### Goal
