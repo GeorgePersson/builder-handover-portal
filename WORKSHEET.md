@@ -71,6 +71,7 @@ After the push, update this worksheet and `docs/agent-handoff-log.md` with what 
 
 ## Last Updated
 
+- 2026-06-21: Fixed spec upload UX so Process to review no longer stays greyed out when the browser/file input state gets out of sync; click now validates missing PDF with an inline error.
 - 2026-06-21: Added Windows-friendly `npm.cmd run dev:docling` script after PowerShell rejected POSIX-style inline env syntax.
 - 2026-06-21: Pushed Docling local parser implementation to `codex/docling-local-context` at commit `1a79f03`; next task is browser upload smoke with `DOCUMENT_CONTEXT_PROVIDER=docling_local`.
 - 2026-06-21: Implemented Docling local CLI smoke and `docling_local` provider wiring; real scanned spec parsed to 89,871 markdown chars / 16 tables, readiness/supabase/lint/build passed, with Turbopack NFT tracing warnings to revisit.

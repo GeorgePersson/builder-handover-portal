@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -127,7 +127,20 @@ export function SpecExtractPanel({ projects }: { projects: ProjectOption[] }) {
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [activeOperation, setActiveOperation] = useState<ActiveOperation>(null);
   const [error, setError] = useState<string | null>(null);
+  const pdfInputRef = useRef<HTMLInputElement | null>(null);
   const isLoading = activeOperation !== null;
+
+  function readSelectedPdfFromInput() {
+    return selectedPdf || pdfInputRef.current?.files?.[0] || null;
+  }
+
+  function handlePdfSelection(file: File | null) {
+    setSelectedPdf(file);
+    setError(null);
+    if (file) {
+      setSourceFileName(file.name);
+    }
+  }
 
   async function runExtraction() {
     setActiveOperation("preview-text");
@@ -158,7 +171,9 @@ export function SpecExtractPanel({ projects }: { projects: ProjectOption[] }) {
   }
 
   async function runPdfExtraction() {
-    if (!selectedPdf) {
+    const pdf = readSelectedPdfFromInput();
+
+    if (!pdf) {
       setError("Choose a PDF first.");
       return;
     }
@@ -170,7 +185,7 @@ export function SpecExtractPanel({ projects }: { projects: ProjectOption[] }) {
     setSaveMessage(null);
 
     const formData = new FormData();
-    formData.append("specificationPdf", selectedPdf);
+    formData.append("specificationPdf", pdf);
 
     const response = await fetch("/api/specifications/extract-pdf", {
       method: "POST",
@@ -190,7 +205,9 @@ export function SpecExtractPanel({ projects }: { projects: ProjectOption[] }) {
   }
 
   async function processPdfToReviewQueue() {
-    if (!selectedPdf) {
+    const pdf = readSelectedPdfFromInput();
+
+    if (!pdf) {
       setError("Choose a PDF first.");
       return;
     }
@@ -203,7 +220,7 @@ export function SpecExtractPanel({ projects }: { projects: ProjectOption[] }) {
 
     const formData = new FormData();
     formData.append("projectId", projectId);
-    formData.append("specificationPdf", selectedPdf);
+    formData.append("specificationPdf", pdf);
 
     const response = await fetch("/api/specifications/process-pdf", {
       method: "POST",
@@ -260,7 +277,7 @@ export function SpecExtractPanel({ projects }: { projects: ProjectOption[] }) {
     setActiveOperation(null);
   }
 
-  const canProcessPdf = Boolean(selectedPdf) && !isLoading;
+  const canProcessPdf = !isLoading;
   const isPreviewResult = resultMode === "preview" || resultMode === "text-preview";
   const progressSteps = activeOperation ? operationSteps[activeOperation] : [];
   const quality = result ? getExtractionQuality(result) : null;
@@ -312,12 +329,12 @@ export function SpecExtractPanel({ projects }: { projects: ProjectOption[] }) {
                 accept="application/pdf"
                 className="mt-2 block w-full rounded-md border border-cyan-200 bg-white px-3 py-2 text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-slate-700"
                 onChange={(event) => {
-                  const file = event.target.files?.[0] || null;
-                  setSelectedPdf(file);
-                  if (file) {
-                    setSourceFileName(file.name);
-                  }
+                  handlePdfSelection(event.target.files?.[0] || null);
                 }}
+                onInput={(event) => {
+                  handlePdfSelection(event.currentTarget.files?.[0] || null);
+                }}
+                ref={pdfInputRef}
                 type="file"
               />
             </div>

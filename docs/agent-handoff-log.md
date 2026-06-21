@@ -1,4 +1,28 @@
 # Agent Handoff Log
+## 2026-06-21 - Spec Upload Button UX Fix
+
+### What Changed
+
+- Made the `Process to review` and `Preview PDF only` buttons clickable whenever the panel is not already processing.
+- Added a ref-backed file lookup so the handler can read the native file input even if React state and the browser file chooser display get out of sync.
+- Added both `onChange` and `onInput` handling for the specification PDF input.
+- Verified the Projects `Add new project` modal opens in-browser while signed in as the documented test account.
+
+### Why
+
+The user selected the real spec PDF and the native input showed the filename, but `Process to review` still appeared greyed out. This indicates the browser input UI and React `selectedPdf` state could get out of sync. The button now validates on click instead of being permanently blocked by stale state.
+
+### Checks Run
+
+- Browser check: `/builder/specifications/new` now shows `Process to review` enabled; clicking without a file shows `Choose a PDF first.`
+- Browser check: `/builder/projects` `Add new project` opens the project modal.
+- `npm.cmd run lint` - passed.
+- `npm.cmd run build` - passed, with the known Turbopack NFT tracing warnings around local Docling child-process support.
+
+### Next Task
+
+Ask the user to refresh `/builder/specifications/new`, select the real spec PDF again, and click `Process to review`. If processing starts, wait several minutes for Docling. If it fails, capture the inline error and server log.
+
 ## 2026-06-21 - Windows PowerShell Docling Dev Command Fix
 
 ### What Changed
