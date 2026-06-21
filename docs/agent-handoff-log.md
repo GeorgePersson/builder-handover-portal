@@ -1,4 +1,32 @@
 # Agent Handoff Log
+## 2026-06-21 - Docling Local Parser Implementation Push Completed
+
+### What Changed
+
+- Pushed the local Docling parser spike and `docling_local` provider wiring to GitHub.
+- Branch: `codex/docling-local-context`.
+- Commit pushed: `1a79f03`.
+- Left `.local-artifacts/docling/` ignored and uncommitted. Left local `.codex/` and `.hermes/` untracked and uncommitted.
+
+### Files Changed
+
+- `WORKSHEET.md`
+- `docs/agent-handoff-log.md`
+
+### Checks Run
+
+- `git push origin HEAD` - passed.
+- `git status --short --branch` - branch is aligned with origin except untracked local agent folders.
+
+### Unknowns/Risks
+
+- Browser upload smoke has not yet been run with `DOCUMENT_CONTEXT_PROVIDER=docling_local`.
+- Turbopack build currently passes with NFT tracing warnings around local Docling child-process support.
+
+### Suggested Next Task
+
+Run the app with `DOCUMENT_CONTEXT_PROVIDER=docling_local`, upload the real scanned outline spec through the builder specification flow, and verify extraction diagnostics/review queue quality before tuning prompts or moving toward a VPS Docling service.
+
 ## 2026-06-21 - Docling Local Parser Smoke Implemented
 
 ### What Changed
