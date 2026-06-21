@@ -134,6 +134,8 @@ export async function POST(request: Request) {
     category: item.category,
     location: item.location,
     extracted_text: item.extracted_text,
+    source_snippet: item.source_snippet || item.extracted_text,
+    source_page: item.source_page || null,
     review_reason: item.matched_existing_record
       ? `Matched existing record ${item.matched_existing_record}.`
       : "Needs review because no reusable source-backed record matched this extracted item.",
@@ -152,6 +154,8 @@ export async function POST(request: Request) {
         category: item.category,
         location: item.location,
         extracted_text: item.extracted_text,
+        source_snippet: item.source_snippet,
+        source_page: item.source_page,
         matched_existing_record: item.matched_existing_record,
         confidence_score: item.confidence_score,
         status: item.status,

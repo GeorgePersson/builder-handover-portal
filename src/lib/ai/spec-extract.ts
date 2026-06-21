@@ -6,6 +6,8 @@ export type ProposedSpecItem = {
   category: string;
   location: string;
   extracted_text: string;
+  source_snippet?: string;
+  source_page?: number | null;
   matched_existing_record: string | null;
   confidence_score: number;
   recommended_action:
@@ -39,10 +41,24 @@ export function getInitialExtractedItemStatus(item: Pick<ProposedSpecItem, "matc
 
 function normalizeForMatching(text: string) {
   return text
+    .replace(/<!--[^>]*-->/g, " ")
+    .replace(/→/g, " ")
     .replace(/([a-z])([A-Z])/g, "$1 $2")
     .replace(/([a-zA-Z])(\d)/g, "$1 $2")
     .replace(/(\d)([a-zA-Z])/g, "$1 $2")
+    .replace(/([a-z]{3,})(to|from|with|and|for|the|wall|floor|door|window|shower|bathroom|kitchen|client|builder|hardware|paint|finish|tiles|tiled|selected)/gi, "$1 $2")
+    .replace(/(to|from|with|and|for|the|wall|floor|door|window|shower|bathroom|kitchen|client|builder|hardware|paint|finish|tiles|tiled|selected)([a-z]{3,})/gi, "$1 $2")
     .replace(/[\t|]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function cleanEvidenceText(text: string) {
+  return normalizeForMatching(text)
+    .replace(/\bimage\b/gi, " ")
+    .replace(/\bBuilder\s*\(Initial\)\b/gi, " ")
+    .replace(/\bClient\s*\(Initial\)\b/gi, " ")
+    .replace(/\(Initial\)/gi, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -91,7 +107,7 @@ function findBestEvidence(rule: ExtractionRule, chunks: string[], fullText: stri
   });
 
   const source = evidenceChunk || fullText;
-  const normalSource = normalizeForMatching(source);
+  const normalSource = cleanEvidenceText(source);
   const lowerSource = normalSource.toLowerCase();
   const term = rule.evidenceTerms.find((candidate) => lowerSource.includes(candidate.toLowerCase()));
 
@@ -114,7 +130,8 @@ function addProposal(proposals: ProposedSpecItem[], seen: Set<string>, rule: Ext
     return;
   }
 
-  const extractedText = evidence.length > 500 ? `${evidence.slice(0, 497)}...` : evidence;
+  const cleanedEvidence = cleanEvidenceText(evidence);
+  const extractedText = cleanedEvidence.length > 500 ? `${cleanedEvidence.slice(0, 497)}...` : cleanedEvidence;
 
   if (shouldExcludeAsAdminNoise(extractedText)) {
     return;
@@ -127,6 +144,8 @@ function addProposal(proposals: ProposedSpecItem[], seen: Set<string>, rule: Ext
     category: rule.category,
     location: rule.location,
     extracted_text: extractedText || rule.fallbackEvidence,
+    source_snippet: extractedText || rule.fallbackEvidence,
+    source_page: null,
     matched_existing_record: rule.matched_existing_record || null,
     confidence_score: rule.confidence_score,
     recommended_action: rule.recommended_action,
@@ -512,6 +531,8 @@ export function buildSpecificationProposals(extractedText: string): ProposedSpec
       category: "To review",
       location: "Project",
       extracted_text: "AI could not confidently classify the supplied text. Builder review is required.",
+      source_snippet: "AI could not confidently classify the supplied text. Builder review is required.",
+      source_page: null,
       matched_existing_record: null,
       confidence_score: 28,
       recommended_action: "manual_review",

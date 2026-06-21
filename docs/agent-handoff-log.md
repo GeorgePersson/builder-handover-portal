@@ -1,4 +1,27 @@
 # Agent Handoff Log
+## 2026-06-21 - Source Snippet Persistence Fix
+
+### Issue
+
+After the broader Docling extraction run, about 25 rows were inserted, but review edit pages still warned that no source snippet was attached. The form displayed fallback `extracted_text` in the source snippet textarea, while the database `source_snippet` column was null. Evidence snippets also included Docling image/comment artifacts such as `<!-- image -->`.
+
+### Fix
+
+- `ProposedSpecItem` now carries `source_snippet` and `source_page` fields.
+- `src/lib/ai/spec-extract.ts` now strips Docling image/comment artifacts before saving evidence text/snippets.
+- `/api/specifications/process-pdf` now persists `source_snippet` and `source_page` when inserting `extracted_handover_items`.
+- Latest upload `b13c6801-6a3d-4100-85ca-b43d149b6e59` was backfilled: 25 existing rows updated with generated source snippets.
+
+### Verification
+
+- `npm.cmd run spec-extract:smoke` passed with 27 proposals.
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed with the known local Docling Turbopack NFT warnings.
+
+### Next Step
+
+Refresh the current review edit page. The yellow "No source snippet" warning should disappear for backfilled rows. Snippet readability is improved but still limited by OCR spacing; further tuning should focus on cleaner source chunking/page attribution.
+
 ## 2026-06-21 - Broader Docling Extraction Push Completed
 
 ### Push
