@@ -1,4 +1,40 @@
 # Agent Handoff Log
+
+## 2026-06-21 - LlamaCloud Readiness Check
+
+### What Changed
+
+- Added a secret-safe document-context readiness helper and API route that reports whether uploads will use LlamaCloud Parse or local PDF/OCR fallback without printing `LLAMA_CLOUD_API_KEY`.
+- Added `npm.cmd run document-context:readiness` for local/cloud checklist verification of provider selection.
+- Updated LlamaCloud implementation docs and the worksheet with canonical `LLAMA_CLOUD_API_KEY` setup and fallback behavior.
+
+### Files Changed
+
+- `src/lib/server/document-context-readiness.ts`
+- `src/lib/server/document-context.ts`
+- `src/app/api/specifications/document-context-readiness/route.ts`
+- `scripts/check-document-context-readiness.mjs`
+- `package.json`
+- `docs/llamacloud-greenfield-implementation.md`
+- `WORKSHEET.md`
+- `docs/agent-handoff-log.md`
+
+### Checks Run
+
+- `npm run document-context:readiness` - passed and reported local fallback because no LlamaCloud key was present in this environment.
+- `DOCUMENT_CONTEXT_PROVIDER=llamacloud LLAMA_CLOUD_API_KEY=<redacted> npm run document-context:readiness` - passed and confirmed the command reports `llamacloud_parse` without printing the key.
+- `npm run lint` - passed.
+- `npm run build` - failed in this environment because Next.js could not fetch Google-hosted Geist fonts during the production build.
+
+### Unknowns/Risks
+
+- No real LlamaCloud parse was run because this environment does not expose a `LLAMA_CLOUD_API_KEY` or the real scanned PDF.
+- The readiness check proves provider selection only; a real OCR-quality smoke still needs a configured key and representative PDF.
+
+### Suggested Next Task
+
+Configure `LLAMA_CLOUD_API_KEY` in a local or cloud secret store, run `npm.cmd run document-context:readiness`, then process a representative scanned specification PDF and confirm extraction diagnostics show `provider: llamacloud_parse` before continuing source-search work.
+
 ## 2026-06-21 - Consolidation Push Completed
 
 ### What Changed
