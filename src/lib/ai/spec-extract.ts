@@ -58,7 +58,11 @@ function cleanEvidenceText(text: string) {
     .replace(/\bimage\b/gi, " ")
     .replace(/\bBuilder\s*\(Initial\)\b/gi, " ")
     .replace(/\bClient\s*\(Initial\)\b/gi, " ")
+    .replace(/\bBuilder_?\b/gi, " ")
+    .replace(/\bClient\b/gi, " ")
+    .replace(/\bqua?ity\s+home\s+oailder\b/gi, " ")
     .replace(/\(Initial\)/gi, " ")
+    .replace(/\s*-{3,}\s*/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -92,7 +96,10 @@ function splitIntoEvidenceChunks(text: string) {
     chunks.push(current.join(" "));
   }
 
-  return chunks.length > 0 ? chunks : [normalizeForMatching(text)];
+  // Prefer original table/markdown lines as evidence before broader chunks.
+  // Docling table rows often contain the cleanest source sentence/cell; merged
+  // chunks can accidentally pull in adjacent rows, footers, or image placeholders.
+  return lines.length > 0 ? [...lines, ...chunks] : [normalizeForMatching(text)];
 }
 
 function patternMatches(rule: ExtractionRule, searchableText: string, compactText: string) {

@@ -1,4 +1,27 @@
 # Agent Handoff Log
+## 2026-06-21 - Table-Row Evidence Snippet Tightening
+
+### Issue
+
+The Grohe kitchen mixer row still had source/evidence snippets polluted by adjacent shower-table text and footer OCR such as Builder/Client/quality-home-builder fragments.
+
+### Fix
+
+- Evidence selection now prefers original Docling markdown/table lines before broader merged chunks.
+- Evidence cleanup strips Builder/Client footer fragments and other repeated OCR/footer noise.
+- Latest upload `f8eb73cd-3359-404f-b708-63d1681df522` was backfilled: 25 rows had `extracted_text` and `source_snippet` regenerated from the tighter evidence selector.
+
+### Verification
+
+- Grohe row now backfills as: `Grohe,Essence Kitchen Mixer with pullout spray-brushed warm sunset 30270 DLO Kitchen Mixer`.
+- `npm.cmd run spec-extract:smoke` passed with 28 proposals.
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed with known local Docling Turbopack NFT warnings.
+
+### Next Step
+
+Refresh the open edit page and spot-check more rows. If a row still blends adjacent table cells, tune its specific rule/evidenceTerms or add table-cell extraction instead of chunk fallback.
+
 ## 2026-06-21 - Source Snippet Persistence Fix
 
 ### Issue

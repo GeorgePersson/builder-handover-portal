@@ -71,6 +71,7 @@ After the push, update this worksheet and `docs/agent-handoff-log.md` with what 
 
 ## Last Updated
 
+- 2026-06-21: Tightened Docling evidence snippets to prefer original table rows over merged chunks; Grohe mixer now backfills as `Grohe,Essence Kitchen Mixer with pullout spray-brushed warm sunset 30270 DLO Kitchen Mixer` instead of adjacent shower/footer noise.
 - 2026-06-21: Fixed review-source issue from the 25-row Docling run: future extracted rows now persist `source_snippet`, Docling image/comment artifacts are stripped from evidence text, and the latest upload rows were backfilled with real snippets.
 - 2026-06-21: Pushed broader Docling extraction implementation to `codex/docling-local-context` at `214872f`; next retry should reprocess the PDF and inspect the ~27-row review queue.
 - 2026-06-21: Broadened `buildSpecificationProposals()` into a Docling-aware deterministic extractor; smoke test on the real Docling markdown now returns 27 proposals (21 products, 4 maintenance, 2 documents) instead of 5.
