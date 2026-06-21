@@ -22,6 +22,7 @@ Add a first-pass workflow so over-extracted Docling rows are not all just "needs
 
 ### Verification
 
+- Pushed implementation commit `e52e623` to `codex/docling-local-context`.
 - `npm.cmd run spec-extract:smoke` passed: 96 proposals, preserving the current broad recall.
 - Action breakdown from the smoke artifact: 50 standard product review, 25 needs model/code, 8 request more context, 7 needs source document, 2 request document, 3 manual review, 1 attach existing task.
 - `npm.cmd run lint` passed.
