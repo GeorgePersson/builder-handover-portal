@@ -281,6 +281,14 @@ function makeReadableTitle(cells: string[], rowText: string) {
   const brand = findKnownBrand(rowText);
   const compactLabel = compactForMatching(label);
 
+  if (/interior\s+colour\s+scheme|semi-gloss\s+paint|flat\s+acrylic\s+paint/i.test(rowText)) {
+    return "Interior paint finish and colour scheme";
+  }
+
+  if (/gib\s*board\s*ceilings?|gibboard\s*ceilings?|level\s*4\s*finish/i.test(rowText)) {
+    return "GIB board ceiling linings";
+  }
+
   if (brand && /mixer|basin|vanity|mirror|toilet|hook|waste|shower|door|light/.test(rowText.toLowerCase())) {
     const productType =
       rowText.match(/\b(?:Kitchen Mixer|Basin Mixer|Vanity|Mirror|Toilet(?:Suite)?|Robe Hook|Waste|Shower|Door|Light(?: strip)?)\b/i)?.[0] ||
@@ -340,8 +348,15 @@ function addSchemaRowProposals(proposals: ProposedSpecItem[], seen: Set<string>,
   for (const cells of rows) {
     const uniqueCells = dedupeCells(cells);
     const rowText = cleanEvidenceText(uniqueCells.join(" | "));
+    const label = uniqueCells[0] || "";
 
-    if (rowText.length < 24 || rowText.length > 1_400 || !rowHasProductSignal(rowText) || shouldExcludeAsAdminNoise(rowText)) {
+    if (
+      rowText.length < 24 ||
+      rowText.length > 1_400 ||
+      /^please\s+note:?$/i.test(label) ||
+      !rowHasProductSignal(rowText) ||
+      shouldExcludeAsAdminNoise(rowText)
+    ) {
       continue;
     }
 
@@ -464,7 +479,7 @@ const extractionRules: ExtractionRule[] = [
     category: "Flooring",
     location: "Entry, kitchen, wet areas, and living areas",
     patterns: [/floor\s*finishes/i, /ceramic\s*tiles\s*area/i, /ceramic\s*tiles\s*square/i, /ceramictilessquare/i],
-    evidenceTerms: ["FLOOR FINISHES", "Ceramic tiles", "entry", "kitchen"],
+    evidenceTerms: ["Ceramic tiles Area", "Ceramic tiles", "entry", "kitchen"],
     confidence_score: 80,
     recommended_action: "review_new_product",
     fallbackEvidence: "Specification references ceramic tile floor finishes.",

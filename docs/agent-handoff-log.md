@@ -1,4 +1,53 @@
 # Agent Handoff Log
+## 2026-06-22 - Full Docling Rerun and Extraction Output Review
+
+### Goal
+
+Run the real PDF through Docling again, run the fixture/smoke harness, inspect the extraction output, and convert any obvious bad output patterns into systemic fixtures/fixes.
+
+### Commands / Results
+
+- `npm.cmd run docling:smoke:local` passed.
+  - PDF: `C:\Users\hunte\Downloads\2074 legal signed outline spec.pdf.pdf`
+  - Docling: 2.104.0
+  - Pages: 34
+  - Markdown characters: 89,871
+  - Tables: 16
+  - Elapsed: ~163s
+- `npm.cmd run spec-extract:fixtures` passed: 7 fixtures.
+- `npm.cmd run spec-extract:smoke` passed: 90 proposals.
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed with known Docling/Turbopack NFT tracing warnings.
+
+### Output Review Findings
+
+The focused extraction review initially found systemic bad patterns that fixtures did not yet cover:
+
+- `Ceramic tile floor finishes` could still choose repeated `FLOOR FINISHES` heading/carpet evidence.
+- Generic schema-row duplicates such as `Paint` duplicated the canonical paint proposal.
+- `Bathroom&` could become a bogus product title for a GIB ceiling row.
+- `Please Note:` electrical-positioning notes could be extracted as a product.
+- `Doors tops` was an OCR/readability issue for `Door stops`.
+
+### Fixes
+
+- Added fixtures for repeated floor-heading evidence, generic paint duplicate suppression, bathroom ampersand ceiling rows, and `Please Note:` note-row suppression.
+- Enhanced evidence scoring/selection to prefer candidates that also match the extraction rule pattern, not just loose evidence terms.
+- Removed `FLOOR FINISHES` as an evidence term for ceramic tile floor finishes because it is a repeated section heading, not source evidence.
+- Added OCR normalization for `Door stops`, `mm gibboard`, `gibboard ceilings`, `throughouts`, and split `stopped` artifacts.
+- Mapped paint colour-scheme rows and GIB ceiling rows to canonical proposal titles so schema-row duplicates are suppressed by the existing `seen` key.
+- Skipped `Please Note:` rows in schema extraction.
+
+### Current Focused Check
+
+The focused review now reports no suspicious matches for the checked patterns: repeated all-caps heading snippets, generic `Paint`, `Bathroom&`, `Please Note:`, or `Doors tops` titles. Key fixture-backed rows now use clean evidence:
+
+- `Interior flush panel doors` -> actual door row.
+- `Interior paint finish and colour scheme` -> paint colour scheme row.
+- `Ceramic tile floor finishes` -> ceramic tile floor row, not floor-heading/carpet evidence.
+- `GIB board ceiling linings` -> GIB ceiling row.
+- `Door stops` -> normalized hardware row.
+
 ## 2026-06-22 - Systemic Docling Extraction Rework Started
 
 ### Goal

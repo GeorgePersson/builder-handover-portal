@@ -25,11 +25,18 @@ const ocrPhraseFixes: Array<[RegExp, string]> = [
   [/\bto\s*belocated\b/gi, "to be located"],
   [/\bto\s*confirmpositionsonsite\b/gi, "to confirm positions onsite"],
   [/Interiorcolourscheme/gi, "Interior colour scheme "],
+  [/mmgibboard/gi, "mm gibboard"],
+  [/gibboardceilings/gi, "gibboard ceilings"],
+  [/gibboardceilingsthroughouts?/gi, "gibboard ceilings throughout"],
+  [/\bthroughouts\b/gi, "throughout"],
+  [/\bsto\s*pped\b/gi, "stopped"],
+  [/\bto\s*pped\b/gi, "stopped"],
   [/\bfourcolours\b/gi, "four colours"],
   [/\bcolour(\d+)/gi, "colour $1"],
   [/\bwaterbornesemi-gloss\b/gi, "waterborne semi-gloss"],
   [/\bSemi-glosspaintfinish\b/gi, "Semi-gloss paint finish"],
   [/\bflushpanelpre-hungdoors\b/gi, "flush panel pre-hung doors"],
+  [/\bDoors\s+tops\b/gi, "Door stops"],
   [/\bHollowcore\b/gi, "Hollow core"],
   [/\bmmpineflushjamb\b/gi, "mm pine flush jamb"],
   [/\bforarchitraves\b/gi, "for architraves"],
@@ -160,5 +167,6 @@ export function hasRepeatedCells(cells: string[]) {
 
 export function isLowInformationEvidence(text: string) {
   const words = text.toLowerCase().match(/[a-z0-9]+/g) || [];
-  return words.length <= 6 && new Set(words).size <= 2;
+  const uniqueWords = new Set(words);
+  return words.length <= 12 && uniqueWords.size <= 2;
 }

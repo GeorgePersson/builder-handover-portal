@@ -5,16 +5,26 @@
     "expectedTitle": "Interior flush panel doors",
     "expectedAction": "review_new_product",
     "expectedReviewReasonIncludes": "General finish item",
-    "expectedSourceIncludes": ["Hollow core", "flush panel pre-hung doors"],
-    "forbiddenSourceIncludes": ["INTERIOR DOORS INTERIOR DOORS"]
+    "expectedSourceIncludes": [
+      "Hollow core",
+      "flush panel pre-hung doors"
+    ],
+    "forbiddenSourceIncludes": [
+      "INTERIOR DOORS INTERIOR DOORS"
+    ]
   },
   {
     "name": "builder range wall tiling is context before search",
     "markdown": "| Wall Tiling- Bathroom(free standing bath) | SelectedceramictilesfromtheBuilder'srange.Allwallstiledfloortoceiling,tiled shower.1x tiledfeaturewall.Tiled intowindowrecess.Tiled intowindowjam,sills | SelectedceramictilesfromtheBuilder'srange.Allwallstiledfloortoceiling,tiled shower.1x tiledfeaturewall.Tiled intowindowrecess.Tiled intowindowjam,sills |",
     "expectedTitle": "Wall Tiling- Bathroom(freestanding bath)",
     "expectedAction": "request_more_context",
-    "expectedSourceIncludes": ["Builder's range", "All walls tiled floor to ceiling"],
-    "forbiddenSourceIncludes": ["Selected ceramic tiles from the Builder's range. All walls tiled floor to ceiling, tiled shower. 1 x tiled feature wall. Tiled into window recess. Tiled into window jamb, sills Selected ceramic tiles"]
+    "expectedSourceIncludes": [
+      "Builder's range",
+      "All walls tiled floor to ceiling"
+    ],
+    "forbiddenSourceIncludes": [
+      "Selected ceramic tiles from the Builder's range. All walls tiled floor to ceiling, tiled shower. 1 x tiled feature wall. Tiled into window recess. Tiled into window jamb, sills Selected ceramic tiles"
+    ]
   },
   {
     "name": "paint scheme is general finish",
@@ -22,7 +32,57 @@
     "expectedTitle": "Interior paint finish and colour scheme",
     "expectedAction": "review_new_product",
     "expectedReviewReasonIncludes": "General finish item",
-    "expectedSourceIncludes": ["Interior colour scheme", "colour 1 walls"],
-    "forbiddenSourceIncludes": ["Interior colour scheme four colours, colour 1 walls, skirting, doors, door&window frames, ceiling&cornice, colour 2 WC, colour 3 Fireplace Surround Interior colour scheme"]
+    "expectedSourceIncludes": [
+      "Interior colour scheme",
+      "colour 1 walls"
+    ],
+    "forbiddenSourceIncludes": [
+      "Interior colour scheme four colours, colour 1 walls, skirting, doors, door&window frames, ceiling&cornice, colour 2 WC, colour 3 Fireplace Surround Interior colour scheme"
+    ]
+  },
+  {
+    "name": "ceramic floor finishes ignores repeated floor heading",
+    "markdown": "| FLOOR FINISHES | FLOOR FINISHES | FLOOR FINISHES |\n| Ceramic tiles Area 1 | Selected ceramic tiles square stopped to timber floor; entry, kitchen, scullery and wet areas | Ceramic tiles square stopped to timber floor; entry, kitchen, scullery and wet areas |",
+    "expectedTitle": "Ceramic tile floor finishes",
+    "expectedAction": "review_new_product",
+    "expectedReviewReasonIncludes": "General finish item",
+    "expectedSourceIncludes": [
+      "Ceramic tiles",
+      "entry",
+      "kitchen"
+    ],
+    "forbiddenSourceIncludes": [
+      "FLOOR FINISHES FLOOR FINISHES"
+    ]
+  },
+  {
+    "name": "paint row maps to canonical paint proposal not generic paint duplicate",
+    "markdown": "| Paint | Interiorcolourschemefourcolours,colour1walls,skirting,doors,door&window frames,ceiling&cornice,colour2WC,colour3FireplaceSurround | Interiorcolourschemefourcolours,colour1walls,skirting,doors,door&window frames,ceiling&cornice,colour2WC,colour3FireplaceSurround |",
+    "expectedTitle": "Interior paint finish and colour scheme",
+    "expectedAction": "review_new_product",
+    "expectedReviewReasonIncludes": "General finish item",
+    "forbiddenTitles": [
+      "Paint"
+    ]
+  },
+  {
+    "name": "bathroom ampersand ceiling row maps to canonical gib ceiling proposal",
+    "markdown": "| Bathroom& | 10mmgibboardceilingsthroughoutstopped to level 4 finish with waterbornesemi-gloss paint finish | 10mmgibboardceilingsthroughoutstopped to level 4 finish with waterbornesemi-gloss paint finish |",
+    "expectedTitle": "GIB board ceiling linings",
+    "expectedAction": "review_new_product",
+    "expectedSourceIncludes": [
+      "gibboard ceilings",
+      "level 4 finish"
+    ],
+    "forbiddenTitles": [
+      "Bathroom&"
+    ]
+  },
+  {
+    "name": "please note electrical positioning note is not extracted as product",
+    "markdown": "| Please Note: | Final positionsof all Electrical itemswillbedetermined onsiteby the electrician dependent on framing, trusses other services. Light switches 1000mm from floor level. | Final positionsof all Electrical itemswillbedetermined onsiteby the electrician dependent on framing, trusses other services. Light switches 1000mm from floor level. |",
+    "forbiddenTitles": [
+      "Please Note:"
+    ]
   }
 ]

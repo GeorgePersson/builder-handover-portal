@@ -49,9 +49,20 @@ export function chooseBestEvidence(rule: EvidenceRule, chunks: string[], fullTex
     .map((chunk) => ({ chunk, quality: scoreEvidence(chunk) }))
     .filter(({ quality }) => quality.score > -1);
 
-  const termEvidenceChunk = rule.evidenceTerms
-    .map((candidate) => cleanedChunks.find(({ chunk }) => chunk.toLowerCase().includes(candidate.toLowerCase())))
-    .find(Boolean)?.chunk;
+  const termEvidenceChunk = cleanedChunks
+    .flatMap(({ chunk, quality }) =>
+      rule.evidenceTerms
+        .map((candidate, index) => ({ candidate, index }))
+        .filter(({ candidate }) => chunk.toLowerCase().includes(candidate.toLowerCase()))
+        .map(({ index }) => {
+          const patternMatched = patternMatches(rule, chunk.toLowerCase(), compactForMatching(chunk));
+          return {
+            chunk,
+            score: quality.score + (patternMatched ? 8 : 0) + Math.max(0, rule.evidenceTerms.length - index),
+          };
+        }),
+    )
+    .sort((a, b) => b.score - a.score)[0]?.chunk;
 
   const patternEvidenceChunk = cleanedChunks.find(({ chunk }) => {
     const normal = chunk.toLowerCase();

@@ -47,6 +47,16 @@ const failures = [];
 
 for (const fixture of fixtures) {
   const proposals = buildSpecificationProposals(fixture.markdown);
+  for (const forbiddenTitle of fixture.forbiddenTitles || []) {
+    if (proposals.some((item) => item.title === forbiddenTitle)) {
+      failures.push(`${fixture.name}: unexpectedly extracted forbidden title ${JSON.stringify(forbiddenTitle)}`);
+    }
+  }
+
+  if (!fixture.expectedTitle) {
+    continue;
+  }
+
   const proposal = proposals.find((item) => item.title === fixture.expectedTitle);
 
   if (!proposal) {
