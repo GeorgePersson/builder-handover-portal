@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { buildSpecificationProposals, getInitialExtractedItemStatus } from "@/lib/ai/spec-extract";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { extractDocumentContext } from "@/lib/server/document-context";
 import { buildSpecificationExtractionResponse } from "@/lib/server/specification-response";
@@ -14,6 +15,30 @@ function hasSupabaseConfig() {
 
 function isMissingReviewReasonColumn(error: { message?: string } | null) {
   return Boolean(error?.message?.includes("review_reason"));
+}
+
+function getStorageErrorMessage(error: { message?: string; name?: string; statusCode?: string | number } | null) {
+  if (!error) {
+    return "Unknown storage error.";
+  }
+
+  return [error.name, error.statusCode, error.message].filter(Boolean).join(" - ") || "Unknown storage error.";
+}
+
+async function uploadSpecificationPdf(storagePath: string, bytes: Buffer, contentType: string) {
+  if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const admin = createSupabaseAdminClient();
+    return admin.storage.from("handover-documents").upload(storagePath, bytes, {
+      contentType,
+      upsert: false,
+    });
+  }
+
+  const supabase = await createSupabaseServerClient();
+  return supabase.storage.from("handover-documents").upload(storagePath, bytes, {
+    contentType,
+    upsert: false,
+  });
 }
 
 export async function POST(request: Request) {
@@ -69,15 +94,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Authentication required." }, { status: 401 });
   }
 
-  const { error: uploadError } = await supabase.storage
-    .from("handover-documents")
-    .upload(upload.storagePath, upload.bytes, {
-      contentType: upload.type,
-      upsert: false,
-    });
+  const { error: uploadError } = await uploadSpecificationPdf(upload.storagePath, upload.bytes, upload.type);
 
   if (uploadError) {
-    return NextResponse.json({ error: "Could not upload specification PDF." }, { status: 500 });
+    console.error("Specification PDF storage upload failed", {
+      bucket: "handover-documents",
+      storagePath: upload.storagePath,
+      error: getStorageErrorMessage(uploadError),
+    });
+    return NextResponse.json(
+      {
+        error: "Could not upload specification PDF.",
+        detail: getStorageErrorMessage(uploadError),
+      },
+      { status: 500 },
+    );
   }
 
   const { data: specification, error: specificationError } = await supabase

@@ -1,4 +1,28 @@
 # Agent Handoff Log
+## 2026-06-21 - Specification Process Storage Upload Fix
+
+### What Changed
+
+- Updated `/api/specifications/process-pdf` so the storage upload uses the server-only Supabase service-role client when `SUPABASE_SERVICE_ROLE_KEY` is available.
+- Kept authenticated user checks and normal row inserts on the request/session Supabase client.
+- Added server logging and a `detail` field for storage upload failures so future upload errors are diagnosable instead of only showing `Could not upload specification PDF.`
+- Updated the upload panel to surface the returned storage detail in the inline error when an upload still fails.
+
+### Why
+
+The Docling parse completed far enough to reach the Supabase storage upload, but the browser received `Could not upload specification PDF.` The local app already has the private `handover-documents` bucket and service role configured; using the server-only service role for bucket writes avoids client/RLS storage policy friction during the local workflow while keeping secrets server-side.
+
+### Checks Run
+
+- `npm.cmd run document-context:readiness` - passed.
+- `npm.cmd run supabase:smoke:readiness` - passed; private `handover-documents` bucket reachable.
+- `npm.cmd run lint` - passed.
+- `npm.cmd run build` - passed, with known local Docling Turbopack NFT tracing warnings.
+
+### Next Task
+
+Restart `npm.cmd run dev:docling`, hard-refresh the app, upload the PDF again, and wait for the Docling process. If it still fails, the inline error should now include the Supabase storage detail and the terminal should log the bucket/path/error.
+
 ## 2026-06-21 - HMR Origin And File Input Resync
 
 ### What Changed

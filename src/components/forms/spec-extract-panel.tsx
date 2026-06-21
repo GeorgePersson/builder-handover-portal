@@ -237,8 +237,9 @@ export function SpecExtractPanel({ projects }: { projects: ProjectOption[] }) {
     });
 
     if (!response.ok) {
-      const payload = (await response.json()) as { error?: string };
-      setError(payload.error || "Could not process the uploaded PDF.");
+      const payload = (await response.json()) as { error?: string; detail?: string };
+      const message = payload.error || "Could not process the uploaded PDF.";
+      setError(payload.detail ? `${message} ${payload.detail}` : message);
       setActiveOperation(null);
       return;
     }
