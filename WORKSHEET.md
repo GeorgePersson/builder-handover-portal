@@ -64,6 +64,7 @@ After the push, update this worksheet and `docs/agent-handoff-log.md` with what 
 
 ## Last Updated
 
+- 2026-06-21: Pushed phone/Codex cloud consolidation to `codex/llamacloud-greenfield` at commit `e3bfe66`; next step is LlamaCloud config plus full Supabase workflow smoke.
 - 2026-06-21: Anchored after phone/Codex cloud consolidation: merged Cloudflare deployment plan, LlamaCloud readiness, extraction guardrails, and quote/source-gap hardening; local readiness, Supabase smoke, lint, and build passed.
 - 2026-06-21: Hardened quote/source-gap approval and readiness checks so Supabase approvals load source-gap fields, approved-as-correct gaps remain publish blockers, and supporting-evidence uploads include audit metadata.
 - 2026-06-21: Hardened extraction guardrails for admin/legal/contract/preliminaries/site setup noise; lint passed in Codex cloud and local verification is pending.

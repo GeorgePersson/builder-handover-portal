@@ -1,4 +1,31 @@
 # Agent Handoff Log
+## 2026-06-21 - Phone Codex Cloud Consolidation Push Completed
+
+### What Changed
+
+- Pushed the consolidated phone/Codex cloud work to GitHub.
+- Commit pushed: `e3bfe66` on branch `codex/llamacloud-greenfield`.
+- Left local `.codex/` and `.hermes/` untracked and uncommitted.
+
+### Files Changed
+
+- `WORKSHEET.md`
+- `docs/agent-handoff-log.md`
+
+### Checks Run
+
+- `git push origin HEAD` - passed.
+- `git status --short --branch` - branch is aligned with origin except untracked local agent folders.
+
+### Unknowns/Risks
+
+- `LLAMA_CLOUD_API_KEY` still needs to be configured locally before realistic scanned-PDF extraction.
+- Full browser workflow smoke remains the next active task.
+
+### Suggested Next Task
+
+Add the LlamaCloud API key to local `.env.local` only, run `npm.cmd run document-context:readiness`, then run the full Supabase-mode workflow smoke with the real scanned outline spec.
+
 ## 2026-06-21 - Phone Codex Cloud Consolidation Anchored
 
 ### What Changed
