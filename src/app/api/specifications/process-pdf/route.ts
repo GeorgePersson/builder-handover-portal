@@ -4,6 +4,7 @@ import {
   getInitialExtractedItemReviewReason,
   getInitialExtractedItemStatus,
 } from "@/lib/ai/spec-extract";
+import { maybeEnhanceSpecificationProposalsWithLlm } from "@/lib/ai/spec-llm";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { extractDocumentContext } from "@/lib/server/document-context";
@@ -68,7 +69,11 @@ export async function POST(request: Request) {
     fileName: upload.fileName,
     mimeType: upload.type,
   });
-  const proposedItems = buildSpecificationProposals(parsed.text);
+  const deterministicItems = buildSpecificationProposals(parsed.text);
+  const { proposedItems } = await maybeEnhanceSpecificationProposalsWithLlm(deterministicItems).catch((error) => {
+    console.warn("Spec LLM classifier failed; falling back to deterministic extraction", error);
+    return { proposedItems: deterministicItems };
+  });
 
   if (!hasSupabaseConfig()) {
     await saveLocalUpload(upload.storagePath, upload.bytes);

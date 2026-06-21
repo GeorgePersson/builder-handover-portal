@@ -1,4 +1,58 @@
 # Agent Handoff Log
+## 2026-06-22 - OpenAI Second-Pass Spec Classifier
+
+### Goal
+
+Keep Docling/code as the cheap deterministic parser/cleanup layer, then use OpenAI only for compact source-backed candidates that need semantic classification. This keeps the pay-as-you-go model while avoiding sending whole PDFs to the LLM.
+
+### Changes
+
+- Added `src/lib/ai/spec-candidates.ts`.
+  - Converts deterministic proposals into `SpecExtractionCandidate` records.
+  - Tracks source text, deterministic title/category/action/confidence, and whether the row is worth LLM spend.
+  - Skips obvious existing matches, existing tasks, source-document rows, and note/noise rows.
+- Added `src/lib/ai/spec-llm.ts`.
+  - Uses OpenAI Responses API with strict JSON schema.
+  - Requires source-grounded `source_quote` values.
+  - Validates candidate IDs, item types, review lanes, source quote grounding, title support, and confidence range.
+  - Normalizes LLM confidence returned as `0-1` into `0-100`.
+  - Applies accepted classifications back to proposals while preserving deterministic fallback for rejected/low-confidence results.
+- Wired optional enhancement into:
+  - `src/app/api/specifications/extract-pdf/route.ts`
+  - `src/app/api/specifications/process-pdf/route.ts`
+- Added script/package command:
+  - `scripts/smoke-spec-extract-llm.mjs`
+  - `npm.cmd run spec-extract:llm-smoke`
+
+### Runtime Controls
+
+- Deterministic extraction remains the default.
+- Set `OPENAI_SPEC_CLASSIFIER_ENABLED=true` to enable the second-pass classifier in app/API extraction routes.
+- Set `OPENAI_SPEC_CLASSIFIER_LIMIT=30` or lower/higher to cap candidates sent per extraction.
+- Uses `OPENAI_SPEC_CLASSIFIER_MODEL`, falling back to `OPENAI_EXTRACTION_MODEL`, then `gpt-5.1-mini`.
+
+### Verification
+
+- `npm.cmd run spec-extract:fixtures` passed: 7 fixtures.
+- `npm.cmd run spec-extract:smoke` passed: 90 deterministic proposals.
+- `OPENAI_SPEC_CLASSIFIER_LIMIT=6 npm.cmd run spec-extract:llm-smoke` passed.
+  - Deterministic proposals: 90
+  - LLM-eligible candidates: 73
+  - Sent candidates: 6
+  - Accepted: 6
+  - Rejected: 0
+  - Enhanced proposal count: 90
+  - Model used in local env: `gpt-5.4-mini`
+  - Token usage: 1,171 input / 534 output / 1,705 total
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed with known Docling/Turbopack NFT tracing warnings.
+
+### Notes / Next Work
+
+- Current implementation is source-grounded and optional; OpenAI failure logs a warning and falls back to deterministic proposals.
+- The next quality step is to tune `needs_llm` gating so only the highest-value ambiguous rows are sent, then run a larger LLM smoke and compare before enabling in production.
+- The LLM should remain a classifier/repair stage, not a free-form extractor; Docling/code still own parsing, cleanup, traceability, and fallback behavior.
+
 ## 2026-06-22 - Full Docling Rerun and Extraction Output Review
 
 ### Goal

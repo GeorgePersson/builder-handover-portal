@@ -18,7 +18,8 @@
     "document-context:readiness": "node scripts/check-document-context-readiness.mjs",
     "docling:smoke:local": "node scripts/smoke-docling-local.mjs",
     "spec-extract:fixtures": "node scripts/check-spec-extract-fixtures.mjs",
-    "spec-extract:smoke": "node scripts/smoke-spec-extract.mjs"
+    "spec-extract:smoke": "node scripts/smoke-spec-extract.mjs",
+    "spec-extract:llm-smoke": "node scripts/smoke-spec-extract-llm.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { buildSpecificationProposals } from "@/lib/ai/spec-extract";
+import { maybeEnhanceSpecificationProposalsWithLlm } from "@/lib/ai/spec-llm";
 import { extractDocumentContext } from "@/lib/server/document-context";
 import { buildSpecificationExtractionResponse } from "@/lib/server/specification-response";
 
@@ -29,7 +30,11 @@ export async function POST(request: Request) {
     fileName: file.name,
     mimeType: file.type || "application/pdf",
   });
-  const proposedItems = buildSpecificationProposals(parsed.text);
+  const deterministicItems = buildSpecificationProposals(parsed.text);
+  const { proposedItems } = await maybeEnhanceSpecificationProposalsWithLlm(deterministicItems).catch((error) => {
+    console.warn("Spec LLM classifier failed; falling back to deterministic extraction", error);
+    return { proposedItems: deterministicItems };
+  });
 
   return NextResponse.json(
     buildSpecificationExtractionResponse({
