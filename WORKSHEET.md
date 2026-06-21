@@ -67,6 +67,7 @@ After the push, update this worksheet and `docs/agent-handoff-log.md` with what 
 
 ## Last Updated
 
+- 2026-06-21: Pushed Docling planning branch `codex/docling-local-context` at commit `8565528`; next task is local Docling install/CLI conversion against the real scanned spec.
 - 2026-06-21: Started Docling local-first parser branch `codex/docling-local-context`; next work is a local Docling CLI spike, then `docling_local` provider wiring and real scanned-PDF smoke.
 - 2026-06-21: Pushed phone/Codex cloud consolidation to `codex/llamacloud-greenfield` at commit `e3bfe66`; next step is LlamaCloud config plus full Supabase workflow smoke.
 - 2026-06-21: Anchored after phone/Codex cloud consolidation: merged Cloudflare deployment plan, LlamaCloud readiness, extraction guardrails, and quote/source-gap hardening; local readiness, Supabase smoke, lint, and build passed.

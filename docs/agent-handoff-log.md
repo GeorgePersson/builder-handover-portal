@@ -1,4 +1,31 @@
 # Agent Handoff Log
+## 2026-06-21 - Docling Planning Branch Push Completed
+
+### What Changed
+
+- Pushed Docling local-context planning work to GitHub.
+- Branch: `codex/docling-local-context`.
+- Commit pushed: `8565528`.
+- Left local `.codex/` and `.hermes/` untracked and uncommitted.
+
+### Files Changed
+
+- `WORKSHEET.md`
+- `docs/agent-handoff-log.md`
+
+### Checks Run
+
+- `git push -u origin HEAD` - passed.
+- `git status --short --branch` - branch is aligned with origin except untracked local agent folders.
+
+### Unknowns/Risks
+
+- Docling is still a plan only; it has not been installed or run against the real scanned PDF yet.
+
+### Suggested Next Task
+
+Implement Phase D1 from `docs/docling-phased-work.md`: install/run Docling locally, create `scripts/docling-convert.py`, process the real scanned spec, and inspect ignored artifacts under `.local-artifacts/docling/` before wiring `DOCUMENT_CONTEXT_PROVIDER=docling_local`.
+
 ## 2026-06-21 - Docling Local Parser Spike Planned
 
 ### What Changed
