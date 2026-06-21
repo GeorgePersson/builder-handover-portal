@@ -1,4 +1,27 @@
 # Agent Handoff Log
+## 2026-06-21 - Windows PowerShell Docling Dev Command Fix
+
+### What Changed
+
+- Added `npm.cmd run dev:docling` so Windows PowerShell users do not need POSIX-style inline environment variable syntax.
+- Updated worksheet/phased-work/handoff docs to prefer the Windows-friendly command.
+
+### Why
+
+PowerShell rejected `DOCUMENT_CONTEXT_PROVIDER=docling_local npm.cmd run dev` because that syntax is for POSIX shells, not PowerShell.
+
+### Next Command
+
+```powershell
+npm.cmd run dev:docling
+```
+
+Alternative:
+
+```powershell
+$env:DOCUMENT_CONTEXT_PROVIDER="docling_local"; npm.cmd run dev
+```
+
 ## 2026-06-21 - Docling Local Parser Implementation Push Completed
 
 ### What Changed
@@ -25,7 +48,7 @@
 
 ### Suggested Next Task
 
-Run the app with `DOCUMENT_CONTEXT_PROVIDER=docling_local`, upload the real scanned outline spec through the builder specification flow, and verify extraction diagnostics/review queue quality before tuning prompts or moving toward a VPS Docling service.
+Run the app with `npm.cmd run dev:docling` from Windows PowerShell (or `$env:DOCUMENT_CONTEXT_PROVIDER="docling_local"; npm.cmd run dev`), upload the real scanned outline spec through the builder specification flow, and verify extraction diagnostics/review queue quality before tuning prompts or moving toward a VPS Docling service.
 
 ## 2026-06-21 - Docling Local Parser Smoke Implemented
 

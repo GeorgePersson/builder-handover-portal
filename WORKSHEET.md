@@ -61,7 +61,7 @@ After the push, update this worksheet and `docs/agent-handoff-log.md` with what 
 
 ## Needs Doing / Next Work
 
-- Run the browser upload smoke with `DOCUMENT_CONTEXT_PROVIDER=docling_local` and the real scanned spec; confirm extraction diagnostics show `provider: docling_local`, `fallbackUsed: false`, and useful review queue rows.
+- Run the browser upload smoke with `npm.cmd run dev:docling` from Windows PowerShell, or `$env:DOCUMENT_CONTEXT_PROVIDER="docling_local"; npm.cmd run dev`; confirm extraction diagnostics show `provider: docling_local`, `fallbackUsed: false`, and useful review queue rows.
 - Inspect/tune extraction prompts/guardrails only after the Docling-backed browser smoke shows real workflow output.
 - Keep `.local-artifacts/docling/` ignored; do not commit parsed customer PDF outputs.
 - Keep LlamaCloud code/docs available for a later quality comparison; do not remove the existing LlamaCloud architecture while adding Docling.
@@ -71,6 +71,7 @@ After the push, update this worksheet and `docs/agent-handoff-log.md` with what 
 
 ## Last Updated
 
+- 2026-06-21: Added Windows-friendly `npm.cmd run dev:docling` script after PowerShell rejected POSIX-style inline env syntax.
 - 2026-06-21: Pushed Docling local parser implementation to `codex/docling-local-context` at commit `1a79f03`; next task is browser upload smoke with `DOCUMENT_CONTEXT_PROVIDER=docling_local`.
 - 2026-06-21: Implemented Docling local CLI smoke and `docling_local` provider wiring; real scanned spec parsed to 89,871 markdown chars / 16 tables, readiness/supabase/lint/build passed, with Turbopack NFT tracing warnings to revisit.
 - 2026-06-21: Pushed Docling planning branch `codex/docling-local-context` at commit `8565528`; next task is local Docling install/CLI conversion against the real scanned spec.

@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:docling": "set DOCUMENT_CONTEXT_PROVIDER=docling_local&& next dev",
     "build": "next build",
     "demo:generate-100-item-spec": "node scripts/generate-100-item-spec.mjs",
     "cloudflare:dev": "npx.cmd wrangler dev --config cloudflare/handover-pipeline/wrangler.jsonc",

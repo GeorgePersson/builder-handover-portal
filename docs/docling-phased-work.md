@@ -172,7 +172,7 @@ Done when:
 
 Goal: prove the actual app upload path can use Docling context.
 
-Status: next active task. Build passes, but the browser upload path has not yet been run with `DOCUMENT_CONTEXT_PROVIDER=docling_local`.
+Status: next active task. Build passes, but the browser upload path has not yet been run with `DOCUMENT_CONTEXT_PROVIDER=docling_local`. On Windows PowerShell, use `npm.cmd run dev:docling` or `$env:DOCUMENT_CONTEXT_PROVIDER="docling_local"; npm.cmd run dev`; do not use POSIX inline env syntax.
 
 Tasks:
 
