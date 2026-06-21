@@ -50,15 +50,13 @@ fallback. The first backend slice added the outline-spec schema contract at
 to use LlamaCloud when configured while preserving the existing builder UI flow.
 See `docs/llamacloud-greenfield-implementation.md`.
 
-Workflow anchor: the LlamaCloud-backed flow is the preferred current path when
-configured, while the document-context provider boundary still allows local or
-future Azure processing. Builders upload specs/supporting documents, processing
+Workflow anchor: the document-context provider boundary is now the key design seam. LlamaCloud remains implemented for later quality comparison, but the next active branch is `codex/docling-local-context`, which tests Docling locally before any new paid parser dependency. Builders upload specs/supporting documents, processing
 can happen asynchronously, builders can return later to approve/edit/reject/add context, known database
 matches are handled before search, unclear rows ask for builder context before
 search, clarified rows are matched again, and only builder-confirmed
 source-ready unknowns go to web/source search. Privacy, durable review state,
 correct item storage, and versioned warranty/manual/source records are part of
-the baseline requirements, not later polish.
+the baseline requirements, not later polish. See `docs/docling-local-context-plan.md` and `docs/docling-phased-work.md` for the Docling work.
 
 Builder records update: client portal opens now create a lightweight
 `handover_open_events` record for published packages. Builders can see the first

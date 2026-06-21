@@ -1,4 +1,38 @@
 # Agent Handoff Log
+## 2026-06-21 - Docling Local Parser Spike Planned
+
+### What Changed
+
+- Created a new feature branch direction for Docling: `codex/docling-local-context`.
+- Added a local-first Docling parser plan at `docs/docling-local-context-plan.md`.
+- Added detailed Docling phased work at `docs/docling-phased-work.md`.
+- Updated `docs/phased-work.md`, `docs/architecture.md`, and `WORKSHEET.md` so future agents know Docling is the next active parser spike while LlamaCloud remains available for later comparison.
+- The plan intentionally starts with local Docling testing against the real scanned outline spec before adding VPS, Cloudflare Container, Azure, or LlamaCloud dependency.
+
+### Files Changed
+
+- `docs/docling-local-context-plan.md`
+- `docs/docling-phased-work.md`
+- `docs/phased-work.md`
+- `docs/architecture.md`
+- `WORKSHEET.md`
+- `docs/agent-handoff-log.md`
+
+### Checks Run
+
+- Planning/docs-only change. Lightweight validation should check conflict markers and git status before push.
+
+### Unknowns/Risks
+
+- Docling is not installed or tested yet in this entry.
+- The real scanned PDF still needs a local Docling parse quality test.
+- Future VPS hosting is plausible but intentionally deferred until local parse quality and resource usage are known.
+- LlamaCloud should not be removed; it remains an optional future quality comparison provider.
+
+### Suggested Next Task
+
+Install/run Docling locally, create `scripts/docling-convert.py`, process `C:\Users\hunte\Downloads\2074 legal signed outline spec.pdf.pdf`, save ignored artifacts under `.local-artifacts/docling/`, then decide whether to wire `DOCUMENT_CONTEXT_PROVIDER=docling_local` into the app.
+
 ## 2026-06-21 - Phone Codex Cloud Consolidation Push Completed
 
 ### What Changed

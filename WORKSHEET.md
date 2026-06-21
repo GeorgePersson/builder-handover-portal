@@ -53,17 +53,21 @@ After the push, update this worksheet and `docs/agent-handoff-log.md` with what 
 
 - Cloudflare-first deployment plan exists at `docs/cloudflare-nextjs-deployment-plan.md`; app host target is Cloudflare Workers/Pages via OpenNext, with Vercel fallback only for a proven blocker.
 
+- New Docling local-first parser spike branch is `codex/docling-local-context`; plan docs are `docs/docling-local-context-plan.md` and `docs/docling-phased-work.md`. LlamaCloud stays in the architecture for later comparison.
+
 ## Needs Doing / Next Work
 
-- Configure `LLAMA_CLOUD_API_KEY` locally, set `DOCUMENT_CONTEXT_PROVIDER=llamacloud` for the realistic PDF pass, and run `npm.cmd run document-context:readiness` until it reports `willUseLlamaCloud: true`.
-- Run the real scanned outline spec extraction smoke using `C:\Users\hunte\Downloads\2074 legal signed outline spec.pdf.pdf`; confirm extraction diagnostics use LlamaCloud and that admin/legal/preliminaries/site setup noise stays out of homeowner package candidates.
-- Run the Supabase-mode browser workflow: login, builder workspace/project, upload, extraction/review queue, source-gap handling, builder-supplied note, supporting evidence/quote path, publish readiness, publish, and client portal visibility.
+- Build the Docling local spike from `docs/docling-phased-work.md` before adding any new paid parser dependency.
+- First run Docling locally against `C:\Users\hunte\Downloads\2074 legal signed outline spec.pdf.pdf` and save ignored artifacts under `.local-artifacts/docling/`.
+- Add `DOCUMENT_CONTEXT_PROVIDER=docling_local` only after the CLI spike proves useful output, then wire it through the existing document-context provider boundary.
+- Keep LlamaCloud code/docs available for a later quality comparison; do not remove the existing LlamaCloud architecture while adding Docling.
+- Run the Supabase-mode browser workflow after Docling is wired: login, builder workspace/project, upload, extraction/review queue, source-gap handling, builder-supplied note, supporting evidence/quote path, publish readiness, publish, and client portal visibility.
 - Keep publish readiness strict: unresolved source gaps, quote references, or builder-context prompts should not silently become client-facing. Approved-as-correct rows with lingering source-gap signals are counted as publish blockers unless edited, excluded, or marked builder-supplied with a note.
-- After the workflow smoke, fix only blockers discovered in the run, then consider the Cloudflare/OpenNext app deploy config from `docs/cloudflare-nextjs-deployment-plan.md`.
-- Verify current app checks before pushing meaningful app changes: `npm.cmd run document-context:readiness`, `npm.cmd run supabase:smoke:readiness`, `npm.cmd run lint`, and `npm.cmd run build`.
+- Verify current app checks before pushing meaningful app changes: `npm.cmd run document-context:readiness`, `npm.cmd run supabase:smoke:readiness`, `npm.cmd run lint`, and `npm.cmd run build`; once implemented also run `npm.cmd run docling:smoke:local`.
 
 ## Last Updated
 
+- 2026-06-21: Started Docling local-first parser branch `codex/docling-local-context`; next work is a local Docling CLI spike, then `docling_local` provider wiring and real scanned-PDF smoke.
 - 2026-06-21: Pushed phone/Codex cloud consolidation to `codex/llamacloud-greenfield` at commit `e3bfe66`; next step is LlamaCloud config plus full Supabase workflow smoke.
 - 2026-06-21: Anchored after phone/Codex cloud consolidation: merged Cloudflare deployment plan, LlamaCloud readiness, extraction guardrails, and quote/source-gap hardening; local readiness, Supabase smoke, lint, and build passed.
 - 2026-06-21: Hardened quote/source-gap approval and readiness checks so Supabase approvals load source-gap fields, approved-as-correct gaps remain publish blockers, and supporting-evidence uploads include audit metadata.

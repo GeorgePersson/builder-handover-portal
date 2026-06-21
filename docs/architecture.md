@@ -9,7 +9,7 @@ This is the compact architecture entrypoint for future agents. Use `docs/technic
 - System of record: Supabase Postgres, Auth, RLS, Storage, and RPCs.
 - Local fallback: `.local-data/` JSON stores and `.local-uploads/` files.
 - AI: OpenAI structured extraction and selective source summarisation when configured.
-- Document context option: LlamaCloud and/or Azure document/context adapters behind server-side provider boundaries.
+- Document context options: local PDF/OCR fallback, Docling local/VPS provider spike, LlamaCloud optional comparison provider, and Azure Content Understanding optional future adapter; all stay behind server-side provider boundaries.
 - Background pipeline: Cloudflare Workers, Queues, Durable Objects, R2, and future D1 pipeline state.
 - Billing/email: Stripe and Resend.
 
@@ -37,7 +37,7 @@ This is the compact architecture entrypoint for future agents. Use `docs/technic
 - `src/lib/server/queries.ts` - read paths and scaffold fallbacks.
 - `src/lib/document-workflow.ts` - workflow status/type contracts.
 - `src/lib/extraction/outline-spec-schema.ts` - context-first extraction schema.
-- `src/lib/server/document-context.ts` - provider selection for document context.
+- `src/lib/server/document-context.ts` - provider selection for document context; currently local PDF/LlamaCloud and next Docling local/VPS branch work.
 - `src/lib/server/document-extraction.ts` and `src/lib/server/pdf-extract.ts` - text/table/OCR extraction primitives.
 - `src/lib/server/product-matching.ts` - product identity and match logic.
 - `src/lib/server/extraction-usage.ts` - extraction/source usage metrics.
@@ -76,6 +76,7 @@ This is the compact architecture entrypoint for future agents. Use `docs/technic
 ## Unknowns And Watchpoints
 
 - Azure document context processing is not settled; it is a spike behind an adapter.
-- LlamaCloud integration is active in the current handoff but should be checked against env configuration before relying on it.
+- Docling is the next active local-first parser spike on `codex/docling-local-context`; see `docs/docling-local-context-plan.md` and `docs/docling-phased-work.md`.
+- LlamaCloud integration is active in the current handoff but should be checked against env configuration before relying on it; keep it as an optional future quality comparison provider.
 - Cloudflare live source enrichment is not enabled; the current Worker is a dry-run scaffold.
 - Supabase migrations may be ahead of a deployed database, so runtime code often preserves compatibility with older schemas.

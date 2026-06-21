@@ -14,9 +14,9 @@ Prompt routing: project setup, upload UX, storage, accepted file types, document
 
 Goal: extract products/items, documents, and maintenance tasks from uploaded specs and categorise them for review.
 
-Current state: implemented with local PDF/text/OCR helpers, OpenAI schema contracts, LlamaCloud adapter work, and context-first classification.
+Current state: implemented with local PDF/text/OCR helpers, OpenAI schema contracts, LlamaCloud adapter work, and context-first classification. The next active spike is Docling local document context on branch `codex/docling-local-context`; see `docs/docling-local-context-plan.md` and `docs/docling-phased-work.md`. Keep LlamaCloud as an optional future comparison provider; do not remove that architecture.
 
-Prompt routing: extraction schemas, OCR/table parsing, category logic, missing fields, source snippets, confidence scoring.
+Prompt routing: extraction schemas, OCR/table parsing, Docling local/VPS provider work, category logic, missing fields, source snippets, confidence scoring.
 
 ## Phase 3 - Builder Review/Edit Workflow
 

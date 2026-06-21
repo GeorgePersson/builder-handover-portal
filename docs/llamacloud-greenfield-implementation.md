@@ -7,8 +7,7 @@ search-last workflow.
 
 ## Anchored Workflow
 
-This is the preferred workflow unless a real production constraint proves it
-wrong:
+The provider ordering is now evidence-driven: keep this LlamaCloud flow available for later quality comparison, but the next active branch is `codex/docling-local-context`, which tests Docling locally before committing to a paid parser path. The product workflow below remains valid regardless of whether document context comes from Docling, LlamaCloud, Azure, or local fallback.
 
 ```txt
 Builder uploads project spec/supporting documents
