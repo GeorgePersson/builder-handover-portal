@@ -1,4 +1,20 @@
 # Agent Handoff Log
+## 2026-06-21 - Broader Docling Extraction Push Completed
+
+### Push
+
+- Branch: `codex/docling-local-context`
+- Implementation commit: `214872f`
+- Commit message: `feat: broaden Docling spec extraction`
+
+### Current Ground Truth
+
+The app previously completed Docling parse/upload but inserted only 5 rows because `src/lib/ai/spec-extract.ts` was too narrow. That function now emits 27 proposals from the real Docling markdown smoke artifact while keeping the workflow contract unchanged.
+
+### Next Step
+
+Restart or refresh the local dev app, reprocess the same PDF through `/builder/specifications/new`, then inspect `/builder/specifications/review`. Expect a new upload to create about 27 rows; compare quality/noise before tuning further.
+
 ## 2026-06-21 - Docling-Aware Extraction Breadth Implemented
 
 ### What Changed

@@ -71,6 +71,7 @@ After the push, update this worksheet and `docs/agent-handoff-log.md` with what 
 
 ## Last Updated
 
+- 2026-06-21: Pushed broader Docling extraction implementation to `codex/docling-local-context` at `214872f`; next retry should reprocess the PDF and inspect the ~27-row review queue.
 - 2026-06-21: Broadened `buildSpecificationProposals()` into a Docling-aware deterministic extractor; smoke test on the real Docling markdown now returns 27 proposals (21 products, 4 maintenance, 2 documents) instead of 5.
 - 2026-06-21: Anchored Docling workflow result: parse/upload finished, only 5 review items were inserted, and the next bottleneck is the keyword-only `src/lib/ai/spec-extract.ts` proposal builder.
 - 2026-06-21: Fixed spec process API storage upload to use the server-only Supabase service role when available and return/log storage detail for future failures.
