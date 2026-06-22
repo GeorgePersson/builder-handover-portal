@@ -23,7 +23,7 @@ export function scoreEvidence(text: string) {
   if (uniqueWordCount >= 5) score += 2;
   else reasons.push("low_unique_word_count");
 
-  if (/\b(?:selected|range|finish|colour|color|supplier|model|code|mm|warranty|manual|quote|tile|paint|door|carpet|light|mixer|vanity|toilet)\b/i.test(cleaned)) {
+  if (/\b(?:selected|range|finish|colour|color|supplier|model|code|mm|warranty|manual|quote|tile|paint|door|carpet|light|mixer|vanity|toilet|air\s*conditioning|airconditioning|ducted|hvac)\b/i.test(cleaned)) {
     score += 2;
   } else {
     reasons.push("no_handover_signal");

@@ -49,9 +49,10 @@ transpileToMjs("src/lib/ai/spec-evidence.ts", "spec-evidence.mjs");
 transpileToMjs("src/lib/ai/spec-classify.ts", "spec-classify.mjs");
 transpileToMjs("src/lib/ai/spec-extract.ts", "spec-extract.mjs");
 
-const { buildSpecificationProposals } = await import(pathToFileURL(path.join(tmpDir, "spec-extract.mjs")));
+const { buildSpecificationExtractionAudit, buildSpecificationProposals } = await import(pathToFileURL(path.join(tmpDir, "spec-extract.mjs")));
 const markdown = fs.readFileSync(inputPath, "utf-8");
 const proposals = buildSpecificationProposals(markdown);
+const extractionAudit = buildSpecificationExtractionAudit(markdown, proposals);
 const byType = proposals.reduce((acc, item) => {
   acc[item.item_type] = (acc[item.item_type] || 0) + 1;
   return acc;
@@ -61,6 +62,7 @@ console.log(JSON.stringify({
   input: inputPath,
   characters: markdown.length,
   proposalCount: proposals.length,
+  extractionAudit,
   byType,
   titles: proposals.map((item) => ({
     type: item.item_type,

@@ -84,5 +84,29 @@
     "forbiddenTitles": [
       "Please Note:"
     ]
+  },
+  {
+    "name": "blank repeated service row extracts air conditioning asset generically",
+    "markdown": "| | 2xwire and connection to external airconditioning unit, allowed 15 amp supply to exterior of building only, no allowance to trench, conduit, wire or connect to air conditioning unit, air conditioning unit supplied and installed by AirConditioning contractor. | 2xwire and connection to external airconditioning unit, allowed 15 amp supply to exterior of building only, no allowance to trench, conduit, wire or connect to air conditioning unit, air conditioning unit supplied and installed by AirConditioning contractor. |",
+    "expectedTitle": "Ducted air conditioning",
+    "expectedAction": "needs_model_code",
+    "expectedReviewReasonIncludes": "Request model/code",
+    "expectedSourceIncludes": [
+      "external airconditioning unit",
+      "air conditioning unit supplied and installed"
+    ],
+    "forbiddenTitles": [
+      "Heat pump system"
+    ]
+  },
+  {
+    "name": "blank repeated service row extracts underfloor heating asset generically",
+    "markdown": "| | Supply and fit underfloor heating mat to tiled bathrooms, including thermostat and final connection by electrician. | Supply and fit underfloor heating mat to tiled bathrooms, including thermostat and final connection by electrician. |",
+    "expectedTitle": "Underfloor heating",
+    "expectedAction": "needs_model_code",
+    "expectedReviewReasonIncludes": "Request model/code",
+    "expectedSourceIncludes": [
+      "under floor heating mat"
+    ]
   }
 ]

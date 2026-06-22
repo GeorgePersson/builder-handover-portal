@@ -9,7 +9,7 @@ const ADMIN_NOISE_PATTERNS = [
 
 const HOMEOWNER_RELEVANT_PATTERNS = [
   /\b(warrant(?:y|ies)|guarantee|manual|owner'?s manual|care guide|maintenance|certificate|producer statement|ps[1234]\b|code compliance|ccc\b)\b/i,
-  /\b(appliance|dishwasher|oven|cooktop|rangehood|heat pump|hvac|hot water|tapware|mixer|toilet|vanity|shower|bath|fixture|fitting)\b/i,
+  /\b(appliance|dishwasher|oven|cooktop|rangehood|heat pump|hvac|air\s*conditioning|airconditioning|ducted|hot water|tapware|mixer|toilet|vanity|shower|bath|fixture|fitting)\b/i,
   /\b(floor(?:ing)?|carpet|tile|vinyl|timber floor|cladding|weatherboard|roof(?:ing)?|gutter|downpipe|paint|coating|finish|colour|color|stain)\b/i,
   /\b(manufacturer|brand|model|product code|sku|supplier|selection schedule|selections?)\b/i,
 ];

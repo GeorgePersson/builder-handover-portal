@@ -30,6 +30,10 @@ export function classifySpecRow(input: ClassificationInput): SpecReviewLane {
     return "needs_source_document";
   }
 
+  if (!hasIdentifier && /heating|cooling|air\s*conditioning|airconditioning|under\s*floor|underfloor|ducted|hvac/.test(text)) {
+    return "needs_model_or_code";
+  }
+
   if (/tile|tiling|splashback|paint|colour|color|carpet|flooring|door|hinge|handle|hardware/.test(text)) {
     if (/builder'?s range|selected|tbc|tba|to confirm|as per|quote|supplier|range/.test(text) && !input.productCode) {
       return "needs_builder_context";
@@ -46,7 +50,7 @@ export function classifySpecRow(input: ClassificationInput): SpecReviewLane {
     return "needs_builder_context";
   }
 
-  if (!hasIdentifier && /appliance|fixture|tap|mixer|vanity|basin|toilet|shower|light|heating|cooling|electrical|plumbing/i.test(text)) {
+  if (!hasIdentifier && /appliance|fixture|tap|mixer|vanity|basin|toilet|shower|light|heating|cooling|air\s*conditioning|airconditioning|ducted|hvac|electrical|plumbing/i.test(text)) {
     return "needs_model_or_code";
   }
 

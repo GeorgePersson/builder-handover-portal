@@ -1,4 +1,59 @@
 # Agent Handoff Log
+## 2026-06-22 - Systemic Service Asset Row Extraction
+
+### Trigger
+
+Full-flow review found that page 31 referenced air conditioning, but extraction produced no matching item. The cached Docling markdown had the row as a blank-label, duplicated-value electrical table row:
+
+```txt
+2xwire and connection to external airconditioning unit ... air conditioning unit supplied and installed by AirConditioning contractor.
+```
+
+The first temptation was a specific `Ducted air conditioning` fallback. That would repeat the one-row patching pattern, so this pass generalized the failure class instead.
+
+### Changes
+
+- Added service/equipment asset recognition in `src/lib/ai/spec-extract.ts` for value-cell driven rows:
+  - underfloor heating
+  - ducted/air-conditioning units
+  - hot water cylinders
+  - solar prewire
+  - external pump power connections
+  - security systems
+  - data/network outlets
+  - gas fireplaces
+- Blank-label/repeated-value Docling table rows are no longer discarded up front. They now survive only when they carry a service/equipment signal; repeated low-value rows still get skipped.
+- Title/category inference now uses the service asset matcher before generic label/title fallback, so useful rows can be extracted from value cells even when the first table cell is blank.
+- Heating/cooling service rows classify as `needs_model_code` before finish/tile/general rules, so “underfloor heating mat to tiled bathrooms” does not become a generic tile finish row.
+- Narrowed the old `Heat pump system` fallback to only `heat pump`/`HVAC` matches; broad `heating`/`cooling` text no longer creates a misleading item.
+- Added `buildSpecificationExtractionAudit()` and surfaced it in `npm.cmd run spec-extract:smoke` so future runs show table row count, product-signal row count, extractable row count, and signal rows that were skipped/not represented.
+
+### Regression Coverage
+
+Added fixtures for the class of problem:
+
+- blank repeated service row extracts air conditioning asset generically
+- blank repeated service row extracts underfloor heating asset generically
+
+These should catch page-31-style rows without adding one fallback per missed item.
+
+### Verification
+
+- `npm.cmd run spec-extract:fixtures` passed: 9 fixtures.
+- `npm.cmd run spec-extract:smoke` passed against cached Docling artifact.
+  - proposalCount: 93
+  - audit tableRowCount: 166
+  - audit signalRowCount: 130
+  - audit extractableRowCount: 88
+  - includes `Ducted air conditioning`, `Hot water cylinder`, `External pump power connection`, and `Solar power prewire`
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed with known Docling/Turbopack NFT tracing warnings.
+
+### Follow-up
+
+- The cached Docling markdown does not visibly contain an underfloor-heating row by that phrase, but the new fixture proves the generic extractor will catch a blank/repeated underfloor-heating service row if Docling emits it in the next full run.
+- After the next browser full-flow rerun, inspect the extraction audit plus review queue for any remaining `skippedSignalRows` that look handover-relevant.
+
 ## 2026-06-22 - OpenAI Second-Pass Spec Classifier
 
 ### Goal

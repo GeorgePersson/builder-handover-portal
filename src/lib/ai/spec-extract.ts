@@ -46,6 +46,64 @@ type ExtractionRule = {
   fallbackEvidence: string;
 };
 
+type ServiceAssetPattern = {
+  title: string;
+  category: string;
+  patterns: RegExp[];
+  terms: string[];
+};
+
+const serviceAssetPatterns: ServiceAssetPattern[] = [
+  {
+    title: "Underfloor heating",
+    category: "Heating/cooling",
+    patterns: [/under\s*floor\s*heating/i, /underfloor\s*heating/i, /floor\s*heating/i, /heating\s*mat/i, /heated\s*floor/i],
+    terms: ["underfloor heating", "under floor heating", "floor heating", "heating mat", "heated floor"],
+  },
+  {
+    title: "Ducted air conditioning",
+    category: "Heating/cooling",
+    patterns: [/ducted\s*air\s*conditioning/i, /air\s*conditioning\s*unit/i, /airconditioning\s*unit/i, /air\s*conditioning/i, /airconditioning/i],
+    terms: ["ducted air conditioning", "air conditioning unit", "airconditioning unit", "air conditioning", "airconditioning"],
+  },
+  {
+    title: "Hot water cylinder",
+    category: "Plumbing fixtures",
+    patterns: [/hot\s*water\s*cylinder/i, /hotwater\s*cylinder/i, /mains\s*pressure\s*electric/i],
+    terms: ["hot water cylinder", "hotwater cylinder", "mains pressure electric"],
+  },
+  {
+    title: "Solar power prewire",
+    category: "Electrical",
+    patterns: [/prewire\s*only\s*for\s*future\s*solar/i, /solar\s*power/i],
+    terms: ["future solar", "solar power", "solar"],
+  },
+  {
+    title: "External pump power connection",
+    category: "Electrical",
+    patterns: [/external\s*(?:swimming\s*pool|domestic\s*water)\s*pump/i, /pump\s*and\s*filtration/i],
+    terms: ["external swimming pool pump", "domestic water pump", "pump and filtration"],
+  },
+  {
+    title: "Security system",
+    category: "Security",
+    patterns: [/security\s*system/i, /electronic\s*security\s*system/i, /infrared\s*sensors?/i],
+    terms: ["security system", "electronic security system", "infrared sensors"],
+  },
+  {
+    title: "Data and network outlets",
+    category: "Electrical",
+    patterns: [/data\s*outlets?/i, /rj\s*45/i, /patch\s*panel/i, /cat\s*6\s*cables?/i],
+    terms: ["data outlets", "RJ45", "patch panel", "Cat6"],
+  },
+  {
+    title: "Gas fireplace",
+    category: "Heating/cooling",
+    patterns: [/gas\s*fire/i, /gas\s*fireplace/i],
+    terms: ["gas fire", "gas fireplace"],
+  },
+];
+
 export function getInitialExtractedItemStatus(
   item: Pick<ProposedSpecItem, "matched_existing_record" | "confidence_score"> &
     Partial<Pick<ProposedSpecItem, "recommended_action">>,
@@ -75,6 +133,21 @@ export function getInitialExtractedItemReviewReason(item: ProposedSpecItem) {
 
 function proposalKey(itemType: ProposedSpecItem["item_type"], title: string) {
   return `${itemType}:${compactForMatching(title)}`;
+}
+
+function findServiceAssetPattern(text: string) {
+  const compact = compactForMatching(text);
+  return serviceAssetPatterns.find((asset) =>
+    asset.patterns.some((pattern) => pattern.test(text) || pattern.test(compact)),
+  );
+}
+
+function hasServiceAssetSignal(text: string) {
+  return Boolean(findServiceAssetPattern(text));
+}
+
+function isRepeatedLowValueRow(cells: string[], rowText: string) {
+  return hasRepeatedCells(cells) && !hasServiceAssetSignal(rowText);
 }
 
 function splitIntoEvidenceChunks(text: string) {
@@ -162,6 +235,8 @@ const knownBrands = [
 
 const productRowTerms = [
   "accoya",
+  "air conditioning",
+  "airconditioning",
   "aluminium",
   "appliance",
   "basin",
@@ -170,6 +245,7 @@ const productRowTerms = [
   "cladding",
   "concrete",
   "cooktop",
+  "ducted",
   "door",
   "downpipe",
   "floor",
@@ -202,7 +278,7 @@ function extractMarkdownTableRows(text: string) {
     .split(/\r?\n/)
     .filter((line) => line.trim().startsWith("|") && line.trim().endsWith("|") && !isSeparatorRow(line))
     .map((line) => splitTableCells(line))
-    .filter((cells) => cells.length >= 2 && !hasRepeatedCells(cells));
+    .filter((cells) => cells.length >= 2);
 }
 
 function findKnownBrand(text: string) {
@@ -226,6 +302,9 @@ function extractFinish(text: string) {
 }
 
 function inferCategory(text: string) {
+  const serviceAsset = findServiceAssetPattern(text);
+  if (serviceAsset) return serviceAsset.category;
+
   const lower = text.toLowerCase();
 
   if (/mixer|tap|waste/.test(lower)) return "Tapware";
@@ -237,6 +316,7 @@ function inferCategory(text: string) {
   if (/paint|finish|colour/.test(lower)) return "Paint and finishes";
   if (/gib|ceiling|lining/.test(lower)) return "Linings";
   if (/light|pdl|power|switch/.test(lower)) return "Electrical";
+  if (/air\s*conditioning|airconditioning|ducted|heat\s*pump|heating|cooling|hvac/.test(lower)) return "Heating/cooling";
   if (/cladding|weatherboard/.test(lower)) return "Cladding";
   if (/slab|concrete|membrane/.test(lower)) return "Structural/foundation";
   if (/appliance|cooktop|oven|dishwasher|rangehood/.test(lower)) return "Appliance";
@@ -272,6 +352,7 @@ function rowHasProductSignal(rowText: string) {
   return Boolean(
     findKnownBrand(rowText) ||
       extractProductCodes(rowText) ||
+      hasServiceAssetSignal(rowText) ||
       productRowTerms.some((term) => lower.includes(term)),
   );
 }
@@ -287,6 +368,11 @@ function makeReadableTitle(cells: string[], rowText: string) {
 
   if (/gib\s*board\s*ceilings?|gibboard\s*ceilings?|level\s*4\s*finish/i.test(rowText)) {
     return "GIB board ceiling linings";
+  }
+
+  const serviceAsset = findServiceAssetPattern(rowText);
+  if (serviceAsset) {
+    return serviceAsset.title;
   }
 
   if (brand && /mixer|basin|vanity|mirror|toilet|hook|waste|shower|door|light/.test(rowText.toLowerCase())) {
@@ -353,6 +439,7 @@ function addSchemaRowProposals(proposals: ProposedSpecItem[], seen: Set<string>,
     if (
       rowText.length < 24 ||
       rowText.length > 1_400 ||
+      isRepeatedLowValueRow(cells, rowText) ||
       /^please\s+note:?$/i.test(label) ||
       !rowHasProductSignal(rowText) ||
       shouldExcludeAsAdminNoise(rowText)
@@ -393,6 +480,64 @@ function addSchemaRowProposals(proposals: ProposedSpecItem[], seen: Set<string>,
       recommended_action: recommendedAction,
     });
   }
+}
+
+export function buildSpecificationExtractionAudit(extractedText: string, proposalsInput?: ProposedSpecItem[]) {
+  const rows = extractMarkdownTableRows(extractedText);
+  const proposals = proposalsInput || buildSpecificationProposals(extractedText);
+  const proposalTitles = new Set(proposals.map((item) => item.title));
+  const skippedSignalRows: Array<{ title: string; category: string; reason: string; source: string }> = [];
+  let signalRowCount = 0;
+  let extractableRowCount = 0;
+
+  for (const cells of rows) {
+    const uniqueCells = dedupeCells(cells);
+    const rowText = cleanEvidenceText(uniqueCells.join(" | "));
+    const label = uniqueCells[0] || "";
+    const hasSignal = rowHasProductSignal(rowText);
+
+    if (hasSignal) {
+      signalRowCount += 1;
+    }
+
+    const skipReason =
+      rowText.length < 24 ? "short" :
+      rowText.length > 1_400 ? "too_long" :
+      isRepeatedLowValueRow(cells, rowText) ? "repeated_low_value" :
+      /^please\s+note:?$/i.test(label) ? "please_note" :
+      !hasSignal ? "no_product_signal" :
+      shouldExcludeAsAdminNoise(rowText) ? "admin_noise" :
+      "";
+
+    if (!skipReason) {
+      extractableRowCount += 1;
+      const title = makeReadableTitle(uniqueCells, rowText);
+      if (!proposalTitles.has(title)) {
+        skippedSignalRows.push({
+          title,
+          category: inferCategory(rowText),
+          reason: "signal_row_not_in_proposals",
+          source: rowText.slice(0, 240),
+        });
+      }
+    } else if (hasSignal && skipReason !== "repeated_low_value") {
+      skippedSignalRows.push({
+        title: makeReadableTitle(uniqueCells, rowText),
+        category: inferCategory(rowText),
+        reason: skipReason,
+        source: rowText.slice(0, 240),
+      });
+    }
+  }
+
+  return {
+    tableRowCount: rows.length,
+    signalRowCount,
+    extractableRowCount,
+    proposalCount: proposals.length,
+    skippedSignalRowCount: skippedSignalRows.length,
+    skippedSignalRows: skippedSignalRows.slice(0, 40),
+  };
 }
 
 const extractionRules: ExtractionRule[] = [
@@ -714,8 +859,8 @@ const fallbackRules: ExtractionRule[] = [
     title: "Heat pump system",
     category: "Heating/cooling",
     location: "Services",
-    patterns: [/heat\s*pump/i, /heating/i, /cooling/i, /hvac/i],
-    evidenceTerms: ["heat pump", "heating", "cooling", "HVAC"],
+    patterns: [/heat\s*pump/i, /hvac/i],
+    evidenceTerms: ["heat pump", "HVAC"],
     confidence_score: 62,
     recommended_action: "review_new_product",
     fallbackEvidence: "Specification references heating or cooling equipment; exact model should be confirmed.",
