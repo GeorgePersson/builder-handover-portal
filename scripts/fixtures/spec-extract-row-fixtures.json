@@ -86,6 +86,27 @@
     ]
   },
   {
+    "name": "window joinery uses window row not aluminium cover plates",
+    "markdown": "| WindowJoinery Finish Hardware JambLiners Glass | Aluminium Selectedstandard powdercoat lcon PineH3.1flushjamb forarchitraveswithwaterbornesemi-glosspaintfinish Generallyclearfloatthroughout.TranslucentlaminatetoW/C&bathrooms | Aluminium Selectedstandard powdercoat lcon PineH3.1flushjamb forarchitraveswithwaterbornesemi-glosspaintfinish Generallyclearfloatthroughout.TranslucentlaminatetoW/C&bathrooms |\n| | Brushedaluminiumcoverplatestoallseencoverplates 1xwireandconnectiontoexternal swimmingpoolpumpandfiltrationunit,allowed | Brushedaluminiumcoverplatestoallseencoverplates 1xwireandconnectiontoexternal swimmingpoolpumpandfiltrationunit,allowed |",
+    "expectedTitle": "Aluminium window and door joinery",
+    "expectedAction": "review_new_product",
+    "expectedSourceIncludes": [
+      "Window Joinery",
+      "Translucentlaminate"
+    ],
+    "forbiddenSourceIncludes": [
+      "Brushed aluminium coverplates",
+      "external swimmingpoolpump"
+    ]
+  },
+  {
+    "name": "aluminium cover plates alone do not create window joinery",
+    "markdown": "| | Brushedaluminiumcoverplatestoallseencoverplates 1xwireandconnectiontoexternal swimmingpoolpumpandfiltrationunit,allowed | Brushedaluminiumcoverplatestoallseencoverplates 1xwireandconnectiontoexternal swimmingpoolpumpandfiltrationunit,allowed |",
+    "forbiddenTitles": [
+      "Aluminium window and door joinery"
+    ]
+  },
+  {
     "name": "blank repeated service row extracts air conditioning asset generically",
     "markdown": "| | 2xwire and connection to external airconditioning unit, allowed 15 amp supply to exterior of building only, no allowance to trench, conduit, wire or connect to air conditioning unit, air conditioning unit supplied and installed by AirConditioning contractor. | 2xwire and connection to external airconditioning unit, allowed 15 amp supply to exterior of building only, no allowance to trench, conduit, wire or connect to air conditioning unit, air conditioning unit supplied and installed by AirConditioning contractor. |",
     "expectedTitle": "Ducted air conditioning",

@@ -1,4 +1,6 @@
+import type { SpecExtractionCandidate } from "@/lib/ai/spec-candidates";
 import type { ProposedSpecItem } from "@/lib/ai/spec-extract";
+import type { SpecLlmClassifyResult } from "@/lib/ai/spec-llm";
 import type { DocumentContextResult } from "@/lib/server/document-context";
 import type { ExtractedPdf } from "@/lib/server/pdf-extract";
 
@@ -13,6 +15,8 @@ type SpecificationExtractionResponseInput = {
   specificationId?: string;
   savedCount?: number;
   includeScaffoldNote?: boolean;
+  candidates?: SpecExtractionCandidate[];
+  llmResult?: SpecLlmClassifyResult | null;
 };
 
 function isDocumentContextResult(parsed: ExtractedPdf | DocumentContextResult): parsed is DocumentContextResult {
@@ -41,6 +45,8 @@ export function buildSpecificationExtractionResponse({
   specificationId,
   savedCount,
   includeScaffoldNote = false,
+  candidates,
+  llmResult,
 }: SpecificationExtractionResponseInput) {
   const matchedCount = proposedItems.filter((item) => item.matched_existing_record).length;
   const isContext = isDocumentContextResult(parsed);
@@ -81,6 +87,15 @@ export function buildSpecificationExtractionResponse({
       ocr_page_count: isContext ? undefined : parsed.diagnostics.ocrPageCount,
       ocr_character_count: isContext ? undefined : parsed.diagnostics.ocrCharacterCount,
       warnings,
+    },
+    ai_classifier: {
+      enabled: Boolean(llmResult),
+      candidate_count: candidates?.length || 0,
+      needs_llm_count: candidates?.filter((candidate) => candidate.needs_llm).length || 0,
+      sent_candidate_count: llmResult?.sentCandidateCount || 0,
+      accepted_count: llmResult?.acceptedCount || 0,
+      rejected_count: llmResult?.rejectedCount || 0,
+      token_usage: llmResult?.tokenUsage || null,
     },
     summary: {
       extracted_count: proposedItems.length,

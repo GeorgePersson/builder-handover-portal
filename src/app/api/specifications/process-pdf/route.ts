@@ -70,9 +70,20 @@ export async function POST(request: Request) {
     mimeType: upload.type,
   });
   const deterministicItems = buildSpecificationProposals(parsed.text);
-  const { proposedItems } = await maybeEnhanceSpecificationProposalsWithLlm(deterministicItems).catch((error) => {
+  const { proposedItems, candidates, llmResult } = await maybeEnhanceSpecificationProposalsWithLlm(deterministicItems).catch((error) => {
     console.warn("Spec LLM classifier failed; falling back to deterministic extraction", error);
-    return { proposedItems: deterministicItems };
+    return { proposedItems: deterministicItems, candidates: [], llmResult: null };
+  });
+
+  console.info("Specification process extraction summary", {
+    provider: parsed.provider,
+    deterministicCount: deterministicItems.length,
+    proposedCount: proposedItems.length,
+    candidateCount: candidates.length,
+    needsLlmCount: candidates.filter((candidate) => candidate.needs_llm).length,
+    llmSentCount: llmResult?.sentCandidateCount || 0,
+    llmAcceptedCount: llmResult?.acceptedCount || 0,
+    llmRejectedCount: llmResult?.rejectedCount || 0,
   });
 
   if (!hasSupabaseConfig()) {
@@ -90,6 +101,8 @@ export async function POST(request: Request) {
             savedCount: saved.extractedItems.length,
             parsed,
             proposedItems,
+            candidates,
+            llmResult,
         file: {
           name: upload.fileName,
           size: upload.size,
@@ -182,6 +195,8 @@ export async function POST(request: Request) {
             savedCount: proposedItems.length,
             parsed,
             proposedItems,
+            candidates,
+            llmResult,
             file: {
               name: upload.fileName,
               size: upload.size,
@@ -201,6 +216,8 @@ export async function POST(request: Request) {
       savedCount: proposedItems.length,
       parsed,
       proposedItems,
+      candidates,
+      llmResult,
       file: {
         name: upload.fileName,
         size: upload.size,

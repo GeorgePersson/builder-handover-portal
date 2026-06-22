@@ -1,4 +1,51 @@
 # Agent Handoff Log
+## 2026-06-22 - Aluminium Joinery Evidence And LLM Gate Review
+
+### Trigger
+
+After clearing and rerunning the full PDF workflow with `OPENAI_SPEC_CLASSIFIER_LIMIT=120`, the review queue had 96 rows but only 8 showed `LLMReviewReason`. The user asked to inspect what the API got/returned and specifically whether `Aluminium window and door joinery` went through the LLM.
+
+### Findings
+
+- The latest saved upload was `c0b15049-2b38-4320-8d9c-d54a0d8f5000`.
+- It saved 96 `extracted_handover_items`; all are unmatched/unverified and in `admin_review`.
+- 8 rows showed `LLMReviewReason`, so they were accepted from the OpenAI second pass.
+- `Aluminium window and door joinery` did **not** go through the accepted LLM path. Its row had no `LLMReviewReason`.
+- Root cause was twofold:
+  1. The deterministic extraction rule had an overbroad `/aluminium/` pattern and `Aluminium` evidence term, so it matched an unrelated electrical row: `Brushedaluminiumcoverplatestoallseencoverplates ... external swimming pool pump ...`.
+  2. The LLM candidate gate did not include `Joinery`, so this 78-confidence joinery row was considered deterministically clear enough and skipped.
+- Because the deterministic source snippet was wrong, simply forcing it through the LLM would not have solved the root issue; the LLM would have seen pump/cover-plate evidence instead of the real window row.
+
+### Changes
+
+- Tightened `Aluminium window and door joinery` extraction in `src/lib/ai/spec-extract.ts`:
+  - Removed broad `/aluminium/` and generic `Aluminium` evidence matching.
+  - Require window-joinery / external-door-aluminium / translucent-laminate context.
+  - Prefer `WindowJoinery`, `Window Joinery`, `translucent laminate`, and selected powdercoat evidence.
+- Added regression fixtures:
+  - Window joinery uses the actual window row, not aluminium cover plates.
+  - Aluminium cover plates alone do not create window joinery.
+- Expanded LLM gating in `src/lib/ai/spec-candidates.ts` so unmatched material/envelope categories like joinery, cladding, waterproofing, structural/foundation, and linings can be sent to the classifier when missing clear identifiers.
+- Added API diagnostics in `buildSpecificationExtractionResponse()` and server logs for both preview and process endpoints:
+  - candidate count
+  - needs-LLM count
+  - sent count
+  - accepted/rejected count
+  - token usage
+
+### Verification
+
+- `npm.cmd run spec-extract:fixtures` passed with 11 fixtures.
+- `npm.cmd run spec-extract:smoke` passed against cached Docling artifact.
+- After the fix, cached-artifact inspection shows `Aluminium window and door joinery` source is the real `Window Joinery ... Aluminium Selected standard powdercoat ... Translucentlaminate...` row.
+- Candidate inspection now marks that row as `needs_llm: true` with reason `Potential model/code item without a clear deterministic identifier.`
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed with known Docling/Turbopack NFT warnings.
+
+### Next test note
+
+The currently saved DB row is still from the pre-fix run. Clear and rerun the PDF to verify the updated API diagnostics and the corrected aluminium window/door joinery source in the review queue.
+
 ## 2026-06-22 - Systemic Service Asset Row Extraction
 
 ### Trigger

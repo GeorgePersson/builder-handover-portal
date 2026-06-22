@@ -51,7 +51,7 @@ function estimateNeedsLlm(item: ProposedSpecItem) {
 
   if (
     item.confidence_score < 82 &&
-    /product to review|bathroom fixtures|electrical|tapware|plumbing fixtures|heating\/cooling|appliance/i.test(item.category) &&
+    /product to review|bathroom fixtures|electrical|tapware|plumbing fixtures|heating\/cooling|appliance|joinery|cladding|waterproofing|structural\/foundation|linings/i.test(item.category) &&
     !/productcode:|model|\b[A-Z]{1,5}\s?\d{2,6}\b/.test(item.extracted_text)
   ) {
     return { needs_llm: true, llm_reason: "Potential model/code item without a clear deterministic identifier." };
