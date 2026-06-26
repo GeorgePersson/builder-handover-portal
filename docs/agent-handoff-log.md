@@ -1,5 +1,35 @@
 # Agent Handoff Log
 
+## 2026-06-26 - GitHub Push: Project Workspace Hardening
+
+### Trigger
+
+User asked to push the current project workspace hardening work to GitHub.
+
+### Push
+
+- Branch: `feature/ai-spec-automation-workflow`
+- Remote: `origin`
+- Commit pushed: `75cedec feat: harden builder project workspace`
+
+### Pushed changes
+
+- Builder dashboard rows deep-link to project workspaces.
+- `/builder/projects?projectId=...` auto-opens the requested workspace.
+- `/builder/projects` has the current standalone manual handover workspace layout, stateful module filters, sidebar-only Client access, documents/legal upload placement, and database-suggestions-first add-item modal ordering.
+- `docs/builder-project-workspace-ui-contract.md` is now tracked as the regression source of truth.
+- `docs/phased-work.md`, `WORKSHEET.md`, and this handoff log now point future agents at the remaining smoke/visual hardening work.
+
+### Verification before push
+
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed with known Docling/Turbopack NFT tracing warnings.
+
+### Local-only files not pushed
+
+- `.codex/`
+- `.hermes/`
+
 ## 2026-06-26 - Phased Work Cleaned Up Into Remaining Work Roadmap
 
 ### Trigger
