@@ -24,6 +24,7 @@ export type Project = {
   clientInvitedAt?: string;
   projectType: string;
   handoverDate: string;
+  publishedAt?: string;
   status: ProjectStatus;
   documentCount: number;
   productCount: number;
@@ -37,8 +38,28 @@ export type HandoverDocument = {
   name: string;
   type: DocumentType;
   size: string;
+  storagePath?: string;
   uploadedAt: string;
   visibleToClient: boolean;
+};
+
+export type DocumentDownloadEvent = {
+  id: string;
+  documentId: string;
+  projectId: string;
+  downloadedBy?: string;
+  downloadedAt: string;
+  userAgent?: string;
+};
+
+export type HandoverOpenEvent = {
+  id: string;
+  projectId: string;
+  openedBy?: string;
+  firstOpenedAt: string;
+  lastOpenedAt: string;
+  openCount: number;
+  userAgent?: string;
 };
 
 export type Source = {
@@ -108,6 +129,9 @@ export type ExtractedHandoverItem = {
     | "auto_approved"
     | "builder_approved"
     | "admin_review"
+    | "request_more_context"
+    | "needs_source_document"
+    | "needs_model_code"
     | "global_approved"
     | "accepted"
     | "edited"

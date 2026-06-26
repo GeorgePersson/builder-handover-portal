@@ -1,0 +1,992 @@
+Builder Handover Portal - Manual Testing Log
+
+Purpose
+- Use this file for things Hunter should test later, especially when Codex work
+  is done from phone and desktop testing has to wait.
+- Keep entries short and actionable.
+- When a test passes, move it from Pending Tests to Tested.
+- When a test fails, leave it in Pending Tests and add the observed result.
+
+Format
+- Date added:
+- Area:
+- What to test:
+- Steps:
+- Expected result:
+- Result:
+- Notes:
+
+Pending Tests
+
+1. Date added: 2026-06-19
+   Area: Phase 1 document workflow schema
+   What to test: Apply the Phase 1 Supabase migration in the real Supabase SQL editor.
+   Steps:
+   - Open Supabase SQL editor.
+   - Run docs/supabase-add-document-workflow-phase1.sql.
+   - Confirm the script completes without errors.
+   - Confirm these tables exist: uploaded_documents, document_extraction_jobs,
+     extracted_items, product_matches, item_review_actions, handover_items,
+     audit_logs.
+   Expected result: Migration succeeds and all Phase 1 tables/enums are created.
+   Result:
+   Notes: This does not change the app UI yet. It only prepares the data model.
+
+2. Date added: 2026-06-19
+   Area: Existing app smoke check after Phase 1
+   What to test: Existing builder/client/admin routes still behave normally.
+   Steps:
+   - Start the app locally.
+   - Open /builder/projects.
+   - Open /client/portal.
+   - Open /admin.
+   Expected result: Existing screens load as before; no new document workflow UI
+   appears yet.
+   Result:
+   Notes: Codex already ran lint and build after Phase 1.
+
+3. Date added: 2026-06-19
+   Area: Phase 2 document upload
+   What to test: Upload a supported project document from the builder project modal.
+   Steps:
+   - Make sure docs/supabase-add-document-workflow-phase1.sql has been run.
+   - Start the app and sign in as the builder.
+   - Open /builder/projects.
+   - Open a project with Edit.
+   - In Client documents, upload a PDF, image, Word, Excel, or CSV file.
+   - Save the document.
+   Expected result: The document saves, appears in Documents in this project,
+   and appears in Upload processing with status Uploaded.
+   Result:
+   Notes: This phase should not create extraction jobs or AI items yet.
+
+4. Date added: 2026-06-19
+   Area: Phase 2 invalid upload
+   What to test: Unsupported project document files are rejected.
+   Steps:
+   - Open /builder/projects and edit a project.
+   - Try to upload an unsupported file type such as .exe or .zip.
+   - Save the document.
+   Expected result: The app redirects back to Projects with an unsupported file
+   type error and no workflow upload is created.
+   Result:
+   Notes:
+
+5. Date added: 2026-06-19
+   Area: Phase 2 upload permissions
+   What to test: A builder cannot upload a document to another organisation's project.
+   Steps:
+   - With Supabase enabled, tamper the hidden projectId in the upload form or use
+     a project id from another organisation.
+   - Submit the upload.
+   Expected result: The upload is rejected with project-not-found and no
+   uploaded_documents or audit_logs row is created for that project.
+   Result:
+   Notes: This is a desktop/devtools test.
+
+6. Date added: 2026-06-19
+   Area: Phase 2 storage privacy
+   What to test: Uploaded files are not publicly accessible without an app route or signed URL.
+   Steps:
+   - Upload a project document.
+   - In Supabase Storage, confirm handover-documents is private.
+   - Try to open the raw storage object URL while signed out.
+   Expected result: The raw object is not publicly accessible; client access
+   should use the app download route/signed URL path only.
+   Result:
+   Notes:
+
+7. Date added: 2026-06-19
+   Area: Phase 3 mocked extraction job
+   What to test: Uploading a supported document creates and completes a placeholder extraction job.
+   Steps:
+   - Make sure docs/supabase-add-document-workflow-phase1.sql has been run.
+   - Open /builder/projects and edit a project.
+   - Upload a supported document with a normal filename.
+   - Reopen or refresh the project modal.
+   Expected result: The upload processing card shows Completed, an extraction
+   job shows Completed, and a placeholder extracted item is visible for builder
+   review. Nothing appears in the homeowner portal from this raw item.
+   Result:
+   Notes: This is mocked extraction only, not real AI.
+
+8. Date added: 2026-06-19
+   Area: Phase 3 failed extraction and retry
+   What to test: Failed placeholder extraction jobs can be retried.
+   Steps:
+   - Upload a supported document whose filename includes fail-extraction.
+   - Reopen or refresh the project modal.
+   - Confirm the extraction job shows Failed and displays a retry button.
+   - Rename/re-upload a normal file if needed, or use the retry button to confirm
+     the failed job stays controlled by the backend.
+   Expected result: The failed job is visible, retry action is available only for
+   failed jobs, retry_count increases after retry, and no homeowner-facing data
+   is published.
+   Result:
+   Notes: With the same fail-extraction filename, the mocked retry will keep
+   failing by design.
+
+9. Date added: 2026-06-19
+   Area: Phase 4 real AI extraction
+   What to test: With OPENAI_API_KEY set, uploaded PDFs/CSVs use real AI extraction instead of the mock.
+   Steps:
+   - Add OPENAI_API_KEY to .env.local.
+   - Optional: set OPENAI_EXTRACTION_MODEL if you want a different model.
+   - Restart the dev server.
+   - Upload a PDF or CSV with product/specification text in /builder/projects.
+   - Reopen or refresh the project modal.
+   Expected result: The extraction job completes, extracted items reflect the
+   document text, raw data is stored only in extracted_items, and homeowner pages
+   do not show these raw AI items.
+   Result:
+   Notes: Without OPENAI_API_KEY, the app intentionally falls back to the Phase 3 mock.
+
+10. Date added: 2026-06-19
+   Area: Phase 4 malformed/failed AI handling
+   What to test: AI extraction failure marks the job failed and retryable.
+   Steps:
+   - Temporarily set OPENAI_EXTRACTION_MODEL to an invalid model value, or remove
+     OPENAI_API_KEY after creating a failed job scenario.
+   - Upload or retry a document extraction.
+   Expected result: The job is marked Failed, the document processing status is
+   Failed, an error message appears, and retry remains available.
+   Result:
+   Notes:
+
+11. Date added: 2026-06-19
+   Area: Phase 5 local product matching
+   What to test: Extracted items are checked against approved local product records before any web search.
+   Steps:
+   - Upload a PDF or CSV that mentions Linea Weatherboard and James Hardie.
+   - Reopen or refresh the project modal after extraction completes.
+   Expected result: The extracted item shows a verified or reviewable local
+   product match with match confidence and a match reason. No web search runs.
+   Result:
+   Notes:
+
+12. Date added: 2026-06-19
+   Area: Phase 5 unmatched and low-confidence matching
+   What to test: Unknown or weak extracted items stay in builder review states.
+   Steps:
+   - Upload a document with a vague product such as unknown bathroom fitting.
+   - Reopen or refresh the project modal after extraction completes.
+   Expected result: The item shows unmatched or low confidence, has a match
+   reason, and does not appear in the homeowner portal.
+   Result:
+   Notes:
+
+13. Date added: 2026-06-19
+   Area: Phase 6 builder review queue
+   What to test: Unresolved workflow items appear in the project review queue and disappear after resolution.
+   Steps:
+   - Upload a document that creates an unmatched, low-confidence, or needs-review item.
+   - Open /builder/projects, edit the project, and find Builder review queue.
+   - Click Approve on one unresolved item.
+   Expected result: The item is saved as approved, a review action is recorded,
+   and it no longer appears in the unresolved queue after the page refreshes.
+   Result:
+   Notes:
+
+14. Date added: 2026-06-19
+   Area: Phase 6 edit review action
+   What to test: Builder edits preserve source history while resolving the item.
+   Steps:
+   - Open an unresolved workflow item in the Builder review queue.
+   - Expand Edit extracted details.
+   - Change the product name, category, warranty, or maintenance text.
+   - Save edited item.
+   Expected result: The item updates to edited_by_builder, the edited details
+   remain on refresh, and the item_review_actions table/local store records an
+   edited action.
+   Result:
+   Notes:
+
+15. Date added: 2026-06-19
+   Area: Phase 6 exclude and builder-supplied actions
+   What to test: Excluded items and builder-supplied items move to resolved states.
+   Steps:
+   - Use Builder supplied on one unresolved item.
+   - Use Exclude item with a reason on another unresolved item.
+   Expected result: Builder-supplied items become builder_supplied with approval
+   metadata; excluded items become excluded with exclusion_reason/excluded_at.
+   Neither item remains in the unresolved queue.
+   Result:
+   Notes:
+
+16. Date added: 2026-06-19
+   Area: Phase 6 supporting evidence upload
+   What to test: A builder can attach supporting evidence without resolving the item.
+   Steps:
+   - Open an unresolved workflow item.
+   - Attach a supported PDF/image/Word/Excel/CSV file in Supporting document.
+   - Refresh the project.
+   Expected result: The file is saved to storage/local uploads and an
+   item_review_actions row records supporting_document_uploaded with file
+   metadata. The item remains unresolved until separately approved, edited,
+   excluded, or marked builder-supplied.
+   Result:
+   Notes:
+
+17. Date added: 2026-06-19
+   Area: Phase 6 review permissions
+   What to test: A builder cannot review another organisation's extracted item.
+   Steps:
+   - With Supabase enabled, tamper a review form itemId to an extracted_items id
+     from another organisation.
+   - Submit approve, edit, exclude, or supporting document upload.
+   Expected result: The action is rejected with project-not-found or
+   workflow-item-not-found, no extracted_items update is made, and no
+   item_review_actions row is created for the other organisation.
+   Result:
+   Notes: This is a desktop/devtools test.
+
+18. Date added: 2026-06-19
+   Area: Phase 7 handover item generation
+   What to test: Approved workflow items create homeowner-safe handover_items.
+   Steps:
+   - Upload a document that creates workflow extracted items.
+   - Approve one item, edit one item, and mark one item builder-supplied.
+   - Inspect Supabase handover_items or .local-data/uploaded-documents.json.
+   Expected result: Only verified_match, approved, edited_by_builder, and
+   builder_supplied workflow items appear as handover_items. Raw extracted data
+   is not copied into the homeowner-safe rows.
+   Result:
+   Notes:
+
+19. Date added: 2026-06-19
+   Area: Phase 7 unresolved and excluded filtering
+   What to test: Unresolved and excluded workflow items never appear in homeowner package data.
+   Steps:
+   - Keep one item as needs_review, low_confidence, or unmatched.
+   - Exclude another item with a reason.
+   - Publish the package.
+   - Open /client/portal for the project.
+   Expected result: The homeowner portal shows only generated handover_items
+   from approved workflow items. Unresolved items, excluded items, exclusion
+   reasons, and raw AI JSON are not visible.
+   Result:
+   Notes:
+
+20. Date added: 2026-06-19
+   Area: Phase 7 published visibility gate
+   What to test: Generated workflow handover_items are not visible to homeowners before publish.
+   Steps:
+   - Approve a workflow item but do not publish the project.
+   - Open the client portal for that project.
+   - Then publish the package and reopen the client portal.
+   Expected result: Before publish, the homeowner does not see the generated
+   workflow handover item. After publish, the item appears in the relevant
+   homeowner package column.
+   Result:
+   Notes:
+
+21. Date added: 2026-06-19
+   Area: Phase 8 processing publish block
+   What to test: A project cannot publish while workflow processing is incomplete.
+   Steps:
+   - Upload a supported project document.
+   - Before the extraction job completes, open Send package for that project.
+   - Try to publish if the button is available, or tamper-submit the publish form.
+   Expected result: The UI shows a publish blocker for incomplete processing,
+   the button is disabled when the modal has current data, and the backend
+   rejects direct publish attempts with workflow-publish-blocked.
+   Result:
+   Notes:
+
+22. Date added: 2026-06-19
+   Area: Phase 8 failed extraction publish block
+   What to test: Failed extraction jobs block publishing until retried/resolved.
+   Steps:
+   - Upload a supported document whose filename includes fail-extraction.
+   - Open Send package for that project.
+   - Try to publish.
+   Expected result: The UI shows failed extraction/document blockers and the
+   backend refuses publishing with workflow-publish-blocked.
+   Result:
+   Notes: With the same fail-extraction filename, retry will keep failing by design.
+
+23. Date added: 2026-06-19
+   Area: Phase 8 unresolved review publish block
+   What to test: Unresolved workflow items block publishing.
+   Steps:
+   - Upload a document that produces needs_review, low_confidence, or unmatched items.
+   - Leave at least one unresolved.
+   - Open Send package and try to publish.
+   Expected result: The UI lists unresolved review items as a publish blocker
+   and the backend rejects direct publish attempts.
+   Result:
+   Notes:
+
+24. Date added: 2026-06-19
+   Area: Phase 8 resolved review publish allowed
+   What to test: Publishing succeeds once processing is complete and uncertain items are resolved.
+   Steps:
+   - Resolve all workflow review items by approving, editing, excluding, or
+     marking builder-supplied.
+   - Confirm no extraction jobs are queued, processing, or failed.
+   - Open Send package and publish.
+   Expected result: Publish succeeds, generated handover_items remain the
+   homeowner-facing source, and excluded items do not appear in the client portal.
+   Result:
+   Notes:
+
+25. Date added: 2026-06-19
+   Area: Phase 9 required approval checkbox
+   What to test: Publishing is blocked until the builder approval checkbox is checked.
+   Steps:
+   - Resolve all workflow blockers for a project.
+   - Open Send package.
+   - Leave the builder approval checkbox unchecked and try to publish.
+   - Then check it and submit again.
+   Expected result: The unchecked submission is blocked by the browser and by
+   the backend if tampered. Checked submission can proceed if all readiness
+   checks pass.
+   Result:
+   Notes:
+
+26. Date added: 2026-06-19
+   Area: Phase 9 AI approval checkbox
+   What to test: AI-assisted handovers require the AI confirmation checkbox.
+   Steps:
+   - Use a project with AI/workflow extracted items or package-ready spec items.
+   - Open Send package.
+   - Confirm the AI checkbox appears.
+   - Tamper-submit without aiApprovalConfirmed if testing from devtools.
+   Expected result: The backend rejects missing AI confirmation with
+   handover-ai-approval-required, and normal publish stores the AI checkbox text.
+   Result:
+   Notes:
+
+27. Date added: 2026-06-19
+   Area: Phase 9 approval record metadata
+   What to test: Final approval creates a stored approval record.
+   Steps:
+   - Run docs/supabase-add-handover-approvals.sql if using an existing Supabase project.
+   - Publish a ready project with all required checkboxes checked.
+   - Inspect Supabase handover_approvals or .local-data/uploaded-documents.json.
+   Expected result: The approval record stores approved_at, approving builder,
+   handover version, accepted checkbox text, included item IDs, excluded item
+   IDs, AI-generated item count, reviewed item count, and metadata.
+   Result:
+   Notes:
+
+28. Date added: 2026-06-19
+   Area: Phase 10 full checklist
+   What to test: Run the consolidated desktop checklist for upload, AI, review,
+   publish blocking, final approval, homeowner visibility, and permissions.
+   Steps:
+   - Open docs/hunter-testing-checklist.md.
+   - Work through the sections that match your current setup.
+   - Fill in Result/Notes here for any failing or confusing checks.
+   Expected result: The workflow behaves as documented and any failed manual
+   checks are easy to replay from the checklist.
+   Result:
+   Notes:
+
+29. Date added: 2026-06-19
+   Area: Phase 10 published handover immutability
+   What to test: Builder review changes after publish do not silently alter the
+   homeowner-facing handover.
+   Steps:
+   - Publish a project with at least one approved workflow handover item.
+   - Open the homeowner portal and note the visible published item.
+   - Return to /builder/projects and approve, edit, exclude, or mark another
+     workflow item builder-supplied on the same project.
+   - Open the homeowner portal again before republishing.
+   Expected result: The already-published homeowner data stays unchanged until
+   the builder opens Send package and completes final approval/publish again.
+   Result:
+   Notes:
+
+30. Date added: 2026-06-19
+   Area: Phase 10 legacy handover route
+   What to test: The old handover preview route no longer bypasses the final
+   approval checkboxes.
+   Steps:
+   - Open /builder/handover-package.
+   - Use the send action in the page header.
+   Expected result: The action sends you back to /builder/projects so publishing
+   happens through the project Send package modal with readiness checks and
+   required final approval confirmations.
+   Result:
+   Notes:
+
+31. Date added: 2026-06-20
+   Area: 100-item extraction cost and redaction telemetry
+   What to test: The controlled 100-item spec reports extraction usage,
+   dedupe, AI calls/tokens/cost, and redaction counts.
+   Steps:
+   - Add OPENAI_API_KEY and cost-rate env vars if measuring real cost.
+   - Set ENABLE_DEBUG_COST_TESTS=true for the quick JSON route.
+   - Run docs/openai-100-item-cost-test-runbook.md.
+   - Optionally upload docs/demo-assets/100-item-cost-test-spec.csv through a
+     project document upload and compare the project modal metrics.
+   Expected result: The debug route and/or project modal show rows extracted,
+   unique identities, duplicates, cache hits/misses, AI calls/tokens, optional
+   cost estimates, and at least one redaction replacement from the intentional
+   PII/admin fixture row. The debug route also returns testingLogTemplate for
+   copying results back into this file.
+   Result:
+   Notes:
+
+32. Date added: 2026-06-20
+   Area: Source PDF inspection scaffold
+   What to test: A direct manufacturer/supplier PDF URL can be fetched,
+   inspected, hashed, and returned as structured source metadata.
+   Steps:
+   - Set ENABLE_DEBUG_COST_TESTS=true locally.
+   - Start the app.
+   - Follow docs/source-pdf-inspection-runbook.md with a real warranty/manual
+     PDF URL.
+   Expected result: The debug route returns sourceDomain, contentType,
+   sizeBytes, fileHash, textHash, extractedTextCharacters, pageCount, title,
+   optional identityCheck, and warnings without persisting the PDF.
+   Result:
+   Notes:
+
+33. Date added: 2026-06-20
+   Area: 100-item source search and warranty enrichment cost
+   What to test: Run official-source web search and source PDF inspection over
+   the controlled 100-item fixture to estimate enrichment cost.
+   Steps:
+   - Add OPENAI_API_KEY.
+   - Set ENABLE_DEBUG_COST_TESTS=true.
+   - Set OPENAI_SOURCE_ENRICHMENT_MODEL to an available general model, such as
+     gpt-5.4-mini.
+   - Optionally set OPENAI_ENRICHMENT_INPUT_COST_PER_1M,
+     OPENAI_ENRICHMENT_OUTPUT_COST_PER_1M, and OPENAI_WEB_SEARCH_COST_PER_1K.
+   - Start with maxUniqueItems=2 against
+     POST /api/debug/source-enrichment-cost-test.
+   - If the sample looks sane, rerun with maxUniqueItems=40.
+   Expected result: The route reports extraction metrics, unique identities,
+   web search calls, enrichment tokens, source PDF inspection counts/failures,
+   estimated enrichment cost where rates are configured, projected cost for all
+   unique identities, and sample source URLs/warranty findings.
+   Result:
+   Notes: Codex ran an initial full web-search-only pass and a smaller PDF
+   inspection sample on 2026-06-20; see Tested.
+
+34. Date added: 2026-06-20
+   Area: Phase 11 Cloudflare dry-run pipeline
+   What to test: A normal project document upload dispatches source-ready
+   identities to the local Cloudflare dry-run Worker without live enrichment.
+   Steps:
+   - Start the Worker with `npm.cmd run cloudflare:dev`.
+   - Set `CLOUDFLARE_PIPELINE_URL=http://127.0.0.1:8787` in `.env.local`.
+   - Restart the Next.js dev server.
+   - Upload a supported project document from `/builder/projects`.
+   - Reopen the project modal and inspect Upload processing.
+   - Optionally open `http://127.0.0.1:8787/jobs/<document_extraction_job_id>`.
+   Expected result: The extraction job completes, shows source-ready identity
+   counts, and shows `Cloudflare dry-run` queued/skipped status. The Worker job
+   contains dry-run results only. No OpenAI source enrichment, web search,
+   crawling, or live PDF source fetching runs.
+   Result: Partial pass from Codex automated smoke; exact desktop upload still pending.
+   Notes: Worker health/job/queue and modal status rendering were verified, but
+   Codex browser automation could not attach a file to the upload input. Run the
+   real desktop upload once from `/builder/projects` before closing this item.
+
+35. Date added: 2026-06-20
+   Area: Context-first extraction and builder source gaps
+   What to test: Vague, custom, supplier-quote, or unfindable items become
+   builder-review prompts before internet/source enrichment.
+   Steps:
+   - Start the app.
+   - Upload a supported CSV/PDF from `/builder/projects` that includes at least
+     one incomplete item such as "kitchen joinery as per supplier quote" or
+     "builder range bathroom fitting".
+   - Reopen the project modal and inspect Builder review queue.
+   - Resolve one item with Builder supplied info.
+   Expected result: The review queue shows missing fields, builder info needed,
+   or document-context classification reasons. Builder supplied info makes the
+   item project-eligible after final approval, but records metadata that global
+   reuse still requires admin review. No live web search, crawling, source PDF
+   fetching, or paid source enrichment is required for this test.
+   Result:
+   Notes:
+
+36. Date added: 2026-06-20
+   Area: LlamaCloud greenfield integration browser smoke
+   What to test: Hydrated builder review lanes, rich edit submit, quote upload, and client category/care grouping in a real browser.
+   Steps:
+   - Start the app locally.
+   - Open /builder/projects and edit the Bayview project or a project with workflow items.
+   - Confirm lanes render: Ready to accept, Needs detail, Project documents/quotes, Search results ready, Not handover.
+   - Expand an older/local scaffold row and confirm missing original values show Not captured.
+   - Edit manufacturer, supplier, supplier SKU, approved category, warranty, care text, and care guidance label.
+   - Attach a quote to a quote-like item and confirm the upload creates a linked child extraction/re-match before any source search.
+   - Publish only after review, then open /client/portal and confirm items are grouped by approved category with care guidance labels.
+   Expected result: Builder fields save without breaking, quote rows stay gated until quote extraction/re-match, source search is not triggered for unconfirmed unknowns, and homeowners see only approved package fields.
+   Result:
+   Notes: Codex could not run the browser-level check because the local Playwright browser binary is not installed. Lint, build, and route-level scaffold smoke passed; finish this from the desktop browser.
+
+Tested
+
+- 2026-06-20 Codex automated local smoke:
+  - `npm.cmd run lint` passed.
+  - `npm.cmd run build` passed.
+  - Started local dev server on `http://127.0.0.1:3000`.
+  - `/` returned `200`.
+  - Unauthenticated `/admin`, `/builder/projects`, `/builder/handover-package`,
+    `/builder/onboarding`, `/builder/products/new`, `/client/portal`, and
+    `/client/accept-invite?token=test-token` returned `307` login redirects
+    with the expected `next` target preserved.
+  - `POST /api/ai/product-draft` returned a high-confidence James Hardie/Linea
+    Weatherboard source-backed scaffold response when called with valid JSON.
+  - `POST /api/debug/extraction-cost-test` and `POST /api/debug/source-pdf`
+    returned `404` while `ENABLE_DEBUG_COST_TESTS` is not enabled, as expected.
+
+- 2026-06-20 Codex debug scaffold smoke:
+  - Started a temporary debug-enabled dev server on `http://127.0.0.1:3001`
+    with `ENABLE_DEBUG_COST_TESTS=true` and no `OPENAI_API_KEY`.
+  - `POST /api/debug/extraction-cost-test` returned mock-mode metrics,
+    `reviewNeededItemCount`, `failedItemCount`, and a copy-paste
+    `testingLogTemplate` dated `2026-06-20`.
+  - `POST /api/debug/source-pdf` rejected a localhost URL with
+    `Source URL cannot target a private or local host.`
+  - `POST /api/debug/source-pdf` inspected a small public PDF, returned hashes,
+    extracted-text counts, page count, warnings, and `identityCheck` terms.
+  - `npm.cmd run lint` passed.
+  - `npm.cmd run build` passed.
+
+- 2026-06-20 Codex source enrichment cost smoke:
+  - Added `POST /api/debug/source-enrichment-cost-test` for guarded source
+    enrichment cost testing.
+  - A 2-unique-item smoke with PDF inspection returned manufacturer source URLs
+    and direct PDF candidates for Fisher and Paykel and Panasonic products.
+  - Full web-search-only run over the controlled 100-item fixture completed:
+    rows extracted 81, unique identities 34, enriched identities 34, web search
+    calls 122, enrichment input tokens 596807, output tokens 21136, total tokens
+    617943, elapsed time 301864ms, failed enrichment items 0.
+  - Using 2026-06-20 `gpt-5.4-mini` Standard rates from OpenAI pricing
+    ($0.75 input / $4.50 output per 1M tokens), model cost is about $0.543 for
+    the full web-search-only run before web-search call charges. If web search
+    is $10 per 1K calls, 122 calls add about $1.22, for about $1.76 total.
+  - PDF-inspection sample over 10 unique identities completed: web search calls
+    27, source PDFs inspected 9, source PDF failures 5, enrichment input tokens
+    154457, output tokens 5826, total tokens 160283, elapsed time 110711ms.
+  - PDF inspection can recover useful source text for some official PDFs, but
+    failures and runtime show this should become a queued/background workflow
+    before production.
+  - PDF summarisation sample over 3 unique identities completed: 8 web search
+    calls, 3 PDFs inspected, 1 PDF failure, 2 PDF summary calls, 5608 summary
+    input tokens, 443 summary output tokens, 54878 total enrichment tokens,
+    elapsed time 59196ms.
+  - Chunked PDF summarisation run over the remaining/full-ish unique set
+    completed in four batches of 10/10/10/2 selected identities: 32 enriched
+    identities, 97 web search calls, 26 PDFs inspected, 13 PDF failures, 13 PDF
+    summary calls, 42271 PDF-summary input tokens, 2560 PDF-summary output
+    tokens, 552397 total enrichment input tokens, 20797 total output tokens,
+    573194 total tokens, and 432748ms summed route time.
+  - Using Hunter's observed token rates from the first run
+    (7700 input tokens cost $0.002 and 11391 output tokens cost $0.023), the
+    chunked PDF-summarisation model-token cost is about $0.19. At an assumed
+    $10/1K web-search calls, 97 web searches add about $0.97, for about $1.16
+    over 32 enriched identities. Scaling to the usual 34-36 unique identities
+    from this fixture gives a practical estimate of about $1.25-$1.35 before
+    Cloudflare/background infrastructure costs.
+
+- 2026-06-20 Codex real-world scanned spec benchmark:
+  - Input file: `C:\Users\hunte\Downloads\2074 legal signed outline spec.pdf.pdf`.
+  - PDF inspection with pdfplumber found 34 pages, 11.4 MB, and only 14
+    selectable text characters, so this is effectively an image/scanned spec.
+  - Added guarded `POST /api/debug/local-document-cost-test` so local PDFs under
+    Downloads/workspace can be benchmarked with configurable `ocrMaxPages`.
+  - Extraction-only with `ocrMaxPages=6`: OCR recovered 9773 characters from 6
+    sparse pages, extracted 57 rows / 57 unique identities, used 6114 input
+    tokens and 2717 output tokens, and took 44622ms. Output mostly represented
+    front-matter/legal/site-service content.
+  - Extraction-only with `ocrMaxPages=20`: OCR recovered 23743 characters from
+    20 sparse pages, extracted 153 rows / 146 unique identities, used 16868
+    input tokens and 8009 output tokens, and took 233256ms.
+  - Source-search sample on the top 10 repeated/enrichable identities from the
+    20-page OCR extraction, without PDF summaries: 10 enriched identities, 38
+    web-search calls, 157379 source input tokens, 6079 source output tokens,
+    and 81434ms source runtime.
+  - Source-search + PDF-summary sample on the top 10 repeated/enrichable
+    identities: 156 extracted rows, 152 unique identities, 10 enriched
+    identities, 32 web-search calls, 6 PDFs inspected, 1 PDF failure, 5 PDF
+    summary calls, 157285 source input tokens, 5668 source output tokens, and
+    84599ms source runtime.
+  - The real spec is a strong benchmark for scanned/OCR workflows, but the
+    extractor currently over-extracts legal/spec/admin/service lines as
+    candidate items. Do not run full source enrichment over all 150-ish
+    identities until product-vs-admin/service classification is tightened.
+  - Added `docs/real-spec-extraction-workflow.md` to define the target
+    workflow: source-quality inspection, full extraction, classification gate,
+    dedupe/cache lookup, batched source enrichment, review, and publish.
+  - Added source-enrichment classification output to the debug routes so tests
+    now report extracted unique identities separately from source-enrichable
+    unique identities, plus classification counts and samples.
+  - Follow-up extraction/classification with `ocrMaxPages=20`: 156 rows, 149
+    extracted unique identities, 118 source-enrichable unique identities, 47
+    extraction calls, 16868 input tokens, 7963 output tokens, 24831 total
+    tokens, 2 redaction replacements, and 112350ms extraction runtime.
+  - 5-item real-PDF source sample with PDF inspection and PDF summarisation:
+    152 rows, 149 extracted unique identities, 126 source-enrichable unique
+    identities, 5 enriched identities, 18 web-search calls, 4 PDFs inspected, 1
+    PDF failure, 3 PDF summary calls, 91100 source input tokens, 3524 source
+    output tokens, 94624 total source tokens, 113968ms extraction runtime, and
+    41558ms source runtime.
+  - Useful sample source results included Rheem/Zip-style 180L mains-pressure
+    hot water PDF warranty/maintenance detail, Elementi Uno shower mixer PDF
+    warranty detail, and BRANZ appraisal detail for slab/DPM context. Generic
+    cavity batten and raft/slab rows still need builder/admin identity review.
+  - All-page extraction-only run with `ocrMaxPages=40`: 321 rows, 291 extracted
+    unique identities, 30 duplicate identities, 181 source-enrichable unique
+    identities, 81 extraction calls, 30295 input tokens, 15582 output tokens,
+    45877 total tokens, 49285 document text characters, 3 redaction
+    replacements, and 211267ms extraction runtime.
+  - 10-item all-page source-enrichment batch with `ocrMaxPages=40`,
+    `inspectPdfSources=true`, `summarizePdfSources=true`, and
+    `searchContextSize=low` completed: 330 rows, 300 extracted unique
+    identities, 30 duplicate identities, 185 source-enrichable unique
+    identities, 81 extraction calls, 30295 extraction input tokens, 15740
+    extraction output tokens, 46035 extraction total tokens, 49285 document text
+    characters, 3 redaction replacements, 10 enriched identities, 37 web-search
+    calls, 7 PDFs inspected, 2 PDF failures, 5 PDF summary calls, 170489 source
+    input tokens, 5876 source output tokens, 176365 source total tokens,
+    210036ms extraction runtime, and 88236ms source runtime.
+  - The 10-item batch produced useful high-confidence source-backed examples
+    for VENT VB20 cavity batten/vermin strip, Rinnai 180L mains-pressure hot
+    water cylinder, and Newline DryFit shower. It also correctly left generic
+    builder-range tiles blocked/review-needed and marked generic downlights as
+    medium confidence because no exact model was supplied.
+  - Linear projection from the 10-item all-page source batch to the 185
+    source-ready identities is about 685 web searches, 130 PDF inspections, 93
+    PDF summaries, 3.15M source input tokens, and 108.7K source output tokens.
+    Using the earlier rough `gpt-5.4-mini` Standard token rates plus an assumed
+    $10/1K web-search price, this would be roughly $9.70 before retries,
+    persistence, and background infrastructure. Do not run the full 185-item
+    enrichment in one request; continue in 10-item batches after improving
+    caching and exact-identity review.
+
+- 2026-06-20 Codex Phase 11 Cloudflare dry-run smoke:
+  - Added `CLOUDFLARE_PIPELINE_URL=http://127.0.0.1:8787` to `.env.local`.
+  - Started the local Worker with `npm.cmd run cloudflare:dev`; `/health`
+    returned `ok: true`, `service: builder-handover-pipeline`, and
+    `dryRunEnrichment: true`.
+  - Started the Next.js app in `NODE_ENV=test` for this smoke so `.env.local`
+    Supabase/OpenAI keys were not loaded and no paid-service behavior was
+    triggered.
+  - `POST /jobs` accepted `local-phase11-smoke-job` with 2 source-ready
+    candidates and 1 batch. After the local queue `max_batch_timeout`, the job
+    moved to `completed` with 2 `dry_run_not_enriched` results.
+  - Seeded a local scaffold smoke record in `.local-data/uploaded-documents.json`
+    and verified the Bayview project modal showed
+    `phase-11-cloudflare-dry-run-smoke.csv`, 2 rows extracted, 2 unique
+    identities, 0 AI calls, 2 source-ready identities, and
+    `Cloudflare dry-run: 2 candidates queued in 1 batches`.
+  - The exact file upload through the modal could not be automated because the
+    in-app browser runtime does not expose file attachment for file inputs.
+    Keep pending test 34 open for Hunter's desktop/manual upload confirmation.
+
+- 2026-06-20 Codex builder/client review UI slice:
+  - Added builder project review lanes for Ready to accept, Needs detail,
+    Project documents, Search results ready, and Not handover.
+  - Added item edit controls for manufacturer, approved category, supplier,
+    quantity, finish, colour, location, warranty text, care text, and care
+    guidance source label. Colour and quote document kind are review metadata
+    only until first-class schema fields are added.
+  - Quote-like rows now show an explicit upload quote action against the item.
+  - Client portal published package sections now group items by approved
+    category and show care text with manufacturer/supplier/builder/general AI
+    guidance labels.
+  - `npm.cmd run lint` passed.
+  - `npm.cmd run build` passed.
+
+- 2026-06-20 Codex builder/client comparison refinement:
+  - Added an original extracted vs current edited comparison table inside the
+    workflow item edit drawer for item, manufacturer, model, supplier,
+    quantity, finish, colour, location, category, and care label.
+  - Renamed the project document lane to `Project documents/quotes` and
+    simplified builder-facing care label options to Manufacturer, Supplier,
+    Builder supplied, and General AI care guidance.
+  - Older workflow rows without original extraction history gracefully show
+    `Not captured`.
+  - `npm.cmd run lint` passed.
+  - `npm.cmd run build` passed.
+
+- 2026-06-20 Codex LlamaCloud backend data-model slice:
+  - Added Supabase schema and incremental migration support for multi-unit
+    replication batches/units, supplier records, supplier documents, source
+    documents/source versions, care guidance versions, quote-linked extracted
+    items, original-vs-edited item values, category overrides, and care guidance
+    source labels.
+  - Extended workflow TypeScript/local scaffold types so manufacturer and
+    supplier stay distinct, builder edits record value-history snapshots, and
+    generated handover items preserve supplier/category/care/source-version
+    metadata.
+  - Extended AI extraction mapping to capture manufacturer, supplier SKU,
+    quantity, finish/variation, source page/section/snippet, quote references,
+    original extracted values, and care guidance source type without exposing
+    raw AI output to homeowners.
+  - Supabase insertion now attempts rich workflow columns first and falls back
+    to legacy columns plus `raw_extracted_data` for older schemas.
+  - `npm.cmd run lint` passed.
+  - `npm.cmd run build` passed.
+
+- 2026-06-20 Codex LlamaCloud async extraction workflow slice:
+  - Added durable extraction/upload status handling for uploaded, processing,
+    needs_review, partially_reviewed, package_ready, and failed states, with
+    legacy Supabase enum fallbacks where needed.
+  - Rewired AI extraction to request the repo-owned outline-spec schema and
+    normalize the schema output into durable workflow rows with original values,
+    source evidence, supplier/manufacturer separation, quote-reference status,
+    and category override fields.
+  - Supporting quote/invoice/supplier-schedule uploads now link to the parent
+    extracted item, create supplier-document traceability where available,
+    extract child rows, and run database matching again before any source
+    search.
+  - Builder item edits now trigger re-match while preserving the review action;
+    local scaffold retries replace rows for the same extraction job to avoid
+    duplicate extracted items.
+  - `npm.cmd run lint` passed.
+  - `npm.cmd run build` passed.
+
+- 2026-06-20 Codex LlamaCloud greenfield integration pass:
+  - Checked backend/UX contracts for manufacturer, supplierName, supplierSku,
+    builderApprovedCategory, careGuidanceSourceLabel, quoteReferenceStatus,
+    parentExtractedItemId, original_extracted_values, builder_edited_values,
+    source/search readiness, and documentKind=quote supporting uploads.
+  - Added Supplier SKU to the builder item edit form and action payload.
+  - Updated Supabase handover item generation/readback to preserve rich
+    homeowner package fields: manufacturer, supplier name/SKU, approved
+    category, quantity, finish, care guidance label/type, and source-version
+    references, with legacy-column fallback for older schemas.
+  - Tightened source-candidate dispatch so extraction completion sends only
+    builder-confirmed unmatched items; referenced or uploaded quote rows remain
+    blocked until quote extraction/re-match.
+  - Started a local scaffold dev server on `http://127.0.0.1:3002`.
+  - Route-level smoke returned `200` for `/builder/projects`, `/client/portal`,
+    and `/builder/handover-package`; `/client/portal` rendered homeowner
+    sections without raw `raw_extracted_data`, `sourceResults`, or
+    `searchResults` strings in the fetched page.
+  - Playwright browser smoke could not run because the local Playwright
+    Chromium binary is missing.
+  - `npm.cmd run lint` passed.
+  - `npm.cmd run build` passed.
+
+- 2026-06-20 Codex Cloudflare local R2/queue dry-run smoke:
+  - Temporarily moved `.env.local` aside and started Next.js in local scaffold
+    mode so the smoke would not use Supabase/OpenAI keys; restored it after the
+    smoke.
+  - Started Wrangler local Worker on `http://127.0.0.1:8787` with local
+    Durable Object, Queue, and simulated R2 bindings.
+  - `GET /health` returned `ok=true` and `dryRunEnrichment=true`.
+  - `POST /jobs` with one source candidate queued and completed one dry-run
+    batch after the local queue timeout; result status was
+    `dry_run_not_enriched` with no OpenAI or web-search calls.
+  - Added and tested `POST /cache/smoke`; local simulated R2 wrote/read
+    `dry-run/smoke/local-r2-smoke-codex-001.json` with a 236 byte synthetic JSON
+    payload.
+  - `/builder/projects` rendered with HTTP 200 in scaffold mode, but the
+    in-app browser did not activate the Help/Edit modal buttons; real desktop
+    click/upload confirmation is still needed before closing the manual smoke.
+
+- 2026-06-20 Codex Cloudflare D1 pipeline SQL scaffold:
+  - Added `cloudflare/handover-pipeline/schema.sql` for pipeline-only D1 tables:
+    jobs, events, context segments, identity lookup cache, source candidates,
+    source results, source cache index, idempotency keys, and cost meter events.
+  - Added optional Worker D1 prepared-statement writes for dry-run job creation,
+    source candidate queueing, batch completion, and zero-cost dry-run meter
+    events when `PIPELINE_DB` is bound.
+  - Left current Worker behavior unchanged when D1 is not configured; Durable
+    Object status remains the active local path.
+  - Direct Worker module mock check for `GET /health` and `POST /jobs` passed
+    without a D1 binding; `/health` returned `d1Configured=false` and `/jobs`
+    returned `d1State.skipped`.
+  - Later the same day, Wrangler OAuth login succeeded and a remote Cloudflare
+    D1 database named `builder-handover-pipeline` was created in region `OC`.
+  - Bound the database as `PIPELINE_DB` in
+    `cloudflare/handover-pipeline/wrangler.jsonc`.
+  - Applied `cloudflare/handover-pipeline/schema.sql` to the remote database:
+    19 queries, 27 rows read, 36 rows written, database size 0.13 MB.
+  - Remote table readback confirmed `_cf_KV`, `pipeline_jobs`,
+    `pipeline_job_events`, `context_segments`, `identity_lookup_cache`,
+    `source_search_candidates`, `source_search_results`, `source_cache_index`,
+    `idempotency_keys`, and `cost_meter_events`.
+  - No deployed Worker was called, no R2 object was written, and no paid/live
+    source enrichment ran.
+
+- 2026-06-20 Codex Cloudflare progress sync scaffold:
+  - Added a server-side sync action that fetches dry-run Worker job status and
+    persists latest pipeline status, batch counts, result counts, sync time, and
+    sync errors into extraction job usage metrics.
+  - Added a builder project card refresh action for dispatched Cloudflare
+    dry-run jobs and clearer queued/processing/completed status formatting.
+  - `npm.cmd run lint` passed.
+  - `npm.cmd run build` passed.
+  - Still needs a real local Worker UI smoke from `/builder/projects` to click
+    the refresh action after a queue batch completes and confirm the persisted
+    metrics survive page refresh.
+
+- 2026-06-20 Codex Cloudflare public Worker dry-run smoke:
+  - Created Cloudflare Queue `builder-handover-source-enrichment`.
+  - Created R2 bucket `builder-handover-source-cache`; no objects were written.
+  - Set Worker secret `PIPELINE_SHARED_SECRET` with a generated random value;
+    the temporary scratch file used for smoke authentication was deleted after
+    `.env.local` was updated.
+  - Deployed dry-run Worker to
+    `https://builder-handover-pipeline.gpersson2002.workers.dev`.
+  - Public `GET /health` returned `ok=true`, `dryRunEnrichment=true`, and
+    `d1Configured=true`.
+  - Authenticated public `POST /jobs` for `public-dry-run-d1-smoke-001`
+    accepted 2 source candidates, returned `d1State.skipped=false`, and queued
+    1 batch.
+  - Follow-up `GET /jobs/public-dry-run-d1-smoke-001` returned `completed` with
+    1 completed batch, 0 failed batches, and 2 `dry_run_not_enriched` results.
+  - Remote D1 readback confirmed 1 `pipeline_jobs` row, 2
+    `source_search_candidates` rows, 3 `pipeline_job_events` rows, and 1
+    `cost_meter_events` row for the smoke job.
+  - Updated `.env.local` with the public Worker URL and matching shared secret.
+  - No OpenAI, LlamaCloud, web search, live enrichment, source PDF fetch, or R2
+    object write ran.
+
+- 2026-06-20 Codex Cloudflare failed-batch retry primitive:
+  - Added Worker route `POST /jobs/<jobId>/retry-failed`.
+  - Failed dry-run batches now retain candidate payloads in Durable Object job
+    status and can be requeued with an incremented retry attempt.
+  - Added D1 mirror events/updates for `batch_failed` and `batch_retry_queued`.
+  - Direct Worker module mock verified a failed batch is requeued with
+    `retryAttempt=1` and no D1 binding.
+  - Redeployed public dry-run Worker; version `f390a04e-9895-47aa-91e5-2da9873b9299`.
+  - Public `POST /jobs/public-dry-run-d1-smoke-001/retry-failed` returned
+    `no_failed_batches` and `requeuedBatchCount=0`, as expected for a completed
+    job.
+  - No live enrichment, source search, source PDF fetch, or R2 object write ran.
+
+- 2026-06-20 Codex Cloudflare app-side retry action:
+  - Added a Next.js server helper/action that posts to the configured Worker's
+    `POST /jobs/<jobId>/retry-failed` route with the existing shared secret.
+  - The action merges retry status, requeued batch count, retry timestamp, and
+    cleared retry errors into extraction job usage metrics in Supabase or local
+    scaffold mode.
+  - Builder project extraction job cards now show `Retry failed batches` only
+    when stored Cloudflare metrics indicate a failed Worker job or failed batch
+    count.
+  - `npm.cmd run lint` passed.
+  - `npm.cmd run build` passed.
+  - Still needs a failing dry-run UI smoke to prove the button appears,
+    requeues failed batches, and survives a follow-up refresh/page reload.
+
+- 2026-06-20 Codex Cloudflare local retry smoke harness:
+  - Added `scripts/smoke-cloudflare-retry.mjs` and
+    `npm.cmd run cloudflare:smoke:retry`.
+  - The script imports the Worker module from source, mocks Durable Object
+    storage and the Queue, and runs with `PIPELINE_MODE=dry_run_failure_test`.
+  - Verified batch 0 fails once, failed batch candidates are retained,
+    `POST /jobs/<jobId>/retry-failed` requeues exactly one batch with
+    `retryAttempt=1`, and the retry completes with 2 dry-run results.
+  - `npm.cmd run cloudflare:smoke:retry` passed.
+  - No public Cloudflare call, R2 write, OpenAI call, source search, source PDF
+    fetch, or live enrichment ran.
+
+- 2026-06-20 Codex Cloudflare live-pilot admission guard:
+  - Added Worker-side safety metadata and admission checks for
+    `PIPELINE_MODE=live_pilot`.
+  - Live-pilot jobs now require `LIVE_PILOT_ENABLED=true` and respect
+    `LIVE_PILOT_MAX_CANDIDATES`, which defaults to 1.
+  - Live-pilot jobs now also require explicit `LIVE_PILOT_MAX_SEARCHES` and
+    `LIVE_PILOT_MAX_ESTIMATED_COST_USD` before admission.
+  - The Worker still reports `liveEnrichmentEnabled=false` and
+    `dryRunEnrichment=true`; this is a guard only, not live source enrichment.
+  - Added `scripts/smoke-cloudflare-live-guard.mjs` and
+    `npm.cmd run cloudflare:smoke:live-guard`.
+  - `npm.cmd run cloudflare:smoke:live-guard` passed: disabled live-pilot jobs
+    returned 403, over-cap jobs returned 413, missing-budget jobs returned 403,
+    and budgeted one-candidate admission queued dry-run work only.
+  - The live-guard smoke also confirms the admitted safety/budget snapshot is
+    copied onto the queue message and persisted in Worker job status.
+  - The live-guard smoke now also verifies a tampered live-pilot queue message
+    without the admitted safety budget is rejected before processing, while the
+    valid budgeted message still completes as dry-run only.
+  - Completed dry-run batches now expose `budgetUsage` with 0 searches and
+    $0.00 estimated cost in Worker job status; both live-guard and retry smokes
+    assert this.
+  - `npm.cmd run cloudflare:smoke:retry` still passed after the guard change.
+  - No public Cloudflare call, R2 write, OpenAI call, source search, source PDF
+    fetch, or live enrichment ran.
+
+- 2026-06-20 Codex Cloudflare app-side budget usage sync:
+  - Added app-side parsing for Worker `budgetUsage` on `/jobs/<jobId>` status
+    sync.
+  - Status refresh now merges `budgetUsage` into extraction job usage metrics in
+    Supabase or local scaffold mode.
+  - Builder project extraction job cards now show pipeline usage as searches
+    used plus estimated cost, so dry-run jobs visibly report 0 searches and
+    $0.00 estimated cost after refresh.
+  - `node --check src\lib\server\cloudflare-pipeline.ts` passed.
+  - `npm.cmd run lint` passed.
+  - `npm.cmd run build` passed.
+  - `npm.cmd run cloudflare:smoke:live-guard` passed.
+  - `npm.cmd run cloudflare:smoke:retry` passed.
+  - No public Cloudflare call, R2 write, OpenAI call, source search, source PDF
+    fetch, or live enrichment ran.
+
+- 2026-06-20 Codex publish-readiness pipeline gate:
+  - Added a shared workflow readiness blocker for Cloudflare pipeline work that
+    is explicitly marked live/required for publish.
+  - The blocker requires those future live/required jobs to reach `completed`
+    and also blocks if the latest status sync failed.
+  - Current dry-run jobs remain non-blocking unless future metadata marks them
+    required for publish.
+  - `npm.cmd run lint` passed.
+  - `npm.cmd run build` passed.
+  - No public Cloudflare call, R2 write, OpenAI call, source search, source PDF
+    fetch, or live enrichment ran.
+
+- 2026-06-20 Codex source-cache metadata dry-run:
+  - Added planned source-cache references to Worker dry-run results and
+    aggregate job status with `dry-run/source-cache/<job>/<identity>/<source-hash>.json`
+    keys.
+  - Status sync now preserves those planned references in extraction job usage
+    metrics.
+  - Builder project extraction job cards now show `Source cache dry-run`
+    metadata after pipeline status refresh.
+  - D1-bound dry-run completion now mirrors planned keys into
+    `source_cache_index` with `status='planned'` and links
+    `identity_lookup_cache.source_cache_key`.
+  - Updated the retry and live-guard module smokes to assert planned cache keys.
+  - Updated the retry smoke D1 mock to assert planned source-cache index writes.
+  - `node --check cloudflare\handover-pipeline\src\index.js` passed.
+  - `npm.cmd run cloudflare:smoke:retry` passed and confirmed the D1 mock
+    received planned `source_cache_index` writes.
+  - `npm.cmd run cloudflare:smoke:live-guard` passed.
+  - `npm.cmd run lint` passed.
+  - `npm.cmd run build` passed after tightening TypeScript narrowing in the
+    app-side cache-reference parsers.
+  - No public Cloudflare call, R2 write, OpenAI call, source search, source PDF
+    fetch, or live enrichment ran.
+
+- 2026-06-21 Codex Cloudflare safety metadata app sync:
+  - Added app-side parsing for Worker `safety` metadata from job creation and
+    `/jobs/<jobId>` status responses.
+  - Status refresh now persists `pipelineMode`, `dryRunEnrichment`,
+    `liveEnrichmentEnabled`, and the admitted safety/budget snapshot into
+    extraction job usage metrics in Supabase or local scaffold mode.
+  - Builder project extraction job cards now label stored live-pilot guard
+    metadata separately from ordinary dry-run jobs.
+  - This keeps the future live-pilot publish gate tied to stored Worker
+    metadata while ordinary dry-run jobs remain non-blocking.
+
+- 2026-06-21 Codex Cloudflare D1 dry-run smoke:
+  - Added `npm.cmd run cloudflare:smoke:d1-dry-run`.
+  - The smoke imports the Worker module, uses mocked Durable Object, Queue, and
+    D1 bindings, creates a two-candidate dry-run job, processes the queued
+    batch, and verifies D1 prepared-statement writes for pipeline jobs,
+    source candidates, job events, zero-cost meter events, planned source-cache
+    rows, and identity cache links.
+  - First run passed with 2 candidate rows, 3 job events, 1 zero-cost meter
+    event, 2 planned cache rows, 2 identity cache rows, 0 searches, and $0.00
+    estimated cost.
+  - No remote Cloudflare binding, R2 write, OpenAI call, source search, source
+    PDF fetch, or live enrichment ran.
+
+- 2026-06-21 Codex document upload body-size limit fix:
+  - Raised Next Server Action `bodySizeLimit` to `60mb` in `next.config.ts`.
+  - This matches the app's existing upload intent: project documents are
+    validated up to 50 MB and specification PDFs up to 30 MB before storage.
+  - `npm.cmd run lint` passed.
+  - `npm.cmd run build` passed.
+  - Restarted the local dev server and verified `/builder` returned HTTP 200.

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -53,6 +53,11 @@ type SpecExtractResponse = {
 
 type ResultMode = "processed" | "preview" | "text-preview";
 type ActiveOperation = "process-pdf" | "preview-pdf" | "preview-text" | "save-preview" | null;
+type SaveMessage = {
+  text: string;
+  tone: "success" | "warning";
+  showReviewLink: boolean;
+};
 
 const operationLabels: Record<Exclude<ActiveOperation, null>, string> = {
   "preview-pdf": "Previewing PDF extraction",
@@ -124,10 +129,32 @@ export function SpecExtractPanel({ projects }: { projects: ProjectOption[] }) {
   const [resultMode, setResultMode] = useState<ResultMode | null>(null);
   const [selectedPdf, setSelectedPdf] = useState<File | null>(null);
   const [sourceFileName, setSourceFileName] = useState("Local specification demo.pdf");
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [saveMessage, setSaveMessage] = useState<SaveMessage | null>(null);
   const [activeOperation, setActiveOperation] = useState<ActiveOperation>(null);
   const [error, setError] = useState<string | null>(null);
+  const pdfInputRef = useRef<HTMLInputElement | null>(null);
   const isLoading = activeOperation !== null;
+
+  function readSelectedPdfFromInput() {
+    return selectedPdf || pdfInputRef.current?.files?.[0] || null;
+  }
+
+  function handlePdfSelection(file: File | null) {
+    setSelectedPdf(file);
+    setError(null);
+    if (file) {
+      setSourceFileName(file.name);
+    }
+  }
+
+  useEffect(() => {
+    const file = pdfInputRef.current?.files?.[0] || null;
+
+    if (file) {
+      setSelectedPdf(file);
+      setSourceFileName(file.name);
+    }
+  }, []);
 
   async function runExtraction() {
     setActiveOperation("preview-text");
@@ -158,7 +185,9 @@ export function SpecExtractPanel({ projects }: { projects: ProjectOption[] }) {
   }
 
   async function runPdfExtraction() {
-    if (!selectedPdf) {
+    const pdf = readSelectedPdfFromInput();
+
+    if (!pdf) {
       setError("Choose a PDF first.");
       return;
     }
@@ -170,7 +199,7 @@ export function SpecExtractPanel({ projects }: { projects: ProjectOption[] }) {
     setSaveMessage(null);
 
     const formData = new FormData();
-    formData.append("specificationPdf", selectedPdf);
+    formData.append("specificationPdf", pdf);
 
     const response = await fetch("/api/specifications/extract-pdf", {
       method: "POST",
@@ -190,7 +219,9 @@ export function SpecExtractPanel({ projects }: { projects: ProjectOption[] }) {
   }
 
   async function processPdfToReviewQueue() {
-    if (!selectedPdf) {
+    const pdf = readSelectedPdfFromInput();
+
+    if (!pdf) {
       setError("Choose a PDF first.");
       return;
     }
@@ -203,7 +234,7 @@ export function SpecExtractPanel({ projects }: { projects: ProjectOption[] }) {
 
     const formData = new FormData();
     formData.append("projectId", projectId);
-    formData.append("specificationPdf", selectedPdf);
+    formData.append("specificationPdf", pdf);
 
     const response = await fetch("/api/specifications/process-pdf", {
       method: "POST",
@@ -211,8 +242,9 @@ export function SpecExtractPanel({ projects }: { projects: ProjectOption[] }) {
     });
 
     if (!response.ok) {
-      const payload = (await response.json()) as { error?: string };
-      setError(payload.error || "Could not process the uploaded PDF.");
+      const payload = (await response.json()) as { error?: string; detail?: string };
+      const message = payload.error || "Could not process the uploaded PDF.";
+      setError(payload.detail ? `${message} ${payload.detail}` : message);
       setActiveOperation(null);
       return;
     }
@@ -223,7 +255,19 @@ export function SpecExtractPanel({ projects }: { projects: ProjectOption[] }) {
     };
     setResult(payload);
     setResultMode("processed");
-    setSaveMessage(`Processed PDF and sent ${payload.saved_count} items to the ${payload.storage} review queue.`);
+    if (payload.saved_count === 0) {
+      setSaveMessage({
+        text: "Processed PDF, but no valid handover items were found to send. Check the text preview below; this usually means the file is an admin/contract/supporting document rather than a project specification.",
+        tone: "warning",
+        showReviewLink: false,
+      });
+    } else {
+      setSaveMessage({
+        text: `Processed PDF and sent ${payload.saved_count} items to the ${payload.storage} review queue.`,
+        tone: "success",
+        showReviewLink: true,
+      });
+    }
     setActiveOperation(null);
   }
 
@@ -256,11 +300,15 @@ export function SpecExtractPanel({ projects }: { projects: ProjectOption[] }) {
 
     const payload = (await response.json()) as { saved_count: number; storage: string };
     setResultMode("processed");
-    setSaveMessage(`Sent ${payload.saved_count} items to the ${payload.storage} review queue.`);
+    setSaveMessage({
+      text: `Sent ${payload.saved_count} items to the ${payload.storage} review queue.`,
+      tone: "success",
+      showReviewLink: true,
+    });
     setActiveOperation(null);
   }
 
-  const canProcessPdf = Boolean(selectedPdf) && !isLoading;
+  const canProcessPdf = !isLoading;
   const isPreviewResult = resultMode === "preview" || resultMode === "text-preview";
   const progressSteps = activeOperation ? operationSteps[activeOperation] : [];
   const quality = result ? getExtractionQuality(result) : null;
@@ -312,12 +360,12 @@ export function SpecExtractPanel({ projects }: { projects: ProjectOption[] }) {
                 accept="application/pdf"
                 className="mt-2 block w-full rounded-md border border-cyan-200 bg-white px-3 py-2 text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-slate-700"
                 onChange={(event) => {
-                  const file = event.target.files?.[0] || null;
-                  setSelectedPdf(file);
-                  if (file) {
-                    setSourceFileName(file.name);
-                  }
+                  handlePdfSelection(event.target.files?.[0] || null);
                 }}
+                onInput={(event) => {
+                  handlePdfSelection(event.currentTarget.files?.[0] || null);
+                }}
+                ref={pdfInputRef}
                 type="file"
               />
             </div>
@@ -439,11 +487,19 @@ export function SpecExtractPanel({ projects }: { projects: ProjectOption[] }) {
 
       {error ? <p className="mt-4 rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{error}</p> : null}
       {saveMessage ? (
-        <div className="mt-4 flex flex-col gap-3 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800 sm:flex-row sm:items-center sm:justify-between">
-          <span>{saveMessage}</span>
-          <Link className="font-semibold text-emerald-900 underline" href="/builder/specifications/review">
-            Open review queue
-          </Link>
+        <div
+          className={`mt-4 flex flex-col gap-3 rounded-md border p-3 text-sm sm:flex-row sm:items-center sm:justify-between ${
+            saveMessage.tone === "success"
+              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+              : "border-amber-200 bg-amber-50 text-amber-800"
+          }`}
+        >
+          <span>{saveMessage.text}</span>
+          {saveMessage.showReviewLink ? (
+            <Link className="font-semibold text-emerald-900 underline" href="/builder/specifications/review">
+              Open review queue
+            </Link>
+          ) : null}
         </div>
       ) : null}
 
@@ -545,8 +601,8 @@ export function SpecExtractPanel({ projects }: { projects: ProjectOption[] }) {
               </button>
             </div>
           ) : null}
-          {result.proposed_items?.map((item) => (
-            <div className="rounded-md border border-slate-200 bg-white p-4" key={`${item.item_type}-${item.title}`}>
+          {result.proposed_items?.map((item, index) => (
+            <div className="rounded-md border border-slate-200 bg-white p-4" key={`${item.item_type}-${item.title}-${item.location || "no-location"}-${index}`}>
               <div className="flex flex-wrap items-center gap-2">
                 <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-semibold uppercase text-slate-600">
                   {item.item_type}

@@ -1,29 +1,21 @@
 import Link from "next/link";
 import {
   Activity,
-  Bot,
   Building2,
   CalendarCheck2,
   ClipboardCheck,
-  FileText,
   Home,
-  LayoutList,
   PackageCheck,
-  ScrollText,
+  Settings,
   ShieldCheck,
-  Users,
 } from "lucide-react";
 
 const navItems = [
   { label: "Dashboard", href: "/builder", icon: Activity },
   { label: "Projects", href: "/builder/projects", icon: Building2 },
-  { label: "Documents", href: "/builder/documents", icon: FileText },
-  { label: "Specifications", href: "/builder/specifications", icon: ScrollText },
-  { label: "Handover Package", href: "/builder/handover-package", icon: LayoutList },
   { label: "Product Library", href: "/builder/products", icon: PackageCheck },
-  { label: "Project Approvals", href: "/builder/specifications/review", icon: Bot },
   { label: "Maintenance", href: "/builder/maintenance", icon: CalendarCheck2 },
-  { label: "Client Portal", href: "/client/portal", icon: Users },
+  { label: "Settings", href: "/builder/settings", icon: Settings },
   { label: "Portal Switchboard", href: "/", icon: ClipboardCheck },
 ];
 

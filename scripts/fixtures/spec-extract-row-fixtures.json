@@ -1,0 +1,444 @@
+[
+  {
+    "name": "interior flush panel doors uses real row not heading",
+    "markdown": "| INTERIOR DOORS | INTERIOR DOORS | INTERIOR DOORS |\n| Doors Type Size Finish Frames | Hollowcore flushpanelpre-hungdoors 2200mm Semi-glosspaintfinish 19mmpineflushjambforarchitraveswith semi-glosspaintfinish | Interior Door Flush Panel |",
+    "expectedTitle": "Interior flush panel doors",
+    "expectedAction": "review_new_product",
+    "expectedReviewReasonIncludes": "General finish item",
+    "expectedSourceIncludes": [
+      "Hollow core",
+      "flush panel pre-hung doors"
+    ],
+    "forbiddenSourceIncludes": [
+      "INTERIOR DOORS INTERIOR DOORS"
+    ]
+  },
+  {
+    "name": "builder range wall tiling is context before search",
+    "markdown": "| Wall Tiling- Bathroom(free standing bath) | SelectedceramictilesfromtheBuilder'srange.Allwallstiledfloortoceiling,tiled shower.1x tiledfeaturewall.Tiled intowindowrecess.Tiled intowindowjam,sills | SelectedceramictilesfromtheBuilder'srange.Allwallstiledfloortoceiling,tiled shower.1x tiledfeaturewall.Tiled intowindowrecess.Tiled intowindowjam,sills |",
+    "expectedTitle": "Wall Tiling- Bathroom(freestanding bath)",
+    "expectedAction": "request_more_context",
+    "expectedSourceIncludes": [
+      "Builder's range",
+      "All walls tiled floor to ceiling"
+    ],
+    "forbiddenSourceIncludes": [
+      "Selected ceramic tiles from the Builder's range. All walls tiled floor to ceiling, tiled shower. 1 x tiled feature wall. Tiled into window recess. Tiled into window jamb, sills Selected ceramic tiles"
+    ]
+  },
+  {
+    "name": "paint scheme is general finish",
+    "markdown": "| Paint | Interiorcolourschemefourcolours,colour1walls,skirting,doors,door&window frames,ceiling&cornice,colour2WC,colour3FireplaceSurround | Interiorcolourschemefourcolours,colour1walls,skirting,doors,door&window frames,ceiling&cornice,colour2WC,colour3FireplaceSurround |",
+    "expectedTitle": "Interior paint finish and colour scheme",
+    "expectedAction": "review_new_product",
+    "expectedReviewReasonIncludes": "General finish item",
+    "expectedSourceIncludes": [
+      "Interior colour scheme",
+      "colour 1 walls"
+    ],
+    "forbiddenSourceIncludes": [
+      "Interior colour scheme four colours, colour 1 walls, skirting, doors, door&window frames, ceiling&cornice, colour 2 WC, colour 3 Fireplace Surround Interior colour scheme"
+    ]
+  },
+  {
+    "name": "ceramic floor finishes ignores repeated floor heading",
+    "markdown": "| FLOOR FINISHES | FLOOR FINISHES | FLOOR FINISHES |\n| Ceramic tiles Area 1 | Selected ceramic tiles square stopped to timber floor; entry, kitchen, scullery and wet areas | Ceramic tiles square stopped to timber floor; entry, kitchen, scullery and wet areas |",
+    "expectedTitle": "Ceramic tile floor finishes",
+    "expectedAction": "review_new_product",
+    "expectedReviewReasonIncludes": "General finish item",
+    "expectedSourceIncludes": [
+      "Ceramic tiles",
+      "entry",
+      "kitchen"
+    ],
+    "forbiddenSourceIncludes": [
+      "FLOOR FINISHES FLOOR FINISHES"
+    ]
+  },
+  {
+    "name": "paint row maps to canonical paint proposal not generic paint duplicate",
+    "markdown": "| Paint | Interiorcolourschemefourcolours,colour1walls,skirting,doors,door&window frames,ceiling&cornice,colour2WC,colour3FireplaceSurround | Interiorcolourschemefourcolours,colour1walls,skirting,doors,door&window frames,ceiling&cornice,colour2WC,colour3FireplaceSurround |",
+    "expectedTitle": "Interior paint finish and colour scheme",
+    "expectedAction": "review_new_product",
+    "expectedReviewReasonIncludes": "General finish item",
+    "forbiddenTitles": [
+      "Paint"
+    ]
+  },
+  {
+    "name": "bathroom ampersand ceiling row maps to canonical gib ceiling proposal",
+    "markdown": "| Bathroom& | 10mmgibboardceilingsthroughoutstopped to level 4 finish with waterbornesemi-gloss paint finish | 10mmgibboardceilingsthroughoutstopped to level 4 finish with waterbornesemi-gloss paint finish |",
+    "expectedTitle": "GIB board ceiling linings",
+    "expectedAction": "review_new_product",
+    "expectedSourceIncludes": [
+      "gibboard ceilings",
+      "level 4 finish"
+    ],
+    "forbiddenTitles": [
+      "Bathroom&"
+    ]
+  },
+  {
+    "name": "please note electrical positioning note is not extracted as product",
+    "markdown": "| Please Note: | Final positionsof all Electrical itemswillbedetermined onsiteby the electrician dependent on framing, trusses other services. Light switches 1000mm from floor level. | Final positionsof all Electrical itemswillbedetermined onsiteby the electrician dependent on framing, trusses other services. Light switches 1000mm from floor level. |",
+    "forbiddenTitles": [
+      "Please Note:"
+    ]
+  },
+  {
+    "name": "window joinery uses window row not aluminium cover plates",
+    "markdown": "| WindowJoinery Finish Hardware JambLiners Glass | Aluminium Selectedstandard powdercoat lcon PineH3.1flushjamb forarchitraveswithwaterbornesemi-glosspaintfinish Generallyclearfloatthroughout.TranslucentlaminatetoW/C&bathrooms | Aluminium Selectedstandard powdercoat lcon PineH3.1flushjamb forarchitraveswithwaterbornesemi-glosspaintfinish Generallyclearfloatthroughout.TranslucentlaminatetoW/C&bathrooms |\n| | Brushedaluminiumcoverplatestoallseencoverplates 1xwireandconnectiontoexternal swimmingpoolpumpandfiltrationunit,allowed | Brushedaluminiumcoverplatestoallseencoverplates 1xwireandconnectiontoexternal swimmingpoolpumpandfiltrationunit,allowed |",
+    "expectedTitle": "Aluminium window and door joinery",
+    "expectedAction": "review_new_product",
+    "expectedSourceIncludes": [
+      "Window Joinery",
+      "Translucentlaminate"
+    ],
+    "forbiddenSourceIncludes": [
+      "Brushed aluminium coverplates",
+      "external swimmingpoolpump"
+    ]
+  },
+  {
+    "name": "aluminium cover plates alone do not create window joinery",
+    "markdown": "| | Brushedaluminiumcoverplatestoallseencoverplates 1xwireandconnectiontoexternal swimmingpoolpumpandfiltrationunit,allowed | Brushedaluminiumcoverplatestoallseencoverplates 1xwireandconnectiontoexternal swimmingpoolpumpandfiltrationunit,allowed |",
+    "forbiddenTitles": [
+      "Aluminium window and door joinery"
+    ]
+  },
+  {
+    "name": "blank repeated service row extracts air conditioning asset generically",
+    "markdown": "| | 2xwire and connection to external airconditioning unit, allowed 15 amp supply to exterior of building only, no allowance to trench, conduit, wire or connect to air conditioning unit, air conditioning unit supplied and installed by AirConditioning contractor. | 2xwire and connection to external airconditioning unit, allowed 15 amp supply to exterior of building only, no allowance to trench, conduit, wire or connect to air conditioning unit, air conditioning unit supplied and installed by AirConditioning contractor. |",
+    "expectedTitle": "Ducted air conditioning",
+    "expectedAction": "needs_model_code",
+    "expectedReviewReasonIncludes": "Request model/code",
+    "expectedSourceIncludes": [
+      "external air conditioning unit",
+      "air conditioning unit supplied and installed"
+    ],
+    "forbiddenTitles": [
+      "Heat pump system"
+    ]
+  },
+  {
+    "name": "blank repeated service row extracts underfloor heating asset generically",
+    "markdown": "| | Supply and fit underfloor heating mat to tiled bathrooms, including thermostat and final connection by electrician. | Supply and fit underfloor heating mat to tiled bathrooms, including thermostat and final connection by electrician. |",
+    "expectedTitle": "Underfloor heating",
+    "expectedAction": "needs_model_code",
+    "expectedReviewReasonIncludes": "Request model/code",
+    "expectedSourceIncludes": [
+      "under floor heating mat"
+    ]
+  },
+  {
+    "name": "shower row preserves model size door and niche evidence",
+    "markdown": "| Showers Bed 1&2 Type Model Size Door Niche | Selected Newline shower Dry Fit 2 wall 900\u00d7900 Hinged RH When standing outside shower looking at shower door refer floor plan 1 x 400 x 400 shelf on 1 side. Niche to face shower door Chrome Hardware | Selected Newline shower Dry Fit 2 wall 900\u00d7900 Hinged RH When standing outside shower looking at shower door refer floor plan 1 x 400 x 400 shelf on 1 side. Niche to face shower door Chrome Hardware |",
+    "expectedTitle": "Showers Bed 1&2",
+    "expectedAction": "review_new_product",
+    "expectedSourceIncludes": [
+      "Manufacturer/Supplier: Newline",
+      "ProductCode: shower Dry Fit 2 wall 900\u00d7900 Hinged RH",
+      "Model: Dry Fit 2 wall 900\u00d7900 Hinged RH",
+      "Door: Hinged RH",
+      "Niche to face shower door",
+      "Chrome Hardware"
+    ],
+    "forbiddenSourceIncludes": [
+      "Description: Selected Newline shower\n"
+    ]
+  },
+  {
+    "name": "interior flush panel doors normalizes spaced pre-hung doors variant",
+    "markdown": "| INTERIOR DOORS | INTERIOR DOORS | INTERIOR DOORS |\n| Doors Type Size Finish Frames | Hollow core flushpanelpre-hung doors 2200mm Semi-glosspaintfinish 19mm pine flush jamb for architraves with Semi-glosspaintfinish | Interior Door Flush Panel |",
+    "expectedTitle": "Interior flush panel doors",
+    "expectedAction": "review_new_product",
+    "expectedReviewReasonIncludes": "General finish item",
+    "expectedSourceIncludes": [
+      "Hollow core",
+      "flush panel pre-hung doors"
+    ],
+    "forbiddenSourceIncludes": [
+      "flushpanelpre-hung doors",
+      "INTERIOR DOORS INTERIOR DOORS"
+    ]
+  },
+  {
+    "name": "kitchen island bench lights preserves island word",
+    "markdown": "| Kitchen Isl and Bench Lights | TBC | TBC |\n| LED Light strips | Asper Superior Kitchens quote Kitchen:Underneath isl and bench, underneathoverhead cupboardsbreakfast nook Scullery:Underneathoverhead cupboards | Asper Superior Kitchens quote Kitchen:Underneath isl and bench, underneathoverhead cupboardsbreakfast nook Scullery:Underneathoverhead cupboards |",
+    "expectedTitle": "Kitchen Island Bench Lights",
+    "expectedAction": "request_more_context",
+    "expectedCategory": "Electrical",
+    "expectedReviewReasonIncludes": "Request more context",
+    "expectedSourceIncludes": [
+      "Kitchen Island Bench Lights",
+      "TBC"
+    ],
+    "forbiddenSourceIncludes": [
+      "Isl and",
+      "isl and"
+    ]
+  },
+  {
+    "name": "superior kitchens quote normalizes as per wording",
+    "markdown": "| Kitchen | Asper Superior Kitchens quote | Asper Superior Kitchens quote |\n| Scullery | Asper Superior Kitchens quote | Asper Superior Kitchens quote |",
+    "expectedTitle": "Kitchen and joinery supplier quote/source document",
+    "expectedAction": "request_document",
+    "expectedReviewReasonIncludes": "Request source document",
+    "expectedSourceIncludes": [
+      "As per Superior Kitchens quote"
+    ],
+    "forbiddenTitles": [
+      "Kitchen",
+      "Scullery",
+      "Laundry",
+      "Entertainment Unit- drawers",
+      "Kitchen, scullery and laundry joinery"
+    ],
+    "forbiddenSourceIncludes": [
+      "Asper Superior Kitchens"
+    ]
+  },
+  {
+    "name": "pdl iconic electrical row spacing is readable",
+    "markdown": "| Electrical Switching | PDLIconic Series-Silver Shadow(SH)& Crowne(CE) Whitefaceplates PDLlconicSeries,theirresistiblybeautiful newstandard inresidential electrical accessoriesthatdeliverscleverefficiencyto thehome.Winnerofthe2017GoldDesign Award,thelconicrangeisfuture-proofedwith simplesmarthomeconnectivityoptions,such as Bluetoothconnectivity andUSB charging options,tomakelivingamodernconnected life easy.Bluetooth and USBcharging availableasanextracostupgrade. | PDL Iconic Series STYLE |",
+    "expectedTitle": "Electrical Switching",
+    "expectedCategory": "Electrical",
+    "expectedSourceIncludes": [
+      "PDL Iconic Series",
+      "irresistibly beautiful new standard in residential electrical accessories that deliver clever efficiency to the home",
+      "Winner of the 2017 Gold Design Award",
+      "the Iconic range is future-proofed with simple smart home connectivity options",
+      "Bluetooth connectivity and USB charging options",
+      "to make living a modern connected life easy",
+      "USB charging available as an extra cost upgrade"
+    ],
+    "forbiddenSourceIncludes": [
+      "accessoriesthat",
+      "deliverscleverefficiency",
+      "Winnerof",
+      "lconicrange",
+      "simplesmarthomeconnectivityoptions",
+      "USBcharging",
+      "availableasan"
+    ]
+  },
+  {
+    "name": "night walk light spacing is readable for source snippet",
+    "markdown": "| Supply Fit Interior Night Walk Light Hallway | availableasanextracostupgrade. A nightwalk lightfeaturesan integrated motion sensor that switcheson when itdetects movement. LEDs illuminate the way when someone gets up atnight with outdisturbingo thers | / 1 Night Walk STYLE Sensor Light |",
+    "expectedTitle": "Supply Fit Interior Night Walk Light Hallway",
+    "expectedCategory": "Electrical",
+    "expectedAction": "needs_model_code",
+    "expectedSourceIncludes": [
+      "available as an extra cost upgrade",
+      "night walk light features an integrated motion sensor",
+      "switches on when it detects movement",
+      "at night without disturbing others"
+    ],
+    "forbiddenSourceIncludes": [
+      "availableasan",
+      "lightfeaturesan",
+      "switcheson",
+      "itdetects",
+      "outdisturbingo"
+    ]
+  },
+  {
+    "name": "cavity slider handles stay door hardware despite bathroom privacy set text",
+    "markdown": "| Cavity Slider Handles | Selected lever Handles from the Builder's range, privacy sets to bathrooms and WC, 1000 centre above finished floor level Brushed Nickel | Selected lever Handles from the Builder's range, privacy sets to bathrooms and WC, 1000 centre above finished floor level Brushed Nickel |",
+    "expectedTitle": "Cavity Slider Handles",
+    "expectedCategory": "Doors and hardware",
+    "expectedAction": "review_new_product",
+    "expectedSourceIncludes": [
+      "Cavity Slider Handles",
+      "privacy sets"
+    ]
+  },
+  {
+    "name": "engineered timber flooring stays flooring despite nearby tile membrane text",
+    "markdown": "| Engineered Timber | Waterproofmembraneunder tiles laidontimber floor inginwetareas. Engineered Timber Veneer flooring, timber veneerlaminated to astructuralplybase, straightlaid, glued to floor. Stair Treads | Waterproofmembraneunder tiles laidontimber floor inginwetareas. Engineered Timber Veneer flooring, timber veneerlaminated to astructuralplybase, straightlaid, glued to floor. Stair Treads |",
+    "expectedTitle": "Engineered Timber",
+    "expectedCategory": "Flooring",
+    "expectedAction": "review_new_product",
+    "expectedSourceIncludes": [
+      "Engineered Timber",
+      "flooring"
+    ]
+  },
+  {
+    "name": "st michel drawer vanity row is bathroom fixture not waste",
+    "markdown": "| Powder Room Type Model Size Top Panelsfront&side Accent Strip Code | St Michel City 50-900 wall 1 x Drawer 900 wx 420 hx 505 d Copper Terazzo (Vessel Basin Not Included) Blackened Teak Titanium 3032 BT 3 NB:Basinnot included-neds tobe drilled onsite for waste&mixer | St Michel City 50-900 wall 1 x Drawer 900 wx 420 hx 505 d Copper Terazzo (Vessel Basin Not Included) Blackened Teak Titanium 3032 BT 3 NB:Basinnot included-neds tobe drilled onsite for waste&mixer |",
+    "expectedTitle": "St Michel Vanity",
+    "expectedCategory": "Bathroom fixtures",
+    "expectedAction": "review_new_product",
+    "expectedSourceIncludes": [
+      "St Michel",
+      "1 x Drawer"
+    ],
+    "forbiddenTitles": [
+      "St Michel waste"
+    ]
+  },
+  {
+    "name": "back door led sensor light is electrical not door hardware",
+    "markdown": "| Back door LEDSensor Light | LED Exterior Sensor Flood STYLE Light | LED Exterior Sensor Flood STYLE Light |",
+    "expectedTitle": "Back door LED Sensor Light",
+    "expectedCategory": "Electrical",
+    "expectedAction": "review_new_product",
+    "expectedSourceIncludes": [
+      "LED Sensor Light",
+      "Exterior Sensor Flood"
+    ]
+  },
+  {
+    "name": "light sensor near entry garage doors is electrical not door hardware",
+    "markdown": "| way Light Sensor | Entry&garage doorx 1, back doorx 1 | Entry&garage doorx 1, back doorx 1 |",
+    "expectedTitle": "way Light Sensor",
+    "expectedCategory": "Electrical",
+    "expectedAction": "review_new_product",
+    "expectedSourceIncludes": [
+      "Light Sensor",
+      "garage door"
+    ]
+  },
+  {
+    "name": "auto door power point connection is electrical not door hardware",
+    "markdown": "| Appliance wire&fit power points and connection | 2 x Auto door powerpoint&pushbutton | 2 x Auto door powerpoint&pushbutton |",
+    "expectedTitle": "Appliance wire&fit power points and connection",
+    "expectedCategory": "Electrical",
+    "expectedAction": "review_new_product",
+    "expectedSourceIncludes": [
+      "power points",
+      "powerpoint"
+    ]
+  },
+  {
+    "name": "mirror pendant light is electrical not bathroom fixture",
+    "markdown": "| Mirror Light Master Ensuite | Mr Ralph Boho Pendantsx 3 Black TBC sizes | Mr Ralph Boho Pendantsx 3 Black TBC sizes |",
+    "expectedTitle": "Mirror Light Master Ensuite",
+    "expectedCategory": "Electrical",
+    "expectedAction": "request_more_context",
+    "expectedSourceIncludes": [
+      "Mirror Light Master Ensuite",
+      "Pendants"
+    ]
+  },
+  {
+    "name": "bathroom gloss paint row maps to canonical paint not generic bathroom",
+    "markdown": "| Bathroom& ensuites: | gloss paint finish | gloss paint finish |",
+    "expectedTitle": "Interior paint finish and colour scheme",
+    "expectedAction": "review_new_product",
+    "expectedCategory": "Paint and finishes",
+    "expectedReviewReasonIncludes": "General finish item",
+    "forbiddenTitles": [
+      "Bathroom& ensuites:"
+    ]
+  },
+  {
+    "name": "ceramic tile area row keeps canonical floor finish only",
+    "markdown": "| Ceramic tiles Area 1 | Ceramic tiles squarelaid to Level 1:entry. Level 2:kitchen, scullery, dining, lounge, laundry, ensuite bed 1. Level 3:ensuite bed 2, bathroom and master ensuite. from Builder's range. | Ceramic tiles squarelaid to Level 1:entry. Level 2:kitchen, scullery, dining, lounge, laundry, ensuite bed 1. Level 3:ensuite bed 2, bathroom and master ensuite. from Builder's range. |",
+    "expectedTitle": "Ceramic tile floor finishes",
+    "expectedAction": "review_new_product",
+    "expectedCategory": "Flooring",
+    "expectedReviewReasonIncludes": "General finish item",
+    "forbiddenTitles": [
+      "Ceramic tiles Area 1"
+    ],
+    "forbiddenSourceIncludes": [
+      "Bathroom fixtures"
+    ]
+  },
+  {
+    "name": "pvc traps row keeps plumbing fixture not generic fittings duplicate",
+    "markdown": "| Fittings | PVC traps and wastes. Plumbing stacks to be located in the most appropriate positionasassessedby the plumber, thismaymean ina cupboard, kitchen | PVC traps and wastes. Plumbing stacks to be located in the most appropriate positionasassessedby the plumber, thismaymean ina cupboard, kitchen |",
+    "expectedTitle": "PVC traps and wastes",
+    "expectedCategory": "Plumbing fixtures",
+    "expectedAction": "review_new_product",
+    "forbiddenTitles": [
+      "Fittings"
+    ]
+  },
+  {
+    "name": "raft slab row keeps specific insulated slab not duplicate generic raft slab",
+    "markdown": "| Raft Slab | Insulatedconcreteraftslabrein for ced with steel and meshonpoly then damp proof membrane. | Insulatedconcreteraftslabrein for ced with steel and meshonpoly then damp proof membrane. |",
+    "expectedTitle": "Raft slab and concrete floor system",
+    "expectedCategory": "Structural/foundation",
+    "expectedAction": "review_new_product",
+    "forbiddenTitles": [
+      "Raft Slab"
+    ]
+  },
+  {
+    "name": "cladding product row does not create inferred maintenance duplicate",
+    "markdown": "| Type Profile Cavity Batten Finish | Horizontal Accoya Accoya H3.2 Rad Tim Spec P905140 x 19 (115 mmcover) Cavitybatten with verminstrip Painted | Horizontal Accoya Accoya H3.2 Rad Tim Spec P905140 x 19 (115 mmcover) Cavitybatten with verminstrip Painted |",
+    "expectedTitle": "Accoya weatherboard cladding",
+    "expectedCategory": "Cladding",
+    "expectedAction": "review_new_product",
+    "forbiddenTitles": [
+      "Wash exterior cladding and painted finishes"
+    ]
+  },
+  {
+    "name": "code compliance owner work row is readable before save",
+    "markdown": "| - Owners Workor Materialsitemsthataffect the issuingofa Code Compliance Certificatewillneed to beinspectedby council, engineers and properlysignedoff, the wnerisresponsible for suchinspections, re-inspectioncosts, delays ordocumentationrequired for the Owners Workor Materials. |",
+    "expectedTitle": "Producer statements and code compliance documents",
+    "expectedAction": "request_document",
+    "expectedSourceIncludes": [
+      "Owners Work or Materials items that affect",
+      "issuing of a Code Compliance Certificate",
+      "will need to be inspected",
+      "properly signed off",
+      "owner is responsible",
+      "documentation required"
+    ],
+    "forbiddenSourceIncludes": [
+      "Workor",
+      "Materialsit",
+      "issuingofa",
+      "willneed",
+      "beinspectedby",
+      "properlysignedoff",
+      "wnerisresponsible",
+      "documentationrequired"
+    ]
+  },
+  {
+    "name": "custom carpet rug row repairs common spacing without high risk final cleanup",
+    "markdown": "| Carpet-Cus tom Rug | Bremworth 100%NZ Wool Carpet Measurespecific for livingroom 3400 mm x 3400 mmsizetbconsiteby | Bremworth 100%NZ Wool Carpet Measurespecific for livingroom 3400 mm x 3400 mmsizetbconsiteby |",
+    "expectedTitle": "Custom rug carpet",
+    "expectedCategory": "Flooring",
+    "expectedAction": "review_new_product",
+    "expectedSourceIncludes": [
+      "Carpet-Custom Rug",
+      "Measure specific",
+      "3400 mm x 3400 mm size TBC on site by"
+    ],
+    "forbiddenSourceIncludes": [
+      "Cus tom",
+      "Measurespecific",
+      "mmsizetbconsiteby"
+    ]
+  },
+  {
+    "name": "pdl icon series faceplates does not use award year as product code",
+    "markdown": "| Electrical Switching | PDL Jconic Series Whitefaceplates PDLIconic Series, the irresistibly beautiful new standard in residential electrical accessories that deliver clever efficiency to the home. Winner of the 2017 Gold Design Award, the Iconic range is future-proofed with simple smart home connectivity options, such as Bluetoothconnectivity and USBcharging options, to make living a modern connected lifeeasy. Bluetooth and USB charging PDL Iconic Series STYLE | PDL Jconic Series Whitefaceplates PDLIconic Series, the irresistibly beautiful new standard in residential electrical accessories that deliver clever efficiency to the home. Winner of the 2017 Gold Design Award, the Iconic range is future-proofed with simple smart home connectivity options, such as Bluetoothconnectivity and USBcharging options, to make living a modern connected lifeeasy. Bluetooth and USB charging PDL Iconic Series STYLE |",
+    "expectedTitle": "Electrical Switching",
+    "expectedAction": "review_new_product",
+    "expectedCategory": "Electrical",
+    "expectedSourceIncludes": [
+      "PDL Iconic Series",
+      "White faceplates",
+      "2017 Gold Design Award"
+    ],
+    "forbiddenSourceIncludes": [
+      "ProductCode: 2017",
+      "Whitefaceplates",
+      "PDLIconic",
+      "Jconic",
+      "lifeeasy",
+      "HasIdentifier",
+      "SuggestedSearchQuery",
+      "Has Identifier",
+      "Suggested Search Query"
+    ]
+  }
+]

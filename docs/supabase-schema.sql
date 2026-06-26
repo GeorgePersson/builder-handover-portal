@@ -31,10 +31,84 @@ create type public.extracted_item_status as enum (
   'auto_approved',
   'builder_approved',
   'admin_review',
+  'request_more_context',
+  'needs_source_document',
+  'needs_model_code',
   'global_approved',
   'accepted',
   'edited',
   'rejected'
+);
+create type public.uploaded_document_processing_status as enum (
+  'uploaded',
+  'processing',
+  'needs_review',
+  'package_ready',
+  'completed',
+  'failed'
+);
+create type public.document_extraction_job_status as enum (
+  'uploaded',
+  'queued',
+  'processing',
+  'needs_review',
+  'partially_reviewed',
+  'package_ready',
+  'completed',
+  'failed'
+);
+create type public.extracted_item_match_status as enum (
+  'verified_match',
+  'needs_review',
+  'low_confidence',
+  'unmatched'
+);
+create type public.extracted_item_review_status as enum (
+  'verified_match',
+  'needs_review',
+  'low_confidence',
+  'unmatched',
+  'builder_supplied',
+  'edited_by_builder',
+  'excluded',
+  'approved'
+);
+create type public.item_review_action_type as enum (
+  'approved_as_correct',
+  'edited',
+  'supporting_document_uploaded',
+  'excluded',
+  'marked_builder_supplied'
+);
+create type public.uploaded_document_workflow_role as enum (
+  'specification',
+  'quote',
+  'invoice',
+  'supplier_schedule',
+  'manual',
+  'warranty',
+  'photo',
+  'other'
+);
+create type public.care_guidance_source_type as enum (
+  'manufacturer',
+  'supplier',
+  'builder_supplied',
+  'general_ai',
+  'unknown'
+);
+create type public.source_review_status as enum (
+  'pending',
+  'approved',
+  'rejected',
+  'superseded'
+);
+create type public.quote_reference_status as enum (
+  'not_applicable',
+  'referenced',
+  'quote_uploaded',
+  'quote_extracted',
+  'resolved'
 );
 
 create table public.organisations (
@@ -57,6 +131,10 @@ create table public.organisation_members (
 create table public.projects (
   id uuid primary key default gen_random_uuid(),
   organisation_id uuid not null references public.organisations(id) on delete cascade,
+  parent_project_id uuid references public.projects(id) on delete set null,
+  replication_batch_id uuid,
+  unit_label text,
+  is_replication_template boolean not null default false,
   name text not null,
   address text not null,
   project_type text not null,
@@ -66,6 +144,38 @@ create table public.projects (
   created_by uuid references auth.users(id),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
+);
+
+create table public.project_replication_batches (
+  id uuid primary key default gen_random_uuid(),
+  organisation_id uuid not null references public.organisations(id) on delete cascade,
+  source_project_id uuid references public.projects(id) on delete set null,
+  created_by uuid references auth.users(id) on delete set null,
+  batch_name text not null,
+  unit_count integer not null check (unit_count > 0),
+  credit_event_id uuid,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+alter table public.projects
+  add constraint projects_replication_batch_id_fkey
+  foreign key (replication_batch_id)
+  references public.project_replication_batches(id)
+  on delete set null;
+
+create table public.project_units (
+  id uuid primary key default gen_random_uuid(),
+  organisation_id uuid not null references public.organisations(id) on delete cascade,
+  replication_batch_id uuid references public.project_replication_batches(id) on delete set null,
+  template_project_id uuid references public.projects(id) on delete set null,
+  project_id uuid not null references public.projects(id) on delete cascade,
+  unit_label text not null,
+  address_override text,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  unique (replication_batch_id, unit_label),
+  unique (project_id)
 );
 
 create table public.project_clients (
@@ -109,6 +219,56 @@ create table public.documents (
   created_at timestamptz not null default now()
 );
 
+create table public.document_download_events (
+  id uuid primary key default gen_random_uuid(),
+  document_id uuid not null references public.documents(id) on delete cascade,
+  project_id uuid not null references public.projects(id) on delete cascade,
+  downloaded_by uuid references auth.users(id) on delete set null,
+  user_agent text,
+  downloaded_at timestamptz not null default now()
+);
+
+create table public.handover_open_events (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references public.projects(id) on delete cascade,
+  opened_by uuid references auth.users(id) on delete set null,
+  first_opened_at timestamptz not null default now(),
+  last_opened_at timestamptz not null default now(),
+  open_count integer not null default 1 check (open_count >= 1),
+  user_agent text,
+  unique (project_id, opened_by)
+);
+
+create table public.uploaded_documents (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references public.projects(id) on delete cascade,
+  original_filename text not null,
+  file_type text,
+  mime_type text not null,
+  storage_path text not null,
+  workflow_role public.uploaded_document_workflow_role not null default 'specification',
+  parent_extracted_item_id uuid,
+  processing_status public.uploaded_document_processing_status not null default 'uploaded',
+  uploaded_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table public.document_extraction_jobs (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references public.projects(id) on delete cascade,
+  uploaded_document_id uuid not null references public.uploaded_documents(id) on delete cascade,
+  status public.document_extraction_job_status not null default 'uploaded',
+  error_message text,
+  started_at timestamptz,
+  completed_at timestamptz,
+  retry_count integer not null default 0 check (retry_count >= 0),
+  usage_metrics jsonb not null default '{}'::jsonb,
+  redaction_summary jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table public.specification_uploads (
   id uuid primary key default gen_random_uuid(),
   project_id uuid not null references public.projects(id) on delete cascade,
@@ -126,6 +286,20 @@ create table public.products (
   manufacturer text,
   category text,
   created_at timestamptz not null default now()
+);
+
+create table public.suppliers (
+  id uuid primary key default gen_random_uuid(),
+  organisation_id uuid references public.organisations(id) on delete cascade,
+  name text not null,
+  contact_name text,
+  email text,
+  phone text,
+  website_url text,
+  notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (organisation_id, name)
 );
 
 create table public.product_versions (
@@ -164,6 +338,68 @@ create table public.product_sources (
   content_hash text,
   storage_path text,
   retrieved_at timestamptz not null default now()
+);
+
+create table public.source_documents (
+  id uuid primary key default gen_random_uuid(),
+  product_id uuid references public.products(id) on delete cascade,
+  supplier_id uuid references public.suppliers(id) on delete set null,
+  title text not null,
+  source_url text,
+  source_domain text,
+  source_type text not null,
+  review_status public.source_review_status not null default 'pending',
+  file_hash text,
+  text_hash text,
+  storage_path text,
+  checked_at timestamptz not null default now(),
+  detected_effective_date date,
+  created_at timestamptz not null default now()
+);
+
+create table public.source_document_versions (
+  id uuid primary key default gen_random_uuid(),
+  source_document_id uuid not null references public.source_documents(id) on delete cascade,
+  version_number integer not null,
+  source_url text,
+  source_domain text,
+  file_hash text,
+  text_hash text,
+  storage_path text,
+  checked_at timestamptz not null default now(),
+  detected_effective_date date,
+  review_status public.source_review_status not null default 'pending',
+  change_summary text,
+  created_at timestamptz not null default now(),
+  unique (source_document_id, version_number)
+);
+
+create table public.care_guidance_versions (
+  id uuid primary key default gen_random_uuid(),
+  product_id uuid references public.products(id) on delete cascade,
+  supplier_id uuid references public.suppliers(id) on delete set null,
+  source_document_version_id uuid references public.source_document_versions(id) on delete set null,
+  source_type public.care_guidance_source_type not null default 'unknown',
+  source_label text not null,
+  guidance_text text not null,
+  review_status public.source_review_status not null default 'pending',
+  requires_builder_approval boolean not null default true,
+  approved_by uuid references auth.users(id) on delete set null,
+  approved_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create table public.supplier_documents (
+  id uuid primary key default gen_random_uuid(),
+  supplier_id uuid references public.suppliers(id) on delete set null,
+  project_id uuid not null references public.projects(id) on delete cascade,
+  uploaded_document_id uuid references public.uploaded_documents(id) on delete set null,
+  source_extracted_item_id uuid,
+  document_role public.uploaded_document_workflow_role not null default 'quote',
+  warranty_notes text,
+  maintenance_notes text,
+  client_visible boolean not null default false,
+  created_at timestamptz not null default now()
 );
 
 create table public.project_products (
@@ -215,6 +451,153 @@ create table public.extracted_handover_items (
   created_at timestamptz not null default now()
 );
 
+create table public.extracted_items (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references public.projects(id) on delete cascade,
+  source_document_id uuid not null references public.uploaded_documents(id) on delete cascade,
+  extraction_job_id uuid references public.document_extraction_jobs(id) on delete set null,
+  parent_extracted_item_id uuid references public.extracted_items(id) on delete set null,
+  source_quote_document_id uuid references public.uploaded_documents(id) on delete set null,
+  raw_extracted_data jsonb not null default '{}'::jsonb,
+  original_extracted_values jsonb not null default '{}'::jsonb,
+  builder_edited_values jsonb not null default '{}'::jsonb,
+  item_type public.extracted_item_type not null default 'product',
+  product_name text,
+  manufacturer text,
+  brand text,
+  model text,
+  category text,
+  ai_suggested_category text,
+  builder_approved_category text,
+  supplier_id uuid references public.suppliers(id) on delete set null,
+  supplier_name text,
+  supplier text,
+  supplier_sku text,
+  location text,
+  quantity text,
+  variant_or_finish text,
+  warranty_text text,
+  maintenance_text text,
+  care_guidance_source_type public.care_guidance_source_type not null default 'unknown',
+  care_guidance_source_label text,
+  care_guidance_review_required boolean not null default false,
+  warranty_source_version_id uuid references public.source_document_versions(id) on delete set null,
+  manual_source_version_id uuid references public.source_document_versions(id) on delete set null,
+  care_guidance_version_id uuid references public.care_guidance_versions(id) on delete set null,
+  identity_fingerprint text,
+  quote_reference_text text,
+  quote_reference_status public.quote_reference_status not null default 'not_applicable',
+  source_page text,
+  source_section text,
+  source_snippet text,
+  confidence_score integer not null default 0 check (confidence_score between 0 and 100),
+  match_status public.extracted_item_match_status not null default 'unmatched',
+  review_status public.extracted_item_review_status not null default 'needs_review',
+  matched_product_id uuid references public.products(id) on delete set null,
+  approved_by uuid references auth.users(id) on delete set null,
+  approved_at timestamptz,
+  excluded_at timestamptz,
+  exclusion_reason text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.uploaded_documents
+  add constraint uploaded_documents_parent_extracted_item_id_fkey
+  foreign key (parent_extracted_item_id)
+  references public.extracted_items(id)
+  on delete set null;
+
+alter table public.supplier_documents
+  add constraint supplier_documents_source_extracted_item_id_fkey
+  foreign key (source_extracted_item_id)
+  references public.extracted_items(id)
+  on delete set null;
+
+create table public.extracted_item_value_history (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references public.projects(id) on delete cascade,
+  extracted_item_id uuid not null references public.extracted_items(id) on delete cascade,
+  action_id uuid,
+  previous_values jsonb not null default '{}'::jsonb,
+  next_values jsonb not null default '{}'::jsonb,
+  changed_fields text[] not null default '{}',
+  changed_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+create table public.product_matches (
+  id uuid primary key default gen_random_uuid(),
+  extracted_item_id uuid not null references public.extracted_items(id) on delete cascade,
+  matched_product_id uuid references public.products(id) on delete set null,
+  match_status public.extracted_item_match_status not null,
+  match_confidence_score integer not null default 0 check (match_confidence_score between 0 and 100),
+  match_reason text,
+  created_at timestamptz not null default now()
+);
+
+create table public.item_review_actions (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references public.projects(id) on delete cascade,
+  extracted_item_id uuid not null references public.extracted_items(id) on delete cascade,
+  action_type public.item_review_action_type not null,
+  action_by uuid references auth.users(id) on delete set null,
+  previous_review_status public.extracted_item_review_status,
+  next_review_status public.extracted_item_review_status,
+  notes text,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+create table public.handover_items (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references public.projects(id) on delete cascade,
+  source_extracted_item_id uuid references public.extracted_items(id) on delete set null,
+  source_document_id uuid references public.uploaded_documents(id) on delete set null,
+  matched_product_id uuid references public.products(id) on delete set null,
+  item_type public.extracted_item_type not null default 'product',
+  title text not null,
+  manufacturer text,
+  brand text,
+  model text,
+  category text,
+  ai_suggested_category text,
+  builder_approved_category text,
+  supplier_id uuid references public.suppliers(id) on delete set null,
+  supplier_name text,
+  supplier text,
+  supplier_sku text,
+  location text,
+  quantity text,
+  variant_or_finish text,
+  warranty_text text,
+  maintenance_text text,
+  care_guidance_source_type public.care_guidance_source_type not null default 'unknown',
+  care_guidance_source_label text,
+  warranty_source_version_id uuid references public.source_document_versions(id) on delete set null,
+  manual_source_version_id uuid references public.source_document_versions(id) on delete set null,
+  care_guidance_version_id uuid references public.care_guidance_versions(id) on delete set null,
+  approved_by uuid references auth.users(id) on delete set null,
+  approved_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create table public.handover_approvals (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references public.projects(id) on delete cascade,
+  approved_by uuid references auth.users(id) on delete set null,
+  approved_at timestamptz not null default now(),
+  handover_version text not null,
+  builder_confirmation_text text not null,
+  ai_confirmation_text text,
+  included_item_ids uuid[] not null default '{}',
+  excluded_item_ids uuid[] not null default '{}',
+  ai_generated_item_count integer not null default 0 check (ai_generated_item_count >= 0),
+  reviewed_item_count integer not null default 0 check (reviewed_item_count >= 0),
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
 create table public.audit_events (
   id uuid primary key default gen_random_uuid(),
   organisation_id uuid references public.organisations(id) on delete cascade,
@@ -226,21 +609,49 @@ create table public.audit_events (
   created_at timestamptz not null default now()
 );
 
+create table public.audit_logs (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid references public.projects(id) on delete cascade,
+  actor_user_id uuid references auth.users(id) on delete set null,
+  event_type text not null,
+  detail text not null,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
 alter table public.organisations enable row level security;
 alter table public.organisation_members enable row level security;
 alter table public.projects enable row level security;
+alter table public.project_replication_batches enable row level security;
+alter table public.project_units enable row level security;
 alter table public.project_clients enable row level security;
 alter table public.client_requests enable row level security;
 alter table public.documents enable row level security;
+alter table public.document_download_events enable row level security;
+alter table public.handover_open_events enable row level security;
+alter table public.uploaded_documents enable row level security;
+alter table public.document_extraction_jobs enable row level security;
 alter table public.specification_uploads enable row level security;
 alter table public.products enable row level security;
 alter table public.product_versions enable row level security;
 alter table public.product_sources enable row level security;
+alter table public.suppliers enable row level security;
+alter table public.supplier_documents enable row level security;
+alter table public.source_documents enable row level security;
+alter table public.source_document_versions enable row level security;
+alter table public.care_guidance_versions enable row level security;
 alter table public.project_products enable row level security;
 alter table public.maintenance_tasks enable row level security;
 alter table public.maintenance_completions enable row level security;
 alter table public.extracted_handover_items enable row level security;
+alter table public.extracted_items enable row level security;
+alter table public.extracted_item_value_history enable row level security;
+alter table public.product_matches enable row level security;
+alter table public.item_review_actions enable row level security;
+alter table public.handover_items enable row level security;
+alter table public.handover_approvals enable row level security;
 alter table public.audit_events enable row level security;
+alter table public.audit_logs enable row level security;
 
 create or replace function public.is_org_member(target_org uuid)
 returns boolean
@@ -375,6 +786,11 @@ create policy "Members can read their organisations"
 on public.organisations for select
 using (public.is_org_member(id));
 
+create policy "Members can update their organisations"
+on public.organisations for update
+using (public.is_org_member(id))
+with check (public.is_org_member(id));
+
 create policy "Users can read their own memberships"
 on public.organisation_members for select
 using (user_id = auth.uid());
@@ -385,6 +801,16 @@ using (public.is_org_member(organisation_id));
 
 create policy "Members can manage projects"
 on public.projects for all
+using (public.is_org_member(organisation_id))
+with check (public.is_org_member(organisation_id));
+
+create policy "Members can manage project replication batches"
+on public.project_replication_batches for all
+using (public.is_org_member(organisation_id))
+with check (public.is_org_member(organisation_id));
+
+create policy "Members can manage project units"
+on public.project_units for all
 using (public.is_org_member(organisation_id))
 with check (public.is_org_member(organisation_id));
 
@@ -452,6 +878,115 @@ with check (
   )
 );
 
+create policy "Users can create document download events"
+on public.document_download_events for insert
+with check (
+  downloaded_by = auth.uid()
+  and exists (
+    select 1
+    from public.documents d
+    where d.id = document_id
+      and d.project_id = project_id
+      and public.can_access_project(d.project_id)
+      and (
+        d.visible_to_client
+        or exists (
+          select 1 from public.projects p
+          where p.id = d.project_id and public.is_org_member(p.organisation_id)
+        )
+      )
+  )
+);
+
+create policy "Users can read document download events"
+on public.document_download_events for select
+using (
+  downloaded_by = auth.uid()
+  or exists (
+    select 1 from public.projects p
+    where p.id = project_id and public.is_org_member(p.organisation_id)
+  )
+);
+
+create policy "Clients can create handover open events"
+on public.handover_open_events for insert
+with check (
+  opened_by = auth.uid()
+  and exists (
+    select 1
+    from public.projects p
+    where p.id = project_id
+      and p.status = 'published'
+  )
+  and exists (
+    select 1
+    from public.project_clients pc
+    where pc.project_id = project_id
+      and pc.user_id = auth.uid()
+  )
+);
+
+create policy "Clients can update their handover open events"
+on public.handover_open_events for update
+using (
+  opened_by = auth.uid()
+  and exists (
+    select 1
+    from public.project_clients pc
+    where pc.project_id = project_id
+      and pc.user_id = auth.uid()
+  )
+)
+with check (
+  opened_by = auth.uid()
+  and exists (
+    select 1
+    from public.project_clients pc
+    where pc.project_id = project_id
+      and pc.user_id = auth.uid()
+  )
+);
+
+create policy "Users can read handover open events"
+on public.handover_open_events for select
+using (
+  opened_by = auth.uid()
+  or exists (
+    select 1 from public.projects p
+    where p.id = project_id and public.is_org_member(p.organisation_id)
+  )
+);
+
+create policy "Members can manage uploaded workflow documents"
+on public.uploaded_documents for all
+using (
+  exists (
+    select 1 from public.projects p
+    where p.id = project_id and public.is_org_member(p.organisation_id)
+  )
+)
+with check (
+  exists (
+    select 1 from public.projects p
+    where p.id = project_id and public.is_org_member(p.organisation_id)
+  )
+);
+
+create policy "Members can manage document extraction jobs"
+on public.document_extraction_jobs for all
+using (
+  exists (
+    select 1 from public.projects p
+    where p.id = project_id and public.is_org_member(p.organisation_id)
+  )
+)
+with check (
+  exists (
+    select 1 from public.projects p
+    where p.id = project_id and public.is_org_member(p.organisation_id)
+  )
+);
+
 create policy "Members can manage specification uploads"
 on public.specification_uploads for all
 using (
@@ -499,6 +1034,56 @@ on public.product_sources for insert
 to authenticated
 with check (true);
 
+create policy "Members can manage organisation suppliers"
+on public.suppliers for all
+using (organisation_id is null or public.is_org_member(organisation_id))
+with check (organisation_id is null or public.is_org_member(organisation_id));
+
+create policy "Members can manage supplier project documents"
+on public.supplier_documents for all
+using (
+  exists (
+    select 1 from public.projects p
+    where p.id = project_id and public.is_org_member(p.organisation_id)
+  )
+)
+with check (
+  exists (
+    select 1 from public.projects p
+    where p.id = project_id and public.is_org_member(p.organisation_id)
+  )
+);
+
+create policy "Authenticated users can read approved source documents"
+on public.source_documents for select
+to authenticated
+using (review_status = 'approved');
+
+create policy "Authenticated users can create source documents"
+on public.source_documents for insert
+to authenticated
+with check (true);
+
+create policy "Authenticated users can read approved source versions"
+on public.source_document_versions for select
+to authenticated
+using (review_status = 'approved');
+
+create policy "Authenticated users can create source versions"
+on public.source_document_versions for insert
+to authenticated
+with check (true);
+
+create policy "Authenticated users can read approved care guidance"
+on public.care_guidance_versions for select
+to authenticated
+using (review_status = 'approved');
+
+create policy "Authenticated users can create care guidance"
+on public.care_guidance_versions for insert
+to authenticated
+with check (true);
+
 create policy "Members can attach project products"
 on public.project_products for insert
 with check (public.can_access_project(project_id));
@@ -529,6 +1114,29 @@ with check (
 create policy "Accessible users can read maintenance tasks"
 on public.maintenance_tasks for select
 using (public.can_access_project(project_id));
+
+create policy "Accessible users can create maintenance completions"
+on public.maintenance_completions for insert
+with check (
+  completed_by = auth.uid()
+  and exists (
+    select 1
+    from public.maintenance_tasks mt
+    where mt.id = maintenance_task_id
+      and public.can_access_project(mt.project_id)
+  )
+);
+
+create policy "Accessible users can read maintenance completions"
+on public.maintenance_completions for select
+using (
+  exists (
+    select 1
+    from public.maintenance_tasks mt
+    where mt.id = maintenance_task_id
+      and public.can_access_project(mt.project_id)
+  )
+);
 
 create policy "Members can manage extracted handover items"
 on public.extracted_handover_items for all
@@ -563,6 +1171,120 @@ using (
   )
 );
 
+create policy "Members can manage workflow extracted items"
+on public.extracted_items for all
+using (
+  exists (
+    select 1 from public.projects p
+    where p.id = project_id and public.is_org_member(p.organisation_id)
+  )
+)
+with check (
+  exists (
+    select 1 from public.projects p
+    where p.id = project_id and public.is_org_member(p.organisation_id)
+  )
+);
+
+create policy "Members can read extracted item value history"
+on public.extracted_item_value_history for select
+using (
+  exists (
+    select 1 from public.projects p
+    where p.id = project_id and public.is_org_member(p.organisation_id)
+  )
+);
+
+create policy "Members can create extracted item value history"
+on public.extracted_item_value_history for insert
+with check (
+  exists (
+    select 1 from public.projects p
+    where p.id = project_id and public.is_org_member(p.organisation_id)
+  )
+);
+
+create policy "Members can read workflow product matches"
+on public.product_matches for select
+using (
+  exists (
+    select 1
+    from public.extracted_items ei
+    join public.projects p on p.id = ei.project_id
+    where ei.id = extracted_item_id and public.is_org_member(p.organisation_id)
+  )
+);
+
+create policy "Members can create workflow product matches"
+on public.product_matches for insert
+with check (
+  exists (
+    select 1
+    from public.extracted_items ei
+    join public.projects p on p.id = ei.project_id
+    where ei.id = extracted_item_id and public.is_org_member(p.organisation_id)
+  )
+);
+
+create policy "Members can manage workflow review actions"
+on public.item_review_actions for all
+using (
+  exists (
+    select 1 from public.projects p
+    where p.id = project_id and public.is_org_member(p.organisation_id)
+  )
+)
+with check (
+  exists (
+    select 1 from public.projects p
+    where p.id = project_id and public.is_org_member(p.organisation_id)
+  )
+);
+
+create policy "Project users can read published handover items"
+on public.handover_items for select
+using (
+  exists (
+    select 1 from public.projects p
+    where p.id = project_id
+      and p.status = 'published'
+      and public.can_access_project(p.id)
+  )
+);
+
+create policy "Members can manage handover items"
+on public.handover_items for all
+using (
+  exists (
+    select 1 from public.projects p
+    where p.id = project_id and public.is_org_member(p.organisation_id)
+  )
+)
+with check (
+  exists (
+    select 1 from public.projects p
+    where p.id = project_id and public.is_org_member(p.organisation_id)
+  )
+);
+
+create policy "Members can read handover approvals"
+on public.handover_approvals for select
+using (
+  exists (
+    select 1 from public.projects p
+    where p.id = project_id and public.is_org_member(p.organisation_id)
+  )
+);
+
+create policy "Members can create handover approvals"
+on public.handover_approvals for insert
+with check (
+  exists (
+    select 1 from public.projects p
+    where p.id = project_id and public.is_org_member(p.organisation_id)
+  )
+);
+
 create policy "Members can create project clients"
 on public.project_clients for insert
 with check (
@@ -586,4 +1308,24 @@ create policy "Members can create project audit"
 on public.audit_events for insert
 with check (
   organisation_id is not null and public.is_org_member(organisation_id)
+);
+
+create policy "Members can read workflow audit logs"
+on public.audit_logs for select
+using (
+  project_id is not null
+  and exists (
+    select 1 from public.projects p
+    where p.id = project_id and public.is_org_member(p.organisation_id)
+  )
+);
+
+create policy "Members can create workflow audit logs"
+on public.audit_logs for insert
+with check (
+  project_id is not null
+  and exists (
+    select 1 from public.projects p
+    where p.id = project_id and public.is_org_member(p.organisation_id)
+  )
 );

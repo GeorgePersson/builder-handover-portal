@@ -102,6 +102,18 @@ function getStatusAdvice(item: ExtractedHandoverItem) {
     return "This item still needs admin review. Strong source snippets and conservative confidence make that decision easier.";
   }
 
+  if (item.status === "request_more_context") {
+    return "This item is source-backed but needs builder context before approval. Confirm whether it is a true handover item and add any missing selection details.";
+  }
+
+  if (item.status === "needs_source_document") {
+    return "This item references a quote, manual, warranty, certificate, or supporting source document. Upload/link that evidence before approval.";
+  }
+
+  if (item.status === "needs_model_code") {
+    return "This item appears real but needs a brand, supplier, model, product code, or clearer identifier before matching manuals and warranties.";
+  }
+
   if (item.status === "builder_approved" || item.status === "global_approved") {
     return "This item has already been approved. Re-check the source before changing title, category, or confidence.";
   }
