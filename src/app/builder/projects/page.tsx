@@ -77,6 +77,7 @@ export default async function ProjectsPage({
       extractedItems={extractedItems}
       extractedWorkflowItems={extractedWorkflowItems}
       extractionJobs={extractionJobs}
+      initialProjectId={params.projectId}
       inviteToken={params.inviteToken}
       maintenanceTasks={maintenanceTasks}
       productVersions={productVersions}

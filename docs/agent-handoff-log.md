@@ -1,5 +1,155 @@
 # Agent Handoff Log
 
+## 2026-06-26 - Phased Work Cleaned Up Into Remaining Work Roadmap
+
+### Trigger
+
+User asked to complete the phased work document, remove parts already done from the active work list, and provide context where work is not complete.
+
+### Changes
+
+- `docs/phased-work.md`
+  - Rewrote the file as a current/future roadmap instead of a mixed history list.
+  - Kept completed work only as concise context under each phase so future agents do not repeat it.
+  - Moved remaining actionable work into explicit numbered lists for each phase.
+  - Kept `/builder/projects` hardening as the active slice and pointed to `docs/builder-project-workspace-ui-contract.md` as the regression source of truth.
+  - Preserved context for unfinished areas: browser/visual test hardening, fresh Docling upload smoke, manual checklist completion states, quote linking, per-section document completion, client-safe output, audit consistency, and Cloudflare/OpenNext production hardening.
+
+### Verification
+
+- To run after this handoff entry: `npm.cmd run lint` and `npm.cmd run build`.
+
+## 2026-06-26 - Project Workspace Next Steps Added To Phased Work
+
+### Trigger
+
+User asked to make a list of the next steps and add them into the phased work document.
+
+### Changes
+
+- `docs/phased-work.md`
+  - Added `Immediate Next Steps - Project Workspace Hardening` near the top of the stable phase-routing document.
+  - Pointed future agents to `docs/builder-project-workspace-ui-contract.md` as the `/builder/projects` UI source of truth.
+  - Captured next work for Playwright/browser smoke coverage, visual regression snapshots, demo browser smoke, React/Next server-action upload-form warning guardrails, separate Docling/Turbopack NFT warning hardening, systemic extraction fixture discipline, and lint/build verification.
+  - Updated Phase 1 current state to describe the standalone project workspace, dashboard `?projectId=...` deep links, module filters, sidebar client access/status, database-autofill/manual item flow, and documents/legal upload.
+
+### Verification
+
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed.
+- Build still reports known Docling/Turbopack NFT tracing warnings from the existing document-context/Docling import path.
+
+## 2026-06-26 - Project Details + Add Document Side-by-Side Regression Fix
+
+### Trigger
+
+User reported a regression in `/builder/projects`: Project details and Add client document were stacked vertically, leaving the top card too tall. User wanted Add client document moved next to Project details because both are short admin sections.
+
+### Changes
+
+- `src/components/builder/projects-workspace.tsx`
+  - Changed the top project/admin card wrapper from a vertical stack to a responsive two-column grid on wide screens.
+  - Project details remains the larger left panel.
+  - Add client document sits in the smaller right panel.
+  - Kept the upload server-action form free of explicit `encType`/`method` so the React/Next warning stays fixed.
+
+### Verification
+
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed.
+- Build still reports known Docling/Turbopack NFT tracing warnings from the existing document-context/Docling import path.
+
+## 2026-06-26 - Checklist Groups + Vertical Entry Boxes Screenshot Fix
+
+### Trigger
+
+User repeated that `/builder/projects` still had unused side space, still used side-by-side columns for data entry, and asked to rename the checklist section to `Handover Items & Products` with clickable group/category headers such as Exterior/Interior.
+
+### Changes
+
+- `src/components/builder/projects-workspace.tsx`
+  - Reduced outer page gutters and narrowed the read-only right sidebar so the editable content area uses more horizontal space.
+  - Converted Project details, Add client document, Add handover item, and expanded item edit forms from side-by-side field grids into stacked vertical entry boxes.
+  - Renamed the checklist section heading to `Handover Items & Products`.
+  - Added prominent clickable group/category filter buttons above the checklist list:
+    - `All items` button clears the category filter.
+    - Each actual checklist category becomes a clickable filter button.
+    - Category buttons show ready/total counts.
+  - Kept text search, status, missing-section, source, and completion-state filters as secondary filters below the group buttons.
+
+### Verification
+
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed.
+- Build still reports known Docling/Turbopack NFT tracing warnings from the existing document-context/Docling import path.
+
+### Remaining Work / Recommendation
+
+- Browser-refresh `/builder/projects`, open a project, and verify the checklist now uses the requested title and group chips.
+- If the page still visually leaves too much dead space at the far sides, the next pass should inspect the app shell/sidebar widths in-browser and consider reducing the persistent left navigation width or making it collapsible.
+
+## 2026-06-26 - Dashboard Row Deep Links + Server Action File Form Warning Fix
+
+### Trigger
+
+User asked for every row under dashboard panels to be clickable and reported a runtime console error when opening a project/saving a document: React/Next warned that a server-action form cannot specify `encType`/`method` because React supplies those automatically.
+
+### Changes
+
+- `src/app/builder/page.tsx`
+  - Active project rows link to `/builder/projects?projectId=<id>`.
+  - Client request rows link to the related project workspace.
+  - Package rows link to the related project workspace.
+  - Upcoming maintenance rows link to `/builder/maintenance#project-<id>`.
+  - Dashboard `Row` now accepts optional `href` and renders as a full-row `Link` when present.
+- `src/app/builder/projects/page.tsx`
+  - Passes `searchParams.projectId` to `ProjectsWorkspace`.
+- `src/components/builder/projects-workspace.tsx`
+  - Adds `initialProjectId` prop and initializes selected project from it when valid.
+  - Removed explicit `encType="multipart/form-data"` from the `createDocumentAction` server-action form. React/Next server actions provide the correct form encoding automatically; specifying it caused the console warning.
+- `src/app/builder/maintenance/page.tsx`
+  - Added project-card anchors for dashboard maintenance deep links.
+
+### Validation
+
+- `npm.cmd run lint` passed before this handoff entry.
+- `npm.cmd run build` passed before this handoff entry; only known Docling/Turbopack NFT tracing warnings appeared.
+- Browser smoke attempt reached local dev auth redirect, so authenticated runtime click verification was blocked by login state in the browser session.
+
+## 2026-06-26 - Builder Dashboard Client Requests Panel
+
+### Trigger
+
+User asked to remove the dashboard Admin review metric and Admin review notifications panel, replacing the panel with Client requests.
+
+### Changes
+
+- `src/app/builder/page.tsx`
+  - Removed the `Admin review` top metric.
+  - Removed `Admin review notifications` panel and the extracted-item admin-review queue references from the builder dashboard.
+  - Added/kept `Client requests` as a top metric.
+  - Added a `Client requests` dashboard panel showing waiting client requests with title, details/location fallback, and status.
+  - Updated dashboard description to focus on active projects, ready packages, client requests, and maintenance follow-up.
+
+## 2026-06-26 - Hide Product Library Nav + Database Fill Direction
+
+### Trigger
+
+User asked to remove the Product Library section and asked whether Codex or ChatGPT/GPT-5.5 could help start filling the database.
+
+### Changes
+
+- `src/components/layout/app-sidebar.tsx`
+  - Removed the visible builder sidebar `Product Library` nav item.
+  - Kept `/builder/products` and underlying product/autofill database functionality in place so add-item autofill and future admin/database workflows are not broken.
+
+### Database direction
+
+- Use Codex for implementation work: importer scripts, admin review queues, dedupe/matching, schema migrations, fixtures, and tests.
+- Use GPT/ChatGPT-style models for source-backed extraction and normalization only: parse manufacturer PDFs, supplier CSVs, invoices, manuals, spec sheets, and uploaded docs into structured candidate rows with evidence.
+- Do not seed the database with hallucinated product catalogue rows. Every database row should carry source evidence, confidence, and review status.
+- Best first pipeline: manual item entries + uploaded handover docs/spec sheets -> candidate product records -> dedupe/normalize -> builder/admin review -> approved database rows.
+
 ## 2026-06-26 - GitHub PR Cleanup
 
 ### Trigger

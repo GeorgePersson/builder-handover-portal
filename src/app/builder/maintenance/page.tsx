@@ -44,7 +44,7 @@ export default async function MaintenancePage({
 
         <section className="mt-6 grid gap-4 lg:grid-cols-2">
           {projectCards.map(({ project, tasks }) => (
-            <article className="rounded-lg border border-slate-200 bg-white p-5" key={project.id}>
+            <article className="rounded-lg border border-slate-200 bg-white p-5 scroll-mt-6" id={`project-${project.id}`} key={project.id}>
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <div className="flex items-center gap-2">

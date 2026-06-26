@@ -5,7 +5,6 @@ import {
   CalendarCheck2,
   ClipboardCheck,
   Home,
-  PackageCheck,
   Settings,
   ShieldCheck,
 } from "lucide-react";
@@ -13,7 +12,6 @@ import {
 const navItems = [
   { label: "Dashboard", href: "/builder", icon: Activity },
   { label: "Projects", href: "/builder/projects", icon: Building2 },
-  { label: "Product Library", href: "/builder/products", icon: PackageCheck },
   { label: "Maintenance", href: "/builder/maintenance", icon: CalendarCheck2 },
   { label: "Settings", href: "/builder/settings", icon: Settings },
   { label: "Portal Switchboard", href: "/", icon: ClipboardCheck },

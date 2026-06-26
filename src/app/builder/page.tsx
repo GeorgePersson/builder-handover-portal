@@ -1,6 +1,5 @@
 import Link from "next/link";
 import {
-  Bell,
   Building2,
   CalendarCheck2,
   LayoutDashboard,
@@ -19,14 +18,6 @@ import {
 import { formatDate } from "@/lib/utils";
 
 const packageReadyStatuses = new Set(["accepted", "auto_approved", "builder_approved", "global_approved"]);
-const adminReviewStatuses = new Set([
-  "admin_review",
-  "edited",
-  "proposed",
-  "request_more_context",
-  "needs_source_document",
-  "needs_model_code",
-]);
 
 export default async function BuilderPortalPage() {
   const [projects, specifications, extractedItems, maintenanceTasks, clientRequests] =
@@ -39,7 +30,6 @@ export default async function BuilderPortalPage() {
     ]);
 
   const readyItems = extractedItems.filter((item) => packageReadyStatuses.has(item.status));
-  const awaitingAdmin = extractedItems.filter((item) => adminReviewStatuses.has(item.status));
   const handedOverProjects = projects.filter((project) => project.status === "published");
   const openClientRequests = clientRequests.filter((request) =>
     ["submitted", "ai_checking", "admin_review"].includes(request.status),
@@ -58,15 +48,14 @@ export default async function BuilderPortalPage() {
               Open projects
             </Link>
           }
-          description="A single view of active projects, admin review noise, packages ready to send, and client request follow-up."
+          description="A single view of active projects, packages ready to send, client requests, and maintenance follow-up."
           eyebrow="Builder company"
           icon={LayoutDashboard}
           title="Dashboard"
         />
 
-        <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <Metric icon={Building2} label="Active projects" value={projects.length} />
-          <Metric icon={Bell} label="Admin review" value={awaitingAdmin.length} />
           <Metric icon={Send} label="Ready to send" value={readyItems.length} />
           <Metric icon={PackageCheck} label="Handed over" value={handedOverProjects.length} />
           <Metric icon={UserRoundSearch} label="Client requests" value={openClientRequests.length} />
@@ -82,6 +71,7 @@ export default async function BuilderPortalPage() {
             {projects.map((project) => (
               <Row
                 detail={`${project.clientName} - handover ${formatDate(project.handoverDate)}`}
+                href={`/builder/projects?projectId=${encodeURIComponent(project.id)}`}
                 key={project.id}
                 label={project.name}
                 meta={project.status.replaceAll("_", " ")}
@@ -91,21 +81,25 @@ export default async function BuilderPortalPage() {
 
           <DashboardPanel
             actionHref="/builder/projects"
-            actionLabel="Open review items"
-            icon={Bell}
-            title="Admin review notifications"
+            actionLabel="Open projects"
+            icon={UserRoundSearch}
+            title="Client requests"
           >
-            {awaitingAdmin.length ? (
-              awaitingAdmin.slice(0, 5).map((item) => (
+            {openClientRequests.length ? (
+              openClientRequests.slice(0, 5).map((request) => (
                 <Row
-                  detail={item.reviewReason || item.extractedText}
-                  key={item.id}
-                  label={item.title}
-                  meta={`${item.confidenceScore}%`}
+                  detail={
+                    request.details ||
+                    `${request.requestType.replaceAll("_", " ")} request${request.location ? ` - ${request.location}` : ""}`
+                  }
+                  href={`/builder/projects?projectId=${encodeURIComponent(request.projectId)}`}
+                  key={request.id}
+                  label={request.title}
+                  meta={request.status.replaceAll("_", " ")}
                 />
               ))
             ) : (
-              <EmptyRow text="No admin review items are waiting." />
+              <EmptyRow text="No client requests are waiting." />
             )}
           </DashboardPanel>
 
@@ -123,6 +117,7 @@ export default async function BuilderPortalPage() {
               return (
                 <Row
                   detail={projectReadyCount ? `${projectReadyCount} items ready for builder confirmation` : "No package-ready items yet"}
+                  href={`/builder/projects?projectId=${encodeURIComponent(project.id)}`}
                   key={project.id}
                   label={project.name}
                   meta={projectReadyCount ? "ready" : "draft"}
@@ -140,6 +135,7 @@ export default async function BuilderPortalPage() {
             {maintenanceTasks.slice(0, 5).map((task) => (
               <Row
                 detail={`${task.relatedProduct} - due ${formatDate(task.dueDate)}`}
+                href={`/builder/maintenance#project-${encodeURIComponent(task.projectId)}`}
                 key={task.id}
                 label={task.title}
                 meta={task.status}
@@ -202,9 +198,9 @@ function DashboardPanel({
   );
 }
 
-function Row({ detail, label, meta }: { detail: string; label: string; meta: string }) {
-  return (
-    <article className="grid gap-2 px-5 py-4 sm:grid-cols-[1fr_auto] sm:items-start">
+function Row({ detail, href, label, meta }: { detail: string; href?: string; label: string; meta: string }) {
+  const content = (
+    <>
       <div>
         <p className="text-sm font-semibold text-slate-950">{label}</p>
         <p className="mt-1 text-sm leading-6 text-slate-600">{detail}</p>
@@ -212,8 +208,20 @@ function Row({ detail, label, meta }: { detail: string; label: string; meta: str
       <span className="w-fit rounded-md bg-slate-100 px-2.5 py-1 text-xs font-semibold capitalize text-slate-700">
         {meta}
       </span>
-    </article>
+    </>
   );
+
+  const className = "grid gap-2 px-5 py-4 transition hover:bg-slate-50 sm:grid-cols-[1fr_auto] sm:items-start";
+
+  if (href) {
+    return (
+      <Link aria-label={`Open ${label}`} className={className} href={href}>
+        {content}
+      </Link>
+    );
+  }
+
+  return <article className={className}>{content}</article>;
 }
 
 function EmptyRow({ text }: { text: string }) {
