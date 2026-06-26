@@ -1,5 +1,29 @@
 # Agent Handoff Log
 
+## 2026-06-26 - GitHub PR Cleanup
+
+### Trigger
+
+User said the GitHub project was messy and asked for cleanup.
+
+### Actions
+
+- Created one consolidated open PR:
+  - #16 `feature/manual-entry-autofill-flow` -> `main`
+  - https://github.com/GeorgePersson/builder-handover-portal/pull/16
+- Closed stale stacked Codex PRs #1-#15 as superseded by PR #16.
+- Deleted remote branches that were fully contained in the consolidated branch:
+  - `codex/builder-handover-portal`
+  - `codex/docling-local-context`
+  - `codex/llamacloud-greenfield`
+  - `spike/unstructured-document-context`
+- Left remaining unmerged old Codex remote branches intact so no unmerged work is destroyed.
+
+### Result
+
+- GitHub open PR list now has one PR: #16.
+- Remaining noisy branch refs are archival/unmerged Codex branches; safe to review/delete later if the user wants a harder branch purge.
+
 ## 2026-06-26 - GitHub Branch Push Handoff
 
 ### Trigger
