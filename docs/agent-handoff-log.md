@@ -1,5 +1,29 @@
 # Agent Handoff Log
 
+## 2026-06-26 - GitHub Branch Push Handoff
+
+### Trigger
+
+User asked to push the current branch and any branches waiting on GitHub because the last push was four days ago.
+
+### Pushes
+
+- Committed current workspace on `feature/manual-entry-autofill-flow`:
+  - `d8f3b40 feat: add manual handover item workflow`
+- Pushed new remote branch:
+  - `origin/feature/manual-entry-autofill-flow`
+- Pushed new remote branch:
+  - `origin/spike/unstructured-document-context`
+- Confirmed existing branches were already up to date on origin:
+  - `origin/codex/builder-handover-portal`
+  - `origin/codex/docling-local-context`
+  - `origin/codex/llamacloud-greenfield`
+
+### Notes
+
+- Local-only `.codex/` and `.hermes/` folders were intentionally left untracked and not pushed.
+- This entry is the post-push handoff note and will be committed/pushed as a docs-only follow-up.
+
 ## 2026-06-26 - Remove Redundant Add Item Mode Toggle
 
 ### Trigger
