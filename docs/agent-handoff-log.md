@@ -1,4 +1,1300 @@
 # Agent Handoff Log
+
+## 2026-06-26 - Remove Redundant Add Item Mode Toggle
+
+### Trigger
+
+User said the Add handover item modal did not need the Manual/Search toggle because the existing form already supports both manual item entry and database autofill suggestions in one flow. User also asked to be told in the future when a proposed split is already covered by one combined control.
+
+### Changes
+
+- `src/components/builder/projects-workspace.tsx`
+  - Removed `entryMode` state and the Search database / Manual add segmented switch from `AddHandoverItemForm`.
+  - Kept the automatic database suggestions triggered by the item title.
+  - Kept manual add behavior by allowing the same form to submit without choosing a database suggestion.
+  - Updated helper copy to explain the combined flow: type details, suggestions appear automatically, choose one for autofill or continue manually.
+  - Simplified the submit label to `Add item` unless a database suggestion is selected.
+
+### Verification
+
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed.
+- Build still reports known Docling/Turbopack NFT tracing warnings from existing document-context/Docling imports.
+
+## 2026-06-26 - Project Items Priority + Add Item Mode Toggle
+
+### Trigger
+
+User clarified they liked the current project workspace approach and asked to move the item list above the Spec sheet automation coming-soon section, add a Search database / Manual add switch, and remove the Project browser + Add item buttons from the top header.
+
+### Changes
+
+- `src/components/builder/projects-workspace.tsx`
+  - Moved `ProjectHandoverChecklistSection` above `SpecAutomationComingSoon` so real handover items appear before the future automation placeholder.
+  - Removed the top-header `Project browser` and `Add item` action buttons from the project overview action cluster.
+  - Kept the left `← Back to projects` link and the Add handover item CTA inside the checklist section.
+  - Added an in-modal segmented switch between `Search database` and `Manual add` in `AddHandoverItemForm`.
+  - Database mode shows product suggestions when the title matches; manual mode hides suggestions and clears any selected product.
+
+### Verification
+
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed.
+- Build still reports known Docling/Turbopack NFT tracing warnings from existing document-context/Docling imports.
+
+## 2026-06-26 - Client Document File Picker Simplification
+
+### Trigger
+
+User asked to remove the visible `Show to client` checkbox from the embedded client document module and make the document form only title, type, and a file button, with title/type side-by-side and the file picker full width beneath them.
+
+### Changes
+
+- `src/components/builder/projects-workspace.tsx`
+  - Removed the visible show-to-client checkbox from the Add client document UI.
+  - Kept `visibleToClient` as a hidden default-on form field so saved handover documents still appear in the client pack.
+  - Replaced the path/reference text field with a required `documentFile` file input that opens the OS file picker.
+  - Added `encType="multipart/form-data"` to the document form.
+  - Layout is now `Title` + `Type` on the top row and one full-width `File` control below.
+
+### Verification
+
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed.
+- Build still reports known Docling/Turbopack NFT tracing warnings from existing document-context/Docling imports.
+
+## 2026-06-26 - Project Details Card Document Module Merge
+
+### Trigger
+
+User pointed at unused space inside the project details module and asked to add the document adding module into that same box, while condensing the layout further so more information fits.
+
+### Changes
+
+- `src/components/builder/projects-workspace.tsx`
+  - Replaced the standalone project-details card plus separate client-documents card with one shared compact module.
+  - Project details now sit on the left in a tighter two-column field grid with a small inline Save action.
+  - Add client document now sits on the right side of the same module, using the previously empty space.
+  - Document add fields were condensed to document name, type, path/reference, show-to-client, and a compact Save action.
+  - Removed the old warning block from the document add form to keep the module shorter.
+
+### Verification
+
+- Initial lint/build caught a JSX closing mismatch after moving the card boundary; fixed it.
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed.
+- Build still reports known Docling/Turbopack NFT tracing warnings from existing document-context/Docling imports.
+
+## 2026-06-26 - Project Workspace Compact Density Pass
+
+### Trigger
+
+User said the project workspace still felt too big and asked to “zoom out a bit” so more items fit on one page.
+
+### Changes
+
+- `src/components/builder/projects-workspace.tsx`
+  - Reduced main page padding and base text size on the projects workspace.
+  - Tightened project browser cards, workspace header, metric tiles, buttons, tabs, filters, sidebar cards, document/maintenance cards, checklist cards, and checklist edit forms.
+  - Narrowed the right sidebar slightly so the item/checklist area has more horizontal room.
+  - Changed the checklist filters to fit more controls across wide screens.
+  - Preserved manual item entry, product database autofill, client access, documents, maintenance, send package, and the spec-automation-coming-soon subsection.
+
+### Verification
+
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed.
+- Build still reports known Docling/Turbopack NFT tracing warnings from existing document-context/Docling imports.
+
+## 2026-06-26 - Manual Demo Branch De-AI Project Workspace
+
+### Trigger
+
+User asked, in this branch only, to remove visible AI spec sheet checking / builder review UI and replace it with one subsection that says spec sheet automation is coming soon.
+
+### Changes
+
+- `src/components/builder/projects-workspace.tsx`
+  - Removed visible project-workspace surfaces for AI/spec checking, extraction processing, workflow review queues, builder/admin review lanes, and AI approval checks.
+  - Added a single `Spec sheet automation` coming-soon subsection and nav anchor.
+  - Simplified package sending to checklist/manual items only.
+  - Kept manual item entry, database autofill, client access, documents, maintenance, and send package wired.
+
+### Verification
+
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed.
+- Build still reports known Docling/Turbopack NFT tracing warnings from existing document-context/Docling imports.
+
+## 2026-06-26 - Project Workspace Modalized Client Access + Add Item
+
+### Trigger
+
+User said the project page was still too much to read/take in and asked to move client access to the right bar/header modal and make Add items its own modal.
+
+### Changes
+
+- `src/components/builder/projects-workspace.tsx`
+  - Added modal modes for `clientAccess` and `addItem`.
+  - Moved the long Add handover item form out of the main checklist section into an `Add item` modal opened from the workspace header and checklist CTA.
+  - Preserved existing manual entry/database-autofill behavior, hidden selected product metadata, and server action wiring.
+  - Moved client invite/link/revoke controls out of the main page into a `Client access` modal opened from the workspace header.
+  - Added a compact read-only `Client access` card to the right sidebar with invite/open status and a `Manage` button.
+  - Removed the unused Paper trail anchor from the workspace nav because client access is no longer an inline section.
+  - Main checklist section now focuses on metrics, filters, and item cards, reducing visual overload.
+
+### Verification
+
+- Initial lint/build caught JSX and type issues after the extraction; fixed them.
+- Final `npm.cmd run lint` passed.
+- Final `npm.cmd run build` passed.
+- Build still reports known Docling/Turbopack NFT tracing warnings from the existing document-context/Docling import path.
+
+### Remaining Work / Recommendation
+
+- Browser-smoke `/builder/projects`: open a project, click `Add item`, test database suggestion autofill, close/reopen, click `Client access`, and confirm the page feels less dense.
+
+## 2026-06-26 - Project Workspace Width + Vertical Edit Boxes
+
+### Trigger
+
+User shared screenshots showing wide unused gutters around the workspace and a cramped side-by-side editable area. They asked to use the side space better and make the editable information areas vertical boxes instead of columns.
+
+### Changes
+
+- `src/components/builder/projects-workspace.tsx`
+  - Changed the top-level workspace container from centered `max-w-6xl` to full available width (`w-full max-w-none`) so the project header/workspace expands across the content area instead of leaving large grey gutters.
+  - Kept the right read-only status column, but widened it slightly for desktop (`24rem` / `26rem`) so its status cards breathe.
+  - Changed the editable overview area from a nested side-by-side column grid into stacked vertical cards.
+  - Project details are now a full-width vertical form instead of two columns.
+  - Optional spec/import, client access, client document entry, and product lookup now stack underneath as separate vertical boxes.
+  - Client document fields also stack vertically instead of splitting into columns.
+
+### Verification
+
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed.
+- Build still reports known Docling/Turbopack NFT tracing warnings from the existing document-context/Docling import path.
+
+### Remaining Work / Recommendation
+
+- Browser-smoke the workspace at `/builder/projects` and tune spacing once the user confirms whether they want the right status column retained or moved below the editable boxes.
+
+## 2026-06-26 - Project Workspace Right Sidebar Fill-Out
+
+### Trigger
+
+User asked to fill out the standalone project page better by adding a right-side column for information that does not need editing, including to-be-completed work, legally/commonly required documents to upload, and item categories with counts.
+
+### Changes
+
+- `src/components/builder/projects-workspace.tsx`
+  - Added a sticky right-side `ProjectWorkspaceSidebar` to the standalone project workspace.
+  - The main editable workflow remains on the left; the right column is read-only project guidance/status.
+  - Sidebar sections added:
+    - `To be completed`: incomplete items, autofill/review checks, missing manuals, missing warranties, missing compliance docs.
+    - `Documents to upload / confirm`: Code Compliance Certificate/consent, product warranties, manuals/care guides, producer statements/inspection records, photos/supporting evidence. Copy labels these as common NZ handover/legal pack checks and explicitly says it is not legal advice.
+    - `Item categories`: category counts with ready/total values.
+    - Demo-path reminder that manual entry plus database autofill is the reliable branch path while spec extraction remains optional/future-facing.
+
+### Verification
+
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed.
+- Build still reports known Docling/Turbopack NFT tracing warnings from the existing document-context/Docling import path.
+
+### Remaining Work / Recommendation
+
+- Browser-smoke the visual result at `/builder/projects`: open a project workspace and confirm the right column gives useful status without making the page feel cramped.
+- If it feels too dense, the next polish pass should collapse the document checklist into compact rows or make the right column accordion-based on smaller screens.
+
+## 2026-06-26 - Project Workspace Standalone Page Rework
+
+### Trigger
+
+User said the project page felt split weirdly and asked to make project opening feel like its own standalone page, closer to the captured project workspace UI rework direction.
+
+### Changes
+
+- `src/components/builder/projects-workspace.tsx`
+  - Changed `/builder/projects` from an edit-modal driven experience to a project browser plus standalone project workspace on the same route.
+  - Initial page now shows the project browser and high-level metrics instead of auto-opening the first project.
+  - Clicking a project row/card or `Open workspace` opens a dedicated project workspace view inline, with a clear `Back to projects` action.
+  - Added a polished standalone project header with project name, address, client/type/handover date, status pill, send-package action, and summary counters.
+  - Added top navigation anchors matching the UI rework concept: Overview, Items, Spec upload / review, Documents, and Paper trail.
+  - Kept the existing manual checklist/autofill, optional spec/import, document, client access, package-ready, review-lane, and send-package functionality wired.
+  - Removed the now-unused edit modal path; create/help/send still use modals.
+
+### Verification
+
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed.
+- Build still reports known Docling/Turbopack NFT tracing warnings from the existing document-context/Docling import path.
+
+### Remaining Work / Recommendation
+
+- Browser-smoke the new project browser/workspace interaction on the running dev server: open `/builder/projects`, click `Open workspace`, verify the standalone header and anchors feel right, then test add/edit manual item, send package, and back-to-projects.
+- A future polish pass can turn the anchor navigation into true sticky tabs that hide/show only the selected section, but this pass removes the modal/split feeling while preserving all existing functionality.
+
+## 2026-06-26 - Manual Entry + Database Autofill Demo Flow
+
+### Trigger
+
+User asked for a new branch `feature/manual-entry-autofill-flow` that keeps AI/spec extraction in the codebase long term, but makes manual item entry plus approved product database autofill the primary sales/demo path now.
+
+### Branch / Scope
+
+- Created and switched to `feature/manual-entry-autofill-flow`.
+- Important caveat: the branch was created from an already dirty worktree containing many prior Docling/extraction/checklist changes. Future staging should be deliberate and file-specific.
+- AI/spec extraction routes and code remain in place. Spec upload/import is de-emphasised as optional/secondary rather than removed.
+
+### Changes
+
+- `src/components/builder/projects-workspace.tsx`
+  - `/builder/projects` now foregrounds a manual project checklist section.
+  - Added an Add handover item flow with approved product database suggestions from loaded `ProductVersion` records.
+  - Selecting a suggestion autofills known identity/source fields plus care/manual/warranty/source notes, but copy explicitly says autofill is not authoritative and must be reviewed.
+  - Added checklist filters for text search, status, category, missing section, source (`manual`, `database_autofill`, `imported`), and review state.
+  - Expanded item cards with source badges, location/quantity/finish/colour metadata, section status pills, not-enough-identity messaging, and database-autofill review warning.
+  - Added a detail/edit panel covering identity/name, category, location, manufacturer/brand, model/SKU/product code, supplier/SKU, quantity/finish/colour, care instructions, manual link/reference, warranty, invoice/purchase info, Code of Compliance/compliance docs, supporting documents/photos notes, builder notes, section statuses, and accepted-incomplete reason/audit notes.
+  - Updated the package send panel to count and preview manual checklist items that are complete or accepted incomplete.
+  - Spec upload copy is now `Optional spec/import path`.
+- `src/lib/server/actions.ts`
+  - Checklist create/update form parsing now records manual vs `database_autofill` sources, selected product ID/label, autofill-needs-review metadata, location/quantity/finish/colour/supporting-doc notes, accepted-incomplete notes, and explicit section status fields.
+- `src/lib/server/queries.ts`
+  - Added checklist item -> homeowner-safe package item mapping.
+  - Handover package preview now prefers reviewed/accepted checklist items before workflow/extraction items.
+  - Published client package preview now includes reviewed/accepted checklist items when the project is published.
+- `src/app/builder/handover-package/page.tsx`
+  - Copy now describes manual checklist/database-autofill package preview rather than extraction-first package output.
+- `src/app/client/portal/page.tsx`
+  - Client output labels no longer say `From Spec`; client portal remains clean/homeowner-safe.
+- `WORKSHEET.md`
+  - Updated with branch, scope, verification, and next-work notes.
+
+### Verification
+
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed.
+- Build still reports known Docling/Turbopack NFT tracing warnings from the existing Docling/document-context import path.
+- A dev server was started briefly but produced no captured logs before being stopped; no browser smoke was completed in this pass.
+
+### Remaining Work / Recommendation
+
+1. Run a browser smoke for the manual branch:
+   - open `/builder/projects`;
+   - add one manual item without a database match;
+   - add one item from an approved database suggestion;
+   - edit all sections/statuses;
+   - mark one item complete or accepted incomplete with a reason;
+   - open `/builder/handover-package`;
+   - publish if appropriate;
+   - confirm `/client/portal` shows only homeowner-safe reviewed data.
+2. Before committing, inspect and stage carefully because the worktree includes many pre-existing extraction/Docling changes unrelated to the manual-flow slice.
+3. If committing only this slice, likely intended files are `src/components/builder/projects-workspace.tsx`, `src/lib/server/actions.ts`, `src/lib/server/queries.ts`, `src/app/builder/handover-package/page.tsx`, `src/app/client/portal/page.tsx`, `WORKSHEET.md`, and this log, plus any prerequisite checklist files already intended for the branch.
+
+## 2026-06-24 - Flooring/Waterproofing Glued OCR Escaped Generic Audit
+
+### Trigger
+
+User reported the same visible OCR issue class again:
+
+`Waterproofmembraneunder tiles laidontimber floor inginwetareas. Engineered Timber Veneer flooring, timber veneerlaminated to astructuralplybase, straightlaid, glued to floor...`
+
+### Findings
+
+Current queue had 2 uploads and 76 rows. The exact bad row was:
+
+- `e7dbbc46-5b70-4381-aff2-0da93db2c590`
+- `Engineered timber veneer flooring`
+
+A broader audit also found one remaining current dirty row:
+
+- `13622991-f6c0-4112-95e7-35899c7fb54c`
+- `Heated Towel Rail ensuite bed 1&2`
+- `Timekeeperplustimer`, `Concealedwiring`
+
+### Root Cause
+
+The all-row final cleanup/audit existed, but the generic glued-OCR segmenter did not know flooring/waterproofing domain vocabulary. Tokens like `Waterproofmembraneunder`, `laidontimber`, `inginwetareas`, `veneerlaminated`, `astructuralplybase`, and `straightlaid` were not recognized as split-able dirty OCR because words such as `membrane`, `tiles`, `timber`, `wet`, `areas`, `veneer`, `laminated`, `structural`, `ply`, `base`, `straight`, and `laid` were missing from the generic segment/domain dictionaries.
+
+So this was not that the user imagined it or that cleanup was impossible; the detector vocabulary was too narrow, which let domain-specific glued words pass as clean.
+
+### Changes
+
+- `src/lib/ai/spec-normalize.ts`
+  - Added deterministic phrase repairs for:
+    - `Waterproofmembraneunder` -> `Waterproof membrane under`
+    - `laidontimber` -> `laid on timber`
+    - `inginwetareas` -> `in wet areas`
+    - `veneerlaminated` -> `veneer laminated`
+    - `astructuralplybase` -> `a structural ply base`
+    - `straightlaid` -> `straight laid`
+    - `Timekeeperplustimer` -> `Timekeeper Plus timer`
+    - `Concealedwiring` -> `Concealed wiring`
+  - Extended generic OCR segment/domain word lists with flooring/waterproofing vocabulary.
+- `src/lib/ai/spec-quality-audit.ts`
+  - Added audit detection for those flooring/wet-area glued OCR tokens and towel-rail timer/wiring tokens.
+- `src/lib/ai/spec-final-cleanup.ts`
+  - Added flooring/wet-area examples to final LLM cleanup prompt.
+- `scripts/fixtures/spec-final-quality-fixtures.json`
+  - Added fixture `flooring_wet_area_glued_ocr_is_readable`.
+
+### Verification
+
+- `npm.cmd run spec-final-quality:fixtures` passed: 11 fixtures.
+- `npm.cmd run spec-quality-audit:fixtures` passed: 6 fixtures.
+- `npm.cmd run spec-normalizer:fixtures` passed: 4 fixtures.
+- `npm.cmd run spec-extract:fixtures` passed: 32 fixtures.
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed with known Docling/Turbopack NFT warnings.
+
+### Current Data Backfill
+
+Backfilled:
+
+- `e7dbbc46-5b70-4381-aff2-0da93db2c590` / `Engineered timber veneer flooring`
+- `13622991-f6c0-4112-95e7-35899c7fb54c` / `Heated Towel Rail ensuite bed 1&2`
+
+Post-backfill audit across 76 rows for known OCR/diagnostic/false-code patterns returned `flaggedCount=0`.
+
+### Remaining Work / Recommendation
+
+- The next live upload still needs a restarted dev server to load these changes.
+- If more glued OCR appears, do not only add exact phrase fixes; extend the generic segment/domain dictionary and final audit vocabulary for that domain.
+
+
+## 2026-06-24 - PDL Faceplates False ProductCode and Visible OCR Audit
+
+### Trigger
+
+User reported another missed cleanup/field issue: `Whitefaceplates, ProductCode:` and asked to inspect for more issues.
+
+### Findings
+
+Current queue had 54 review/checklist rows. A scripted visible-field audit found 4 rows with similar issues:
+
+- `dfdf99b6-7bea-424a-bc0c-a8d5e29388a6` / `Electrical Switching`
+  - `Jconic`, `Whitefaceplates`, `PDLIconic`, `lifeeasy`
+  - internal visible lines: `Has Identifier`, `Suggested Search Query`
+  - false `ProductCode: 2017` extracted from `Winner of the 2017 Gold Design Award`
+- `7c18850c-356d-4ddb-a5ef-53b673af26f9` / Robertson basin waste
+  - `Vantiy Waste`
+- `8486b7a9-58df-4be8-9e6f-c5289a4637cf` / WC toilet suite
+  - `C/WSoft`
+- `d1d9682c-084a-42ba-9eec-e19c46237058` / St Michel waste
+  - `clickclackmushroom`
+
+### Root Cause
+
+- Deterministic product-code extraction accepted standalone years, so an award year became `ProductCode: 2017`.
+- Internal helper fields from `buildStructuredEvidence` (`HasIdentifier`, `SuggestedSearchQuery`) were being persisted into visible evidence.
+- LLM classifier default cap was still 30 candidates; with a 54-row queue it was not guaranteed every candidate would reach the LLM even though the user expects broad AI sorting.
+- Quality audit/cleanup did not include the PDL faceplate and related OCR classes.
+
+### Changes
+
+- `src/lib/ai/spec-llm.ts`
+  - Classifier now defaults on when `OPENAI_API_KEY` exists unless `OPENAI_SPEC_CLASSIFIER_ENABLED=false`.
+  - Default classifier limit raised from 30 to 200.
+- `src/lib/ai/spec-extract.ts`
+  - Product-code extraction now filters standalone years when they are near award/range/marketing context.
+  - Removed visible `HasIdentifier` / `SuggestedSearchQuery` lines from structured evidence.
+- `src/lib/ai/spec-normalize.ts`
+  - Added deterministic cleanup for `PDL Jconic Series`, `Whitefaceplates`, `PDLIconic`, `lifeeasy`, `Vantiy`, `C/WSoft`, and `clickclackmushroom`.
+  - Final structured cleanup strips legacy `Has Identifier` / `Suggested Search Query` variants.
+- `src/lib/ai/spec-quality-audit.ts`
+  - Detects those OCR/diagnostic classes so they cannot pass silently.
+- `src/lib/ai/spec-final-cleanup.ts`
+  - Prompt now includes faceplate/Iconic examples.
+- Fixtures added:
+  - `scripts/fixtures/spec-extract-row-fixtures.json`: `pdl icon series faceplates does not use award year as product code`
+  - `scripts/fixtures/spec-final-quality-fixtures.json`: `pdl_faceplates_visible_text_is_readable_and_no_diagnostics`
+
+### Verification
+
+- `npm.cmd run spec-extract:fixtures` passed: 32 fixtures.
+- `npm.cmd run spec-final-quality:fixtures` passed: 10 fixtures.
+- `npm.cmd run spec-quality-audit:fixtures` passed: 6 fixtures.
+- `npm.cmd run spec-candidates:fixtures` passed: 5 fixtures.
+- `npm.cmd run spec-llm:fixtures` passed: 8 fixtures.
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed with known Docling/Turbopack NFT warnings.
+
+### Current Data Backfill
+
+Backfilled the 4 currently flagged rows and synced their checklist metadata/notes. The `Electrical Switching` checklist row now has `product_code = null` instead of `2017`, and visible evidence reads `PDL Iconic Series White faceplates ... life easy`.
+
+A post-backfill scripted audit for the checked OCR/diagnostic/false-code patterns returned `flaggedCount=0`.
+
+### Remaining Work / Recommendation
+
+- Restart dev server before the next upload so the classifier limit/default-on and cleanup changes are active.
+- On the next live route run, check diagnostics: classifier selected count should cover all eligible candidates up to 200, not stop at 30.
+- If another issue appears, run the scripted visible-field audit first before fixing a single row.
+
+
+## 2026-06-24 - Default AI OCR Spell Cleanup To All Rows
+
+### Trigger
+
+User found visible OCR garbage in a saved row despite repeated requests for AI spell/readability cleanup:
+
+`3. 1 flush jamb for architraves Cus to msize 2400 mm x 1500 mm Need to check size`
+
+### Root Cause
+
+- Final save-boundary cleanup already defaulted to all-row mode when OpenAI final cleanup is enabled.
+- But the pre-extraction table-row normalizer was still gated by `OPENAI_SPEC_NORMALIZER_ENABLED=true`; in the current `.env.local` it was unset, so the source table normalization stage did not run.
+- The normalizer also selected only rows matching known messy heuristics, and this specific `Cus to msize` split-word class was missing from the quality audit, so it could pass through even though it was plainly wrong.
+
+### Changes
+
+- `src/lib/ai/spec-text-normalizer.ts`
+  - OpenAI normalization now runs by default whenever `OPENAI_API_KEY` exists, unless explicitly disabled with `OPENAI_SPEC_NORMALIZER_ENABLED=false`.
+  - Added `OPENAI_SPEC_NORMALIZER_MODE=all|messy|off`, defaulting to `all`.
+  - Raised default normalizer limit to 200 so the real spec's table rows are all eligible for AI cleanup.
+  - Added `Cus to msize` / `Custom msize` messy-row detection and prompt guidance.
+- `src/lib/ai/spec-final-cleanup.ts`
+  - Strengthened prompt examples for allowed final repairs: `Cus to msize -> Custom size`, `forarchitraves -> for architraves`, etc.
+- `src/lib/ai/spec-normalize.ts`
+  - Added deterministic cleanup for `Cus to msize` / `Custom msize` and preserved existing `Measurespecific` cleanup.
+- `src/lib/ai/spec-quality-audit.ts`
+  - Added final audit detection for `Cus to msize` / `Custom msize` so this class cannot pass silently again.
+- `scripts/fixtures/spec-final-quality-fixtures.json`
+  - Added fixture `flush_jamb_custom_size_spacing_is_readable`.
+
+### Verification
+
+- `npm.cmd run spec-final-quality:fixtures` passed: 9 fixtures.
+- `npm.cmd run spec-quality-audit:fixtures` passed: 6 fixtures.
+- `npm.cmd run spec-normalizer:fixtures` passed: 4 fixtures.
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed with known Docling/Turbopack NFT trace warnings.
+
+### Current Data Backfill
+
+Backfilled current saved rows:
+
+- Review row `1ee9eb73-665a-4013-8213-5fa14265e643`.
+- Checklist row `77210baa-6d40-4ae0-8011-e881225ba806`.
+
+Visible text now reads:
+
+`flush jamb for architraves Custom size 2400 mm x 1500 mm Need to check size`
+
+### Remaining Work / Recommendation
+
+- Restart dev server before rerunning upload so default-on normalizer and prompt changes are active.
+- Watch route diagnostics: `ai_text_normalizer.enabled` should be `true`, and selected row count should be broad/all-row up to the configured limit, not zero.
+- If more OCR garbage appears, inspect whether normalizer/final cleanup actually ran and whether quality audit flagged it before adding another patch.
+
+
+## 2026-06-24 - Split Multiple Real Items From One LLM Candidate
+
+### Trigger
+
+User caught a merged OCR/source row saved only as `Heated Towel Rail` even though the same text also contained `1 x Insinkera tor multitap` / `Insinkerator Multitap`.
+
+### Root Cause
+
+The LLM gate was being used for validity/classification, but the application layer effectively allowed only one surviving output item per deterministic candidate:
+
+- prompt did not explicitly tell the model to emit multiple outputs for one merged source row;
+- `applySpecLlmClassifications` keyed accepted classifications by `candidate_id` in a `Map`, so duplicate classifications for the same candidate overwrote each other;
+- evidence assembly reused the parent proposal source/structured fields, which would pollute split child rows.
+
+So the LLM was not actually able to fully "sort everything out" when Docling/OCR merged two products into one candidate.
+
+### Changes
+
+- Updated `src/lib/ai/spec-llm.ts` prompt: if one `source_text` contains multiple real handover items, return multiple classification objects with the same `candidate_id`, one per item.
+- Updated `applySpecLlmClassifications` to group accepted classifications by candidate ID and split one proposal into multiple output proposals.
+- For split source rows, evidence now prefers each classification's own `source_quote` and suppresses parent structured fallback fields so one item does not inherit another item's product code/finish.
+- Added OCR cleanup for `Insinkera tor` -> `Insinkerator` in `src/lib/ai/spec-normalize.ts`.
+- Updated `scripts/check-spec-llm-application-fixtures.mjs` to support fixture `classifications[]` and `expectedItems[]`.
+- Added fixture `merged towel rail and insinkerator source row splits into two items` in `scripts/fixtures/spec-llm-application-fixtures.json`.
+- Patched the reusable extraction skill with the multi-item candidate lesson.
+
+### Verification
+
+- `npm.cmd run spec-llm:fixtures` passed: 8 fixtures.
+- `npm.cmd run spec-candidates:fixtures` passed: 5 fixtures.
+- `npm.cmd run spec-final-quality:fixtures` passed: 8 fixtures.
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed with known Docling/Turbopack NFT trace warnings.
+
+### Current Data Backfill
+
+Backfilled the currently affected upload `7b5bff9b-e1b4-4174-a12b-9edfe34095b4`:
+
+- Inserted review row `605b8826-15a5-411d-858d-4b1e640e64db` titled `Insinkerator Multitap`.
+- Inserted checklist row `aa8cbcef-214c-4418-ae9a-0de7300ba66a` titled `Insinkerator Multitap`.
+- Row is marked for review/model-code clarification because the source only clearly had `1 x Insinkerator multitap` and no reliable model/code.
+
+### Remaining Work / Recommendation
+
+- Restart the dev server before any new browser upload so the changed classifier prompt/apply logic is active.
+- Future merged rows should become multiple review/checklist candidates when the LLM emits multiple grounded classifications for the same source candidate.
+- If another merged row still collapses, add it as a fixture and inspect whether the LLM failed to emit multiple classifications or whether validation rejected one.
+
+
+## 2026-06-24 - Live Route Verification For LLM Valid-Item Gate
+
+### Trigger
+
+User asked to finish the implementation and run a test after adding LLM valid-item adjudication for broad source-document/admin bundles.
+
+### Changes
+
+- Extended `scripts/smoke-spec-route-quality.mjs` so live route smokes fail if saved review/checklist rows contain broad invalid source-document/admin bundles, especially producer-statements/code-compliance package rows.
+- Kept the existing visible OCR checks in the same route smoke so the live test covers both readability and item validity.
+
+### Static Verification
+
+- `npm.cmd run spec-candidates:fixtures` passed: 5 fixtures.
+- `npm.cmd run spec-llm:fixtures` passed: 7 fixtures.
+- `npm.cmd run spec-final-quality:fixtures` passed: 8 fixtures.
+- `npm.cmd run spec-quality-audit:fixtures` passed: 6 fixtures.
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed with known Docling/Turbopack NFT trace warnings.
+
+### Live Route Smoke
+
+Restarted the dev server with Docling/OpenAI/final-cleanup all-mode and ran `npm.cmd run spec-route:quality-smoke`.
+
+Result:
+
+- Upload: `29ba0e0f-be5a-4a78-8bc8-aa6c2d886d45`
+- HTTP: 200
+- Saved review rows: 53
+- Synced checklist rows: 53
+- Normalizer selected/accepted/rejected: 50 / 46 / 4
+- Classifier sent/accepted/rejected: 67 / 66 / 1
+- Final cleanup dirty-before/sent/accepted/rejected/dirty-after: 2 / 53 / 53 / 0 / 0
+- Repair retry sent/accepted: 0 / 0
+- Final quality audit checked/pass: 53 / 53
+- Bad visible review/checklist counts: 0 / 0
+- Invalid producer/code-compliance review/checklist counts: 0 / 0
+
+Direct DB inspection for the upload found:
+
+- Review rows: 53
+- Bad/invalid hits: 0
+- Source-document-like saved rows: 0
+
+### Cleanup
+
+Cleared the smoke data after verification:
+
+- Deleted 53 checklist rows/events.
+- Deleted 1 specification upload, cascading 53 review rows.
+- Deleted 1 throwaway route-quality smoke org/auth user.
+- Final counts: uploads/review/checklist/events/smoke-orgs `0/0/0/0/0`.
+- Stopped the dev server started for the smoke.
+
+### Remaining Work / Recommendation
+
+- User can now run a fresh browser flow from a clean state.
+- If the browser flow surfaces a new invalid row, add it as an LLM validity fixture and tune the adjudication prompt/policy rather than suppressing one title.
+
+
+## 2026-06-24 - LLM Valid Item Adjudication For Source Document Bundles
+
+### Trigger
+
+User pointed out that the pipeline should not just clean OCR; the LLM needs to decide whether a row is a valid handover item at all. Example: `Producer statements and code compliance documents` is a broad supporting-document/admin bundle, not a checklist item. User also noted remaining spelling/glued-word issues, which are now handled by the final readability gate after classification.
+
+### Plan
+
+Saved `.hermes/plans/2026-06-24_004650-llm-valid-item-adjudication.md`.
+
+### Changes
+
+- Changed `src/lib/ai/spec-candidates.ts` so deterministic `document` / `request_document` candidates are now sent to LLM validity adjudication instead of being skipped as deterministic source-document rows.
+- Raised document/source-document candidates to spend priority 85 so they are reviewed before lower-value generic rows when classifier limits apply.
+- Updated `src/lib/ai/spec-llm.ts` classifier prompt policy:
+  - valid items are specific products, finishes, fixtures, systems, materials, appliances, maintenance tasks, or a specific source document tied to such an item;
+  - broad supporting-document/admin bundles such as `Producer statements and code compliance documents`, CCC/PS closeout packages, consent closeout lists, or generic certificate bundles must be `keep=false`, `item_type=note`;
+  - `needs_source_document` is reserved for a real specific product/system/finish/fixture that needs an attached quote/manual/warranty/certificate/producer statement/source document.
+- Added fixtures:
+  - `spec-candidates:fixtures`: deterministic source-document rows are LLM-eligible.
+  - `spec-llm:fixtures`: producer-statements/code-compliance bundle is dropped as a non-item.
+  - `spec-llm:fixtures`: a specific Grohe mixer warranty/source-document row is kept and formatted as a valid product needing a source document.
+- Patched the reusable extraction-pipeline skill with the source-document/admin-bundle lesson.
+
+### Verification
+
+- `npm.cmd run spec-candidates:fixtures` passed: 5 fixtures.
+- `npm.cmd run spec-llm:fixtures` passed: 7 fixtures.
+- `npm.cmd run spec-extract:fixtures` passed: 31 fixtures.
+- `npm.cmd run spec-final-quality:fixtures` passed: 8 fixtures.
+- `npm.cmd run spec-quality-audit:fixtures` passed: 6 fixtures.
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed with known Docling/Turbopack NFT trace warnings.
+
+### Cleanup
+
+Cleared stale extraction state after the code change:
+
+- Before: uploads/review/checklist/events `1/74/72/72`.
+- Deleted 72 checklist rows/events and 1 upload, cascading 74 review rows.
+- After: uploads/review/checklist/events `0/0/0/0`.
+
+### Remaining Work / Recommendation
+
+- Restart the dev server before rerunning the browser upload so the new classifier prompt and candidate eligibility logic are active.
+- On the next live flow, inspect `ai_classifier.sent_candidate_count`, accepted/rejected counts, and saved rows to confirm source-document/admin bundles are not entering the review/checklist queue.
+- If a broad admin bundle still appears, capture it as a fixture and tighten the LLM validity policy rather than adding a one-off title suppression.
+
+
+## 2026-06-24 - Generic Fail-Closed Readability Repair Gate
+
+### Trigger
+
+User correctly called out that exact OCR-token patches are counterintuitive and would require endless passes to catch future garbage. We pivoted from whack-a-mole phrase matching to a generic fail-closed readability gate: repair what can be safely repaired, retry unresolved rows through the LLM cleanup with issue examples, and explicitly mark anything still unreadable for manual OCR cleanup rather than presenting it as clean.
+
+### Plan
+
+Saved the implementation plan at `.hermes/plans/2026-06-24_003900-fail-closed-readability-repair-gate.md`.
+
+### Changes
+
+- Added generic glued OCR segmentation in `src/lib/ai/spec-normalize.ts`:
+  - detects long lowercase compounds made from known construction/domain terms plus connectors;
+  - repairs unseen tokens such as `mountedonleftsidewall`, `slidesfromrighttoleftwhenfacingdoor`, and `shelftobemountedonrearwall` without needing exact phrase entries;
+  - exposes `findGenericGluedOcrTokens()` for audit/detection.
+- Expanded `src/lib/ai/spec-quality-audit.ts` to flag generic glued OCR tokens, not just historical bad strings.
+- Added a final repair retry loop in `src/lib/ai/spec-final-cleanup.ts`:
+  - after normal final cleanup, run the quality audit;
+  - send only failed rows back through OpenAI final cleanup with quality issues/examples;
+  - re-clean and re-audit;
+  - any unresolved row receives an explicit `Evidence text needs manual cleanup (...)` quality review note.
+- Added final cleanup response diagnostics in `src/lib/server/specification-response.ts`:
+  - `repair_retry_sent_count`
+  - `repair_retry_accepted_count`
+- Added process-route logging for repair retry and unresolved quality counts.
+- Updated fixture harnesses and fixtures:
+  - final quality fixtures now verify generic segmented repair and fail-closed manual cleanup notes;
+  - quality audit fixtures now verify unseen generic glued tokens and suspicious unreadable token density.
+- Patched the reusable `source-backed-extraction-pipelines` skill note with the new fail-closed debugging lesson.
+
+### Verification
+
+- `npm.cmd run spec-final-quality:fixtures` passed: 8 fixtures.
+- `npm.cmd run spec-quality-audit:fixtures` passed: 6 fixtures.
+- `npm.cmd run spec-normalizer:fixtures` passed: 4 fixtures.
+- `npm.cmd run spec-extract:fixtures` passed: 31 fixtures.
+- `npm.cmd run spec-candidates:fixtures` passed: 4 fixtures.
+- `npm.cmd run spec-llm:fixtures` passed: 5 fixtures.
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed with known Docling/Turbopack NFT trace warnings.
+- Verified Supabase extraction queues are clear: uploads/review/checklist/events `0/0/0/0`.
+
+### Remaining Work / Recommendation
+
+- Restart the dev server before the next browser upload so the updated route/server code is active.
+- For future visible OCR failures, add fixtures for the class, but prefer generic readability/segmentation/audit improvements over exact phrase fixes.
+- A live browser/route rerun is still useful to observe actual `repair_retry_*` diagnostics on the real PDF.
+
+
+## 2026-06-24 - Shower Direction OCR Regression Fix
+
+### Trigger
+
+User ran a fresh flow and surfaced a Master Ensuite shower row still showing visible OCR glue: `overlapsbothfixedpanels`, `stand ingfacing`, `outsideof`, `shelfon`, `sideonend`, and `bemountedonback`. This showed the prior route smoke passed because the forbidden-token list and audit patterns were too narrow for glued shower-direction/preposition classes.
+
+### Changes
+
+- Added generic deterministic cleanup in `src/lib/ai/spec-normalize.ts` for shower direction/layout OCR glue:
+  - `RHWhen` -> `RH When`
+  - `Whenst and ing` / `stand ingfacing` -> `When standing` / `standing facing`
+  - `lookingat`, `outsideof`, `shelfon`, `sideonend`, `bemountedonback`
+  - `fixedpanel(s)`, `overlapsbothfixedpanels`, `mm-slides`, `NB:Slide`
+- Expanded `hasLikelyDirtyOcrText()` and `src/lib/ai/spec-quality-audit.ts` so these glued shower-direction tokens are flagged if they ever escape cleanup.
+- Added regression fixtures:
+  - `spec-final-quality:fixtures` now includes `shower_direction_glued_words_are_readable`.
+  - `spec-quality-audit:fixtures` now includes `flags_glued_shower_direction_tokens`.
+- Expanded `scripts/smoke-spec-route-quality.mjs` forbidden visible-text checks so route smokes fail on these classes too.
+
+### Verification
+
+- `npm.cmd run spec-final-quality:fixtures` passed: 6 fixtures.
+- `npm.cmd run spec-quality-audit:fixtures` passed: 4 fixtures.
+- `npm.cmd run spec-normalizer:fixtures` passed: 4 fixtures.
+- `npm.cmd run spec-extract:fixtures` passed: 31 fixtures.
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed with known Docling/Turbopack NFT warnings.
+
+### Cleanup
+
+Cleared the stale failed browser rerun after patching:
+
+- Before: uploads/review/checklist/events `1/72/70/70`.
+- Deleted 70 legacy checklist rows/events and 1 upload, cascading 72 review rows.
+- After: uploads/review/checklist/events `0/0/0/0`.
+
+### Remaining Work / Recommendation
+
+- User should restart the dev server before rerunning the browser upload, because route/server code changed.
+- If another visible OCR class appears, add it as a generic fixture/audit pattern before clearing/retrying; do not treat it as a one-row backfill.
+
+
+## 2026-06-24 - Cleared Extraction Queue For Fresh User Flow
+
+### Trigger
+
+User asked to clean up after verification and clear the review queue so they can run a fresh user flow and inspect any remaining issues from a clean state.
+
+### Actions
+
+- Reviewed the current worktree diff at a high level. The working tree contains many existing modified/untracked files from broader checklist/extraction work; commit/staging should be selective rather than assuming every changed file belongs to the quality-hardening slice.
+- Audited the latest live route smoke upload before deleting it: upload `3daef1f7-cc6c-451c-8133-8a02de0f7d28` had 57 review rows, bad visible text count `0`, and manual quality-note count `0`.
+- Deleted Supabase extraction/review state for a clean rerun:
+  - 170 legacy checklist candidate rows, with checklist events removed by cascade;
+  - 3 `specification_uploads`, cascading 176 `extracted_handover_items` review rows;
+  - 3 throwaway route-quality smoke organisations/auth users created by the smoke harness.
+
+### Verification
+
+Final Supabase counts after cleanup:
+
+- `specification_uploads`: 0
+- `extracted_handover_items`: 0
+- `project_handover_checklist_items`: 0
+- `project_handover_checklist_events`: 0
+- route-quality smoke orgs: 0
+
+### Remaining Work / Recommendation
+
+- Hunter can now run a fresh browser user flow from a clean extraction/review/checklist state.
+- If the next browser flow surfaces issues, add generic fixtures for the failure class before changing extraction logic.
+- Before committing, inspect/stage carefully because this worktree includes pre-existing modified/untracked files from earlier slices.
+
+
+## 2026-06-24 - Extraction Quality Hardening Save-Boundary Audit
+
+### Trigger
+
+User reported that the Docling/OpenAI flow still allowed human-visible OCR garbage and internal classifier diagnostics into saved review rows (`stand ing`, `lmainspressureelectric`, `kwelement`, `the rmostat`, `throostat`, and `LLMReviewLane:`). User explicitly asked for systemic quality gates and generic fixtures, not one-off row patches.
+
+### Changes
+
+- Added `src/lib/ai/spec-quality-audit.ts` to audit final visible `extracted_text` / `source_snippet` for diagnostic leakage, split words, glued service/unit text, OCR misspellings, and suspicious token density.
+- Added final-quality and audit fixture harnesses:
+  - `scripts/fixtures/spec-final-quality-fixtures.json`
+  - `scripts/check-spec-final-quality-fixtures.mjs`
+  - `scripts/fixtures/spec-quality-audit-fixtures.json`
+  - `scripts/check-spec-quality-audit-fixtures.mjs`
+  - npm scripts `spec-final-quality:fixtures` and `spec-quality-audit:fixtures`.
+- Removed visible `LLMReviewLane:` / `LLMReviewReason:` embedding from `src/lib/ai/spec-llm.ts`; classifier lane/reason are now structured proposal fields and are appended to review diagnostics via `review_reason`, not visible evidence text.
+- Changed final evidence cleanup in `src/lib/ai/spec-final-cleanup.ts` to support `OPENAI_SPEC_FINAL_CLEANUP_MODE=all|dirty|off`; local/demo all-mode sends all final visible rows through cleanup in batches, then runs the final quality audit.
+- Added response diagnostics in `src/lib/server/specification-response.ts` under `final_quality_audit` and expanded `final_evidence_cleanup.mode`.
+- Broadened `src/lib/ai/spec-text-normalizer.ts` messy-row selection with generic OCR-class patterns and priority buckets, so severe OCR rows are selected before lower-risk messy rows.
+- Added low-risk deterministic OCR fallback repairs in `src/lib/ai/spec-normalize.ts` for split words, hot-water unit/service text, compact finish descriptions, and dropped location letters.
+- Added live route quality smoke `scripts/smoke-spec-route-quality.mjs` / `npm.cmd run spec-route:quality-smoke`; it can create a throwaway Supabase user/org/project, POST the real spec PDF to the live route, then query saved review/checklist rows for forbidden visible text.
+- `/api/specifications/extract-pdf` now also runs final cleanup/audit, so preview responses use the same visible-evidence boundary as the save route.
+
+### Verification
+
+- `npm.cmd run spec-extract:fixtures` passed: 31 fixtures.
+- `npm.cmd run spec-normalizer:fixtures` passed: 4 fixtures.
+- `npm.cmd run spec-candidates:fixtures` passed: 4 fixtures.
+- `npm.cmd run spec-llm:fixtures` passed: 5 fixtures.
+- `npm.cmd run spec-final-quality:fixtures` passed: 5 fixtures.
+- `npm.cmd run spec-quality-audit:fixtures` passed: 3 fixtures.
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed with known Docling/Turbopack NFT trace warnings.
+- Fresh live route smoke after dev-server restart with Docling/OpenAI/final-cleanup all-mode passed. Upload `3daef1f7-cc6c-451c-8133-8a02de0f7d28` returned HTTP 200:
+  - saved review rows: 57
+  - synced checklist rows: 55
+  - normalizer selected/accepted/rejected: 53 / 51 / 2
+  - classifier sent/accepted/rejected: 63 / 63 / 0
+  - final cleanup dirty-before/sent/accepted/rejected/dirty-after: 2 / 57 / 56 / 1 / 0
+  - final quality audit pass/checked: 57 / 57
+  - bad visible review/checklist counts: 0 / 0
+
+### Remaining Work / Recommendation
+
+- Keep `OPENAI_SPEC_FINAL_CLEANUP_MODE=all` for local/demo investor prep. Production can tune limits or use dirty-mode only after a cost/quality decision.
+- If future rows are flagged by `final_quality_audit`, add generic fixtures for the new OCR/readability class and improve the relevant boundary before retesting; do not backfill one row only.
+- The route smoke creates throwaway Supabase auth/org/project/upload data. Clean these later if demo database tidiness matters.
+
+
+## 2026-06-24 - Saved Row Quality Audit And Systemic Dedupe
+
+### Trigger
+
+After final evidence cleanup reached zero dirty saved rows, user asked to continue reviewing row quality/coverage instead of stopping at OCR cleanliness.
+
+### Changes
+
+- Audited the latest spec extraction output by compacted source evidence, generic titles, category precedence, and inferred rows.
+- Added systemic extraction fixes in `src/lib/ai/spec-extract.ts`:
+  - suppress generic schema-row duplicates when a canonical source-backed proposal already covers the same evidence;
+  - prevent generic titles such as `Bathroom&`, `Fittings`, `Ceramic tiles Area`, and `Raft Slab` from surviving alongside better canonical rows;
+  - improve category precedence for tiles, cladding, plumbing fixtures, and paint/finish rows;
+  - stop creating the inferred `Wash exterior cladding and painted finishes` maintenance task from product-only cladding evidence.
+- Expanded OCR/readability normalization in `src/lib/ai/spec-normalize.ts` for compliance-document and custom-carpet patterns surfaced by the quality audit.
+- Added conservative final save-boundary dedupe/category normalization in `src/lib/ai/spec-final-cleanup.ts` so LLM title/category variation does not reintroduce same-source duplicates after classification.
+- Added regression fixtures to `scripts/fixtures/spec-extract-row-fixtures.json`; fixture count is now 31.
+
+### Verification
+
+- `npm.cmd run spec-extract:fixtures` passed: 31 fixtures.
+- `npm.cmd run spec-normalizer:fixtures` passed: 3 fixtures.
+- `npm.cmd run spec-candidates:fixtures` passed: 4 fixtures.
+- `npm.cmd run spec-llm:fixtures` passed: 5 fixtures.
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed with known Docling/Turbopack NFT trace warnings.
+- In-process Docling markdown + OpenAI smoke using `.local-artifacts/docling/2074-legal-signed-outline-spec.md` and the normalizer/classifier/final-cleanup path returned:
+  - deterministic proposals: 65
+  - final items: 57
+  - normalizer selected/accepted/rejected: 50 / 49 / 1
+  - classifier candidates/needs/sent/accepted/rejected: 65 / 63 / 63 / 63 / 0
+  - final cleanup dirty-before/sent/accepted/rejected/dirty-after: 5 / 5 / 5 / 0 / 0
+  - dirty count after final cleanup: 0
+  - suspicious generic title count: 0
+  - remaining shared-source group: `Engineered timber veneer flooring` plus `Waterproof membrane under wet-area tiles`, intentionally left separate because flooring and waterproofing are distinct handover concepts from the same source row.
+
+### Remaining Work / Recommendation
+
+- Restart the dev server before the next browser/API route smoke because route/server extraction code changed.
+- Fresh live `/api/specifications/process-pdf` route smoke has now passed after restarting the dev server: upload `b747b824-08b3-462e-af4a-c872471d9702`, saved 60 review rows, synced 58 checklist rows, final cleanup dirty-before/sent/accepted/rejected/dirty-after `5/5/5/0/0`, dirty review/checklist counts `0/0`, suspicious generic title count `0`, and only the intentional flooring/waterproofing shared-source group remained.
+- Continue coverage review next: compare final rows against the original spec sections to identify missed products/finishes/documents, and add any misses as regression fixtures before changing extraction logic.
+
+## 2026-06-24 - Final Evidence Cleanup Diagnostics And Smoke Verification
+
+### Trigger
+
+User wanted the next step completed now: expose the final evidence cleanup quality-gate counts in the API response, then rerun the real Docling/OpenAI spec extraction path and avoid one-off OCR phrase fixes.
+
+### Changes
+
+- Added `finalEvidenceCleanupResult` plumbing to `src/lib/server/specification-response.ts`.
+- `/api/specifications/process-pdf` responses now include `final_evidence_cleanup` with enabled, dirty-before, sent, accepted, rejected, dirty-after, token usage, and error-count diagnostics.
+- Tightened `src/lib/ai/spec-final-cleanup.ts` so if the AI final cleanup repairs the structured `Description:` but leaves `source_snippet` dirty, the save-boundary gate can use the cleaned Description as the readable source snippet rather than persisting glued OCR.
+
+### Verification
+
+- `npm.cmd run spec-extract:fixtures` passed: 24 fixtures.
+- `npm.cmd run spec-normalizer:fixtures` passed: 3 fixtures.
+- `npm.cmd run spec-candidates:fixtures` passed: 4 fixtures.
+- `npm.cmd run spec-llm:fixtures` passed: 5 fixtures.
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed with known Docling/Turbopack NFT trace warnings.
+- Fresh live Supabase smoke against `C:\Users\hunte\Downloads\2074 legal signed outline spec.pdf.pdf` returned HTTP 200 and saved specification upload `fe738086-995f-4fab-a8bf-744d1444ecff`:
+  - `saved_count`: 65
+  - `ai_text_normalizer.enabled`: true
+  - normalizer selected/accepted/rejected: 50 / 49 / 1
+  - `ai_classifier.enabled`: true
+  - classifier candidates/needs/sent/accepted/rejected: 70 / 67 / 67 / 65 / 2
+  - `final_evidence_cleanup.enabled`: true
+  - `final_evidence_cleanup.dirty_before_count`: 0
+  - `final_evidence_cleanup.dirty_after_count`: 0
+- Direct DB verification for that upload found:
+  - review rows: 65
+  - dirty review rows: 0
+  - old dirty phrase hits: none
+  - synced checklist rows for the upload: 63
+  - dirty checklist rows: 0
+
+### Remaining Work / Recommendation
+
+- Keep using `final_evidence_cleanup.dirty_after_count` as the save-boundary invariant. If it rises above zero, query the saved rows and improve detector/prompt/validation/evidence assembly systemically; do not add item-specific phrase fixes.
+- The smoke project/data created during testing is `Hermes Smoke Spec Cleanup Test`; decide later whether to keep it for inspection or clean it before demo data prep.
+
+## 2026-06-23 - LLM OCR/Text Normalization Pass
+
+### Trigger
+
+User pointed out that continuing to add deterministic spacing fixtures for every missing/extra-space pattern would not generalize well to new documents. The prior OpenAI tests were cheap enough to justify an AI pass that repairs OCR/readability issues before extraction/classification.
+
+### Changes
+
+- Added `src/lib/ai/spec-text-normalizer.ts`:
+  - selects messy Docling table rows using glued-word/camelcase/spacing heuristics;
+  - calls OpenAI Responses with a strict JSON schema;
+  - asks for spacing/spelling/punctuation repair only, with explicit no-invention instructions;
+  - validates output by rejecting high-risk rewrites, missing normalized text, invalid confidence, oversized rewrites, and dropped source product codes;
+  - applies accepted rewrites back into table-like markdown for downstream extraction.
+- Added `scripts/check-spec-text-normalizer-fixtures.mjs` and `scripts/fixtures/spec-text-normalizer-fixtures.json`.
+- Added npm scripts:
+  - `spec-normalizer:fixtures`
+  - `spec-normalizer:smoke`
+- Wired the normalizer into both `/api/specifications/extract-pdf` and `/api/specifications/process-pdf` behind `OPENAI_SPEC_NORMALIZER_ENABLED=true`, before deterministic proposal building and before the existing LLM classifier.
+- Added `ai_text_normalizer` diagnostics to extraction responses.
+- Added a few deterministic phrase fixes surfaced by the live normalizer smoke (`topographical`, `standard`, `upstand`, `therefore`).
+
+### Verification
+
+- `npm.cmd run spec-normalizer:fixtures` passed: 3 fixtures.
+- Live bounded smoke: `OPENAI_SPEC_NORMALIZER_LIMIT=10 OPENAI_SPEC_NORMALIZER_BATCH_SIZE=5 npm.cmd run spec-normalizer:smoke`:
+  - input rows: 166
+  - selected rows: 10
+  - accepted: 8
+  - rejected: 2 high-risk rewrites
+  - token usage: 4,354 total tokens
+  - useful repairs included `tobe suppliedby` -> `to be supplied by`, spaces around `&`, `frombenchtop` -> `from bench top`, and `undersideof` -> `underside of`.
+- `npm.cmd run spec-extract:fixtures` passed: 22 fixtures.
+- `npm.cmd run spec-candidates:fixtures` passed: 4 fixtures.
+- `npm.cmd run spec-llm:fixtures` passed: 4 fixtures.
+- `npm.cmd run spec-extract:smoke` passed: 86 proposals.
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed with known Docling/Turbopack NFT trace warnings.
+
+### Remaining Work / Recommendation
+
+- Next run a real browser upload smoke with both `OPENAI_SPEC_NORMALIZER_ENABLED=true` and existing classifier settings enabled. Inspect `ai_text_normalizer` diagnostics, changed row samples/logs, review rows, and checklist candidates.
+- Keep the normalizer conservative. Do not auto-accept high-risk rewrites; add UI/debug surfacing only if needed.
+- If browser output is materially cleaner, move from extraction tuning into checklist item detail/editing UX for the investor demo.
+
+## 2026-06-23 - Product Category/Title Oddity Cleanup
+
+### Trigger
+
+After electrical category cleanup, the remaining targeted extraction-quality oddities included `Engineered Timber` landing as `Tiles` because its row also mentioned waterproof membrane under tiles, and a St Michel powder-room drawer vanity row being titled `St Michel waste` because the notes mentioned drilling for waste/mixer. A cavity-slider row also needed a regression guard so bathroom privacy-set wording would not steal it from `Doors and hardware` in future deterministic extraction.
+
+### Changes
+
+- Added three regression fixtures to `scripts/fixtures/spec-extract-row-fixtures.json`:
+  - cavity slider handles stay `Doors and hardware` despite bathroom/WC privacy set text;
+  - engineered timber flooring stays `Flooring` despite nearby tile/membrane text;
+  - St Michel drawer vanity row becomes `St Michel Vanity` / `Bathroom fixtures`, not `St Michel waste`.
+- Updated `src/lib/ai/spec-extract.ts` category/title precedence:
+  - door-hardware signals such as cavity slider/lever handles/privacy sets are handled before generic bathroom terms;
+  - engineered timber/timber veneer/flooring terms are handled before tile terms;
+  - St Michel vanity/drawer/vessel-basin/top-panel/accent-strip rows get a vanity title/category before waste/mixer notes can dominate.
+- Backfilled the current Supabase review/checklist rows for the product `Engineered Timber Flooring` row and the St Michel vanity row. A focused query now finds no remaining target suspicious rows (`Engineered Timber` as `Tiles` or `St Michel waste`).
+
+### Verification
+
+- Live counts remain:
+  - `extracted_handover_items`: 87
+  - `specification_uploads`: 1
+  - `extracted_items`: 0
+  - `project_handover_checklist_items`: 85
+- `npm.cmd run spec-extract:fixtures` passed: 22 fixtures.
+- `npm.cmd run spec-extract:smoke` passed: 86 proposals. The proposal count dropped by one because the St Michel vanity fixture no longer creates the spurious separate `St Michel waste` proposal.
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed with known Docling/Turbopack NFT trace warnings.
+
+### Remaining Work
+
+- Extraction/checklist quality is now materially cleaner for the investor-demo path. Remaining extraction refinements can be smaller: repeated/groupable shower/vanity/flooring variants, heated towel rail category semantics, and eventual migration away from the legacy `extracted_handover_items` upload path.
+- UI rework remains parked unless the next priority shifts.
+
+## 2026-06-23 - Electrical Category Inference Cleanup
+
+### Trigger
+
+The next extraction quality slice after source-document de-duplication was wrong category assignment for electrical/sensor/power rows. Live Supabase review rows had electrical items categorized as `Doors and hardware` or `Bathroom fixtures`, including `LED sensor light`, `Light sensor`, `Appliance wire & fit power points and connection`, and `Mirror Light Master Ensuite`.
+
+### Root Cause
+
+`inferCategory()` checked bathroom and door keywords before electrical keywords. Rows such as `Back door LEDSensor Light` and `Entry&garage doorx 1, back doorx 1` therefore matched `door` first; `Mirror Light Master Ensuite` matched `mirror` before `light`; and power-point rows with `Auto door` matched door hardware before electrical intent.
+
+### Changes
+
+- Added `expectedCategory` support to `scripts/check-spec-extract-fixtures.mjs`.
+- Added four category regression fixtures to `scripts/fixtures/spec-extract-row-fixtures.json` for:
+  - back-door LED sensor light;
+  - light sensor near entry/garage/back doors;
+  - auto-door power-point connection;
+  - master-ensuite mirror pendant light.
+- Added OCR normalization for `LEDSensor` -> `LED Sensor` in `src/lib/ai/spec-normalize.ts`.
+- Added an electrical category signal helper in `src/lib/ai/spec-extract.ts` and run it before bathroom/door/category fall-through. It covers `lights?`, `downlights?`, `pendants?`, `powerpoint`, `switch`, `sensor`, `wire`, `electrical`, `circuit`, `outlet`, `RJ45`, `patch panel`, and `Cat6`.
+- Backfilled current Supabase review rows and checklist rows for the four affected live items; current focused query finds no electrical-ish rows categorized as `Doors and hardware` or `Bathroom fixtures`.
+
+### Verification
+
+- Live counts remain:
+  - `extracted_handover_items`: 87
+  - `specification_uploads`: 1
+  - `extracted_items`: 0
+  - `project_handover_checklist_items`: 85
+- `npm.cmd run spec-extract:fixtures` passed: 19 fixtures.
+- `npm.cmd run spec-extract:smoke` passed: 87 proposals; electrical rows now classify correctly in the smoke output.
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed with known Docling/Turbopack NFT trace warnings.
+
+### Remaining Work
+
+- Next fixture-backed extraction quality slice could group repeated shower/vanity/flooring variants or clean title/category oddities outside the electrical cluster (for example `Cavity Slider Handles` as bathroom fixtures, `Engineered Timber` as tiles, or `Heated Towel Rail` as tapware).
+- UI rework remains parked.
+
+## 2026-06-23 - Superior Kitchens Source-Document De-Duplication
+
+### Trigger
+
+After fixing checklist sync, the next extraction-quality issue was duplicate source-document rows around the same Superior Kitchens quote. The live queue had individual document rows for `Kitchen`, `Scullery`, `Laundry`, `Entertainment Unit- drawers`, `LED Light strips`, and an LLM-derived `Kitchen joinery quote reference`, in addition to the canonical `Kitchen and joinery supplier quote/source document`.
+
+### Changes
+
+- Added fixture coverage to `scripts/fixtures/spec-extract-row-fixtures.json` so Superior Kitchens quote-only rows must collapse to the canonical source-document request and must not create `Kitchen`, `Scullery`, `Laundry`, `Entertainment Unit- drawers`, or `Kitchen, scullery and laundry joinery` proposals.
+- Added source-document-reference detection in `src/lib/ai/spec-extract.ts`:
+  - schema/table rows that only say `as per quote/invoice/schedule/manual/warranty/certificate` are skipped as product rows;
+  - non-document extraction rules are also suppressed when the selected evidence is only a source-document reference;
+  - audit output now labels these skipped rows as `source_document_reference` rather than silent drops.
+- Backfilled the current Supabase review queue by deleting 6 redundant legacy source-document rows. The remaining document rows are the canonical Superior Kitchens source-document row and the producer/code-compliance document row.
+
+### Verification
+
+- Current live counts after backfill:
+  - `extracted_handover_items`: 87
+  - `specification_uploads`: 1
+  - `extracted_items`: 0
+  - `project_handover_checklist_items`: 85
+  - `project_handover_checklist_events`: 85
+- `npm.cmd run spec-extract:fixtures` passed: 15 fixtures.
+- `npm.cmd run spec-extract:smoke` passed: 87 proposals. The removed rows show in audit as `source_document_reference`, so recall is explicit rather than silent.
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed with known Docling/Turbopack NFT trace warnings.
+
+### Remaining Work
+
+- Next fixture-backed quality target: wrong categories for electrical/sensor/power rows currently landing under doors/bathroom fixtures, or grouping repeated shower/vanity/flooring variants.
+- UI rework remains parked.
+
+## 2026-06-23 - Legacy Specification Rows Sync Into Checklist Candidates
+
+### Trigger
+
+User asked to inspect the latest 93-row extraction output and prove whether it was good enough for an investor demo, with special focus on whether review rows were flowing into the project checklist.
+
+### Findings
+
+- Live Supabase counts before the fix:
+  - `extracted_handover_items`: 93
+  - `specification_uploads`: 1
+  - `extracted_items`: 0
+  - `project_handover_checklist_items`: 0
+- Root cause: the current browser specification upload path is still `/api/specifications/process-pdf`, which writes legacy `extracted_handover_items`; the newer checklist sync only ran for the richer `extracted_items` document workflow in `src/lib/server/actions.ts`.
+- The latest rows are broadly demo-useful, but remaining quality issues to tune later include duplicate/groupable rows (`Showers Bed 1&2`, engineered timber flooring, vanity/toilet-roll variants), duplicated source-document/quote rows for Superior Kitchens, and a few wrong categories around electrical/sensor rows. These are not as blocking as the checklist sync gap.
+
+### Changes
+
+- Added legacy checklist sync to `/api/specifications/process-pdf` after both normal and fallback legacy inserts.
+- Added `legacy_extracted_handover_item_id` to the checklist migration with a unique partial index so legacy review rows can be upserted without conflicting with the newer `source_extracted_item_id` path.
+- Applied the Supabase schema change directly using `SUPABASE_DB_URL`.
+- Backfilled the current live upload: 85 non-document legacy review rows became `project_handover_checklist_items`, with source snippets/review notes stored in `source_metadata` and 85 checklist events inserted.
+- Updated `HANDOFF.md` and `WORKSHEET.md` with the legacy-path diagnosis and current counts.
+
+### Verification
+
+- REST/direct count after backfill: `project_handover_checklist_items=85`; legacy column selectable through REST.
+- `npm.cmd run spec-extract:fixtures` passed: 15 fixtures.
+- `npm.cmd run spec-extract:smoke` passed: 93 proposals.
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed with known Docling/Turbopack NFT trace warnings.
+
+### Remaining Work
+
+- Next extraction quality fixes should be fixture-backed: group or de-dupe repeated real items, especially shower/vanity/flooring variants; collapse duplicate Superior Kitchens source-document request rows; and correct wrong category assignment for electrical/sensor rows.
+- Decide whether to route spec upload fully through the newer `uploaded_documents`/`document_extraction_jobs`/`extracted_items` workflow, or keep the compatibility bridge until the UI is moved.
+- UI rework remains parked until checklist/extraction flow is proven.
+
+## 2026-06-22 - Extraction Rows Sync Into Checklist Candidates
+
+### Trigger
+
+User asked to continue after applying the Supabase checklist migration. The next planned slice was to make Docling/OpenAI extraction results create/update checklist candidates instead of staying only in the extraction review queue.
+
+### Changes
+
+- Extended the checklist contract with `sourceExtractedItemId`, `sourceDocumentId`, and `extractionJobId`.
+- Extended `docs/supabase-add-project-handover-checklist.sql` with source columns and a unique index on `source_extracted_item_id`; reran it against Supabase.
+- Updated checklist queries/actions to select and persist the source identifiers.
+- Added extraction-to-checklist mapping in `src/lib/server/actions.ts`:
+  - product/category/brand/manufacturer/model/supplier fields become checklist identity fields;
+  - `maintenanceText` becomes care instructions requiring review;
+  - `warrantyText` becomes warranty information requiring review;
+  - source document IDs become supporting documents requiring review;
+  - source page/section/snippet are preserved in notes and metadata;
+  - synced items are upserted by `source_extracted_item_id` so retries update instead of duplicating.
+- Wired sync into both Supabase and local document processing after product matching so the checklist receives final match/review state metadata.
+- Added checklist sync metrics into extraction job usage metrics.
+
+### Verification
+
+- Direct DB verification: source columns `source_extracted_item_id`, `source_document_id`, and `extraction_job_id` exist; unique source index exists.
+- REST verification: selecting source columns from `project_handover_checklist_items` returned `200 []`.
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed. Known Docling/Turbopack NFT warnings remain.
+
+### Remaining Work
+
+- Run a browser upload smoke with Docling enabled to confirm real upload -> extraction -> checklist item flow in the UI.
+- Add database autocomplete/match review.
+- Add richer item detail editing/upload controls for manual/care/warranty/invoice/Code-of-Compliance sections.
+- Wire guarded source-search review into checklist items.
+- Update publish readiness and client portal output to use checklist state.
+
+## 2026-06-22 - Supabase Checklist Migration Applied
+
+### Trigger
+
+User asked to move to the next step after the first checklist UI slice, meaning apply/verify the Supabase checklist migration.
+
+### Changes
+
+- Tightened `docs/supabase-add-project-handover-checklist.sql` so it is public-schema-qualified and policy-idempotent with `drop policy if exists` before policy creation.
+- Applied the SQL using ignored `.env.local` `SUPABASE_DB_URL`; no secret values were printed.
+
+### Verification
+
+- Direct DB verification before migration: `projects=yes`, `organisation_members=yes`, `uploaded_documents=yes`; checklist tables were missing.
+- Direct DB verification after migration: `project_handover_checklist_items=yes`, `project_handover_checklist_events=yes`.
+- Policy verification: four policies installed across the two checklist tables.
+- REST verification with service role: both `/rest/v1/project_handover_checklist_items?select=id&limit=1` and `/rest/v1/project_handover_checklist_events?select=id&limit=1` returned `200 []`.
+
+### Remaining Work
+
+- Next implementation slice should wire Docling/OpenAI extraction rows into checklist candidates and start replacing the old extraction-only mental model in the workspace.
+- After that, add database autocomplete/match review, richer item detail editing/upload controls, guarded source-search review, and publish readiness/client portal mapping.
+
+## 2026-06-22 - Checklist First Slice Implemented
+
+### Trigger
+
+Implemented the first demo-ready slice from `.hermes/plans/2026-06-22_000000-project-handover-checklist-pivot.md` so the project workspace starts behaving like a handover item checklist rather than only an extraction review surface.
+
+### Changes
+
+- Added `src/lib/project-handover-checklist.ts` with checklist item statuses, section statuses, value sources, search-identity check, missing-section helper, status derivation, and item builder.
+- Added local scaffold persistence in `src/lib/server/local-store/project-handover-checklist.ts`, storing `.local-data/project-handover-checklist.json` items and events.
+- Added Supabase migration draft `docs/supabase-add-project-handover-checklist.sql` for `project_handover_checklist_items` and `project_handover_checklist_events` with project/member RLS policies.
+- Added `getProjectHandoverChecklistItems()` and wired it into `/builder/projects` data loading.
+- Added server actions for creating checklist items, updating checklist items, and accepting items incomplete with a paper trail. If Supabase is configured but the checklist tables are not migrated yet, the action/query paths fall back to local scaffold storage instead of blocking the UI.
+- Added a `/builder/projects` checklist dashboard with metrics, Add checklist item form, explicit `Not enough information to search` prompt, section status chips, and accepted-incomplete reason capture.
+
+### Verification
+
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed. Build still emits the known Docling/Turbopack NFT trace warnings from `next.config.ts`/`src/lib/server/docling.ts`; no type or build errors remain.
+
+### Remaining Work
+
+- Apply `docs/supabase-add-project-handover-checklist.sql` to the Supabase project when ready; until then, Supabase-mode checklist writes fall back to local JSON.
+- Wire existing Docling/OpenAI extraction rows into checklist item creation/update.
+- Add database autocomplete and match-review modal.
+- Add richer item detail editing and document upload/replace controls per care/manual/warranty/invoice/Code-of-Compliance section.
+- Wire guarded source-search result review into checklist items.
+- Update publish readiness and client portal output to use checklist completion/accepted-incomplete state.
+
+## 2026-06-22 - Checklist-First Handover Item Documentation Pivot
+
+### Trigger
+
+Investor feedback changed the product flow away from a spec-upload-first mental model toward a project handover item checklist. The app must help collect care instructions, manuals, warranties, invoices, Code of Compliance information, uploaded documents, and notes for each project item without pretending to know vague products.
+
+### Decisions Captured
+
+- `/builder/projects` should become the primary checklist dashboard for project handover items.
+- Specs, quotes, invoices, manuals, warranties, supplier schedules, photos, and other uploads are accelerators for creating/updating checklist items, not completion authority.
+- Database autocomplete/matching runs before source search.
+- Similar database matches must be shown for user selection; the app must not guess.
+- Source/web search is allowed only when enough item identity exists.
+- Vague items are explicitly `Not enough information to search` and should prompt for brand/manufacturer/supplier/model/SKU/invoice/photo/document upload or manual entry.
+- Autofilled database/source information remains editable and `Needs review` until user confirmation.
+- Items can proceed as accepted incomplete only with paper-trail metadata showing what was missing, who accepted it, and when.
+
+### Files Updated
+
+- Added `docs/project-handover-item-documentation-flow.md`.
+- Updated `docs/product-brief.md`, `docs/phased-work.md`, `docs/architecture.md`, `docs/implementation-phases.md`, `docs/technical-architecture-source-of-truth.md`, `HANDOFF.md`, and `WORKSHEET.md` to point future agents at the checklist-first flow.
+- Saved the implementation plan under `.hermes/plans/2026-06-22_000000-project-handover-checklist-pivot.md`.
+
+### Next Step
+
+Implement the saved checklist-pivot plan. Start with the data/status contract and persistence, then update `/builder/projects` into the checklist dashboard and add the item modals before rewiring extraction/search/publish flows.
+
+## 2026-06-22 - OpenAI 520 Retry And Clean Rerun Prep
+
+### Trigger
+
+During the browser full PDF process, OpenAI returned Cloudflare `520: Web server is returning an unknown error` from `api.openai.com`. The route caught the exception, fell back to deterministic extraction, and saved 97 rows with no LLM classifications.
+
+### Root Cause
+
+The failure was at the OpenAI API boundary, not Docling or deterministic extraction: Docling completed (`provider: docling_local`) and proposal generation returned 97 deterministic rows. The route fallback also hid candidate diagnostics by returning `candidates: []` in the catch block.
+
+### Changes
+
+- Added retry handling around OpenAI Responses calls for retryable statuses: 408, 409, 429, and 5xx, including the observed 520.
+- Set local test env to smaller batches: `OPENAI_SPEC_CLASSIFIER_BATCH_SIZE=10` and `OPENAI_SPEC_CLASSIFIER_RETRY_ATTEMPTS=3`.
+- Kept candidate diagnostics on fallback in both preview and process routes by rebuilding deterministic candidates instead of returning an empty candidate list.
+- Cleared the failed deterministic-only test upload from Supabase:
+  - `extracted_handover_items`: 97 -> 0
+  - `specification_uploads`: 1 -> 0
+
+### Verification
+
+- `npm.cmd run spec-llm:fixtures` passed.
+- `npm.cmd run lint` passed.
+- `OPENAI_SPEC_CLASSIFIER_LIMIT=10 OPENAI_SPEC_CLASSIFIER_BATCH_SIZE=5 OPENAI_SPEC_CLASSIFIER_RETRY_ATTEMPTS=3 npm.cmd run spec-extract:llm-smoke` passed: 10 sent, 9 accepted, 1 rejected, 3,374 tokens.
+- `npm.cmd run build` passed with known Docling/Turbopack NFT warnings.
+
+### Next Step
+
+Restart the dev server so the route code and `.env.local` batch-size changes are loaded, then rerun the browser upload. If OpenAI is still unstable, logs should now show retry warnings first; if it still falls back, diagnostics will still show candidate and eligibility counts instead of zeros.
+
+## 2026-06-22 - LLM-First Source-Backed Spec Review Implementation
+
+### Trigger
+
+Implemented `.hermes/plans/2026-06-22_141615-llm-first-source-backed-spec-review.md` so deterministic extraction stays the source-backed candidate discovery/cleanup layer, while OpenAI reviews broad meaningful unmatched candidates instead of deterministic confidence deciding final trust.
+
+### Changes
+
+- Reworked `src/lib/ai/spec-candidates.ts`:
+  - Added explicit LLM eligibility reasons and `spend_priority`.
+  - Removed the old unmatched-row default of `Deterministic classification is sufficiently clear.`
+  - Unmatched source-backed rows now default to LLM-eligible after low-information, obvious note/admin noise, existing match/attach, and deterministic source-document skips.
+  - Prioritizes model/code systems/fixtures first, then builder-context selections, envelope/structural rows, general finishes, and ordinary review rows.
+- Reworked `src/lib/ai/spec-llm.ts`:
+  - Sorts eligible candidates by spend priority before applying `OPENAI_SPEC_CLASSIFIER_LIMIT`.
+  - Adds `OPENAI_SPEC_CLASSIFIER_BATCH_SIZE` batching and combines sent/accepted/rejected/token diagnostics across batches.
+  - Strengthens the prompt so valid-but-incomplete rows are kept in `needs_model_or_code`, `needs_builder_context`, `needs_source_document`, or `general_finish` lanes instead of being rejected as junk.
+  - Applies accepted classifications while preserving the broader deterministic `source_snippet` when available and adding both `LLMReviewLane` and `LLMReviewReason` to `extracted_text`.
+- Added no-network regression harnesses:
+  - `scripts/fixtures/spec-candidate-eligibility-fixtures.json`
+  - `scripts/check-spec-candidate-fixtures.mjs`
+  - `scripts/fixtures/spec-llm-application-fixtures.json`
+  - `scripts/check-spec-llm-application-fixtures.mjs`
+  - package scripts `spec-candidates:fixtures` and `spec-llm:fixtures`.
+- Expanded API response diagnostics in `src/lib/server/specification-response.ts`:
+  - `eligible_by_reason`
+  - `skipped_by_reason`
+  - `sent_candidate_ids`
+  - `accepted_by_lane`
+  - `rejected_validation_errors`
+- Updated `scripts/smoke-spec-extract-llm.mjs` so it exercises the same ordered/batched `maybeEnhanceSpecificationProposalsWithLlm()` path as the API.
+
+### Verification
+
+- `npm.cmd run spec-extract:fixtures` passed: 11 fixtures.
+- `npm.cmd run spec-candidates:fixtures` passed: 4 fixtures.
+- `npm.cmd run spec-llm:fixtures` passed: 4 fixtures.
+- `npm.cmd run spec-extract:smoke` passed against cached Docling artifact: 93 proposals.
+- `OPENAI_SPEC_CLASSIFIER_LIMIT=40 OPENAI_SPEC_CLASSIFIER_BATCH_SIZE=20 npm.cmd run spec-extract:llm-smoke` passed:
+  - deterministic proposals: 93
+  - LLM-eligible candidates: 90
+  - sent candidates: 40
+  - accepted: 38
+  - rejected: 2
+  - enhanced proposal count: 92
+  - model: `gpt-5.4-mini`
+  - token usage: 6,231 input / 4,165 output / 10,396 total
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed with the known Docling/Turbopack NFT tracing warnings.
+
+### Remaining Work
+
+- Browser/Supabase full-flow rerun is still needed: clear or isolate old extracted rows, process `C:\Users\hunte\Downloads\2074 legal signed outline spec.pdf.pdf` with `DOCUMENT_CONTEXT_PROVIDER=docling_local`, `OPENAI_SPEC_CLASSIFIER_ENABLED=true`, `OPENAI_SPEC_CLASSIFIER_LIMIT=80`, and `OPENAI_SPEC_CLASSIFIER_BATCH_SIZE=20`, then inspect the saved review queue.
+- Specific rows to inspect after rerun: `Aluminium window and door joinery`, `Ducted air conditioning`, possible underfloor-heating output if Docling emits it, general finishes, and obvious note/admin suppression.
+- Watch LLM lane quality: the 40-candidate smoke accepted 38 and rejected 2 validation-problem outputs, which is useful for recall, but browser review should confirm lanes are practical and not over-promoting rough structural/note-like rows.
+
 ## 2026-06-22 - Aluminium Joinery Evidence And LLM Gate Review
 
 ### Trigger

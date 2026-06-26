@@ -9,13 +9,19 @@ Portal. The product is now split into three route-level portals:
 - Builder company portal: `/builder`
 - Client/homeowner portal: `/client/portal`
 
-The main product direction is now:
+The main product direction is now checklist-first:
 
-Builder uploads a specification PDF -> AI/local extractor proposes products,
-documents, and maintenance tasks -> known matches are auto-approved -> new or
-uncertain items go to admin review and optional project-only builder approval ->
-package-ready items form the handover preview -> builder publishes to homeowner
-portal.
+Builder opens a project -> the project page shows required handover items and
+section-level completion state -> builder adds items manually, from database
+autocomplete, or from uploaded specs/quotes/invoices/manuals/warranties/photos ->
+the app database-matches first -> only searches when enough item identity exists ->
+builder reviews/edits/autofills/uploads/accepts incomplete -> reviewed items form
+the handover package -> builder publishes to the homeowner portal.
+
+Specification extraction and Docling/OpenAI work remain useful, but they are now
+a way to populate project checklist candidates. They are not the whole product
+flow and they must not mark items complete without builder review. See
+`docs/project-handover-item-documentation-flow.md`.
 
 Current approval model:
 
@@ -85,6 +91,42 @@ in use. Local scaffold mode carries the richer fields and records edit-history
 snapshots in `.local-data/uploaded-documents.json`.
 
 Quote/source-gap hardening update: approval now checks Supabase review rows with `quote_reference_status` and raw extraction metadata loaded, so source-gap items cannot bypass the server guard just because the minimal review query omitted those fields. Publish readiness now still blocks any item that was approved-as-correct while retaining unresolved quote/missing-field/builder-info signals; explicit edit, exclusion, or builder-supplied review remains the path to resolution. Supporting evidence uploads now record pending source-gap resolution metadata in the review/audit trail.
+
+Project checklist pivot update: investor feedback moved the product toward a
+project-scoped handover item documentation flow. `/builder/projects` should become
+the main checklist dashboard where every item tracks editable identity fields,
+care instructions, manuals, warranty information, invoice data, Code of
+Compliance information, uploaded supporting documents, notes, completion state,
+and paper trail. Database autocomplete/autofill is allowed but always editable;
+web/source search is allowed only when enough identifying detail exists; vague
+items must show `Not enough information to search`; accepted-incomplete items
+must record who accepted what was missing and when. Durable requirements now live
+in `docs/project-handover-item-documentation-flow.md`.
+
+First checklist implementation slice: the repo now has the shared checklist
+contract in `src/lib/project-handover-checklist.ts`, local JSON persistence in
+`src/lib/server/local-store/project-handover-checklist.ts`, a Supabase migration
+at `docs/supabase-add-project-handover-checklist.sql`, Supabase/local query
+and server-action wiring, and a `/builder/projects` checklist dashboard with Add
+item and accepted-incomplete paper trail. The Supabase migration has been applied
+and verified: `project_handover_checklist_items` and
+`project_handover_checklist_events` exist, REST returns `200 []` for both, and
+four RLS policies are installed. Extraction rows now sync into checklist
+candidates after document processing in both Supabase and local scaffold flows;
+synced items preserve source extracted item/document/job IDs, source evidence,
+identity fields, and autofilled-needs-review section statuses. Supabase source
+columns plus the unique source-extracted-item index have been applied and REST
+verified. The legacy `/api/specifications/process-pdf` upload path also now
+syncs non-document `extracted_handover_items` rows into checklist candidates via
+`legacy_extracted_handover_item_id`, because the latest browser spec upload still
+uses the legacy review queue rather than the newer `extracted_items` workflow.
+The current Supabase run has 87 legacy review rows and 85 checklist candidates
+backfilled after removing duplicate Superior Kitchens source-document rows,
+correcting the affected electrical/sensor/power categories, and cleaning the
+current engineered-timber / St Michel vanity category/title oddities.
+The next slices are browser smoke with the new LLM normalizer enabled,
+database autocomplete/match review, richer item detail document upload/editing,
+guarded search review, and publish readiness / client output mapping.
 
 Async extraction workflow update: upload/extraction jobs now use durable states
 for `uploaded`, `processing`, `needs_review`, `partially_reviewed`,
@@ -1128,16 +1170,18 @@ Both passed after the latest changes.
 
 ## Good Resume Prompt
 
-Continue from `HANDOFF.md`. The controlled document workflow has completed
-Phase 10 hardening and Phase 11 Cloudflare local dry-run contracts have a
-partial smoke. Current product direction is context-first extraction and
-builder source-gap capture before paid source enrichment. New architecture lives
-in `docs/azure-cloudflare-context-processing-architecture.md`: evaluate Azure
-context processing, use Cloudflare D1 only for pipeline SQL state, database-
-match before search, ask builders for low-confidence context, re-match, then
-search only builder-confirmed source-ready unknowns. First smoke the
-missing-field/builder-info review prompts, then plan the Azure/D1 spikes and
-finish the manual `/builder/projects` Cloudflare upload smoke.
+Continue from `HANDOFF.md`. First read `AGENTS.md`, `WORKSHEET.md`,
+`docs/product-brief.md`, `docs/phased-work.md`, `docs/architecture.md`, and
+`docs/project-handover-item-documentation-flow.md`. The product has pivoted to a
+project-scoped handover item checklist: `/builder/projects` should become the
+main dashboard for item identity, care instructions, manuals, warranties,
+invoices, Code of Compliance info, uploaded supporting documents, notes,
+completion state, and paper trail. Keep Docling/OpenAI extraction as a way to
+populate checklist candidates, not as completion authority. Database-match before
+search, never guess between similar products, do not search vague items, and
+record explicit incomplete acceptance. Start by implementing the saved plan in
+`.hermes/plans/2026-06-22_000000-project-handover-checklist-pivot.md` or the
+latest checklist-pivot plan.
 
 ## Notes
 

@@ -39,6 +39,7 @@ import {
   getLocalSpecificationUploads,
   publishLocalHandoverPackage,
   updateLocalExtractedItem,
+  updateLocalExtractedItemReviewState,
   updateLocalExtractedItemStatus,
 } from "@/lib/server/local-store/specifications";
 import {
@@ -57,6 +58,17 @@ import {
   updateLocalExtractedWorkflowItemReview,
   updateLocalUploadedDocumentStatus,
 } from "@/lib/server/local-store/uploaded-documents";
+import {
+  getLocalProjectHandoverChecklistItems,
+  saveLocalProjectHandoverChecklistItem,
+  updateLocalProjectHandoverChecklistItem,
+} from "@/lib/server/local-store/project-handover-checklist";
+import {
+  buildProjectHandoverChecklistItem,
+  defaultChecklistSectionStatuses,
+  deriveProjectHandoverChecklistStatus,
+} from "@/lib/project-handover-checklist";
+import type { ProjectHandoverChecklistItem } from "@/lib/project-handover-checklist";
 import {
   aiHandoverApprovalText,
   builderHandoverApprovalText,
@@ -94,6 +106,456 @@ function getRequired(formData: FormData, key: string) {
 function getOptional(formData: FormData, key: string) {
   const value = formData.get(key);
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function isMissingProjectHandoverChecklistTable(error: { message?: string; code?: string } | null) {
+  return Boolean(
+    error?.code === "42P01" ||
+      error?.message?.includes("project_handover_checklist_items") ||
+      error?.message?.includes("project_handover_checklist_events"),
+  );
+}
+
+function getSectionStatusFromForm(formData: FormData, key: string, fallback: ProjectHandoverChecklistItem["sectionStatuses"][keyof ProjectHandoverChecklistItem["sectionStatuses"]]) {
+  const value = getOptional(formData, key);
+  const allowed = ["not_required", "missing", "provided", "uploaded_manually", "autofilled_needs_review", "reviewed", "accepted_incomplete"];
+
+  return allowed.includes(value || "") ? value as typeof fallback : fallback;
+}
+
+function parseChecklistSectionStatuses(formData: FormData) {
+  const selectedProductId = getOptional(formData, "selectedProductId");
+  const autofilled = Boolean(selectedProductId);
+  const defaults = {
+    ...defaultChecklistSectionStatuses,
+    careInstructions: getOptional(formData, "careInstructions")
+      ? autofilled ? "autofilled_needs_review" as const : "provided" as const
+      : defaultChecklistSectionStatuses.careInstructions,
+    manual: getOptional(formData, "manualUrl")
+      ? autofilled ? "autofilled_needs_review" as const : "provided" as const
+      : defaultChecklistSectionStatuses.manual,
+    warranty: getOptional(formData, "warrantyInformation")
+      ? autofilled ? "autofilled_needs_review" as const : "provided" as const
+      : defaultChecklistSectionStatuses.warranty,
+    invoice: getOptional(formData, "invoiceData") ? "provided" as const : defaultChecklistSectionStatuses.invoice,
+    codeCompliance: getOptional(formData, "codeComplianceInformation") ? "provided" as const : defaultChecklistSectionStatuses.codeCompliance,
+    supportingDocuments: getOptional(formData, "supportingDocumentsNote") || getOptional(formData, "extraNotes")
+      ? "provided" as const
+      : defaultChecklistSectionStatuses.supportingDocuments,
+  };
+
+  return {
+    careInstructions: getSectionStatusFromForm(formData, "careInstructionsStatus", defaults.careInstructions),
+    manual: getSectionStatusFromForm(formData, "manualStatus", defaults.manual),
+    warranty: getSectionStatusFromForm(formData, "warrantyStatus", defaults.warranty),
+    invoice: getSectionStatusFromForm(formData, "invoiceStatus", defaults.invoice),
+    codeCompliance: getSectionStatusFromForm(formData, "codeComplianceStatus", defaults.codeCompliance),
+    supportingDocuments: getSectionStatusFromForm(formData, "supportingDocumentsStatus", defaults.supportingDocuments),
+  };
+}
+
+function buildChecklistInputFromForm(formData: FormData) {
+  const selectedProductId = getOptional(formData, "selectedProductId");
+  const sourceLabel = getOptional(formData, "selectedProductLabel");
+  const location = getOptional(formData, "location");
+  const quantity = getOptional(formData, "quantity");
+  const finish = getOptional(formData, "finish");
+  const colour = getOptional(formData, "colour");
+  const supportingDocumentsNote = getOptional(formData, "supportingDocumentsNote");
+  const acceptedIncompleteReason = getOptional(formData, "acceptedIncompleteReason");
+
+  return {
+    projectId: getRequired(formData, "projectId"),
+    title: getRequired(formData, "title"),
+    category: getOptional(formData, "category") || undefined,
+    brand: getOptional(formData, "brand") || undefined,
+    manufacturer: getOptional(formData, "manufacturer") || getOptional(formData, "brand") || undefined,
+    model: getOptional(formData, "model") || undefined,
+    sku: getOptional(formData, "sku") || undefined,
+    productCode: getOptional(formData, "productCode") || undefined,
+    supplier: getOptional(formData, "supplier") || undefined,
+    supplierSku: getOptional(formData, "supplierSku") || undefined,
+    careInstructions: getOptional(formData, "careInstructions") || undefined,
+    manualUrl: getOptional(formData, "manualUrl") || undefined,
+    warrantyInformation: getOptional(formData, "warrantyInformation") || undefined,
+    invoiceData: getOptional(formData, "invoiceData") || undefined,
+    codeComplianceInformation: getOptional(formData, "codeComplianceInformation") || undefined,
+    extraNotes: getOptional(formData, "extraNotes") || undefined,
+    acceptedIncompleteReason: acceptedIncompleteReason || undefined,
+    acceptedIncompleteAt: acceptedIncompleteReason ? new Date().toISOString() : undefined,
+    sectionStatuses: parseChecklistSectionStatuses(formData),
+    valueSources: selectedProductId ? ["database_autofill" as const] : ["manual_entry" as const],
+    sourceMetadata: {
+      source: selectedProductId ? "database_autofill" : "manual",
+      matched_product_id: selectedProductId || undefined,
+      source_label: sourceLabel || undefined,
+      autofilled_needs_review: Boolean(selectedProductId),
+      location: location || undefined,
+      quantity: quantity || undefined,
+      finish: finish || undefined,
+      colour: colour || undefined,
+      supporting_documents_note: supportingDocumentsNote || undefined,
+    },
+  };
+}
+
+function getChecklistInsertPayload(item: ProjectHandoverChecklistItem) {
+  return {
+    project_id: item.projectId,
+    source_extracted_item_id: item.sourceExtractedItemId || null,
+    source_document_id: item.sourceDocumentId || null,
+    extraction_job_id: item.extractionJobId || null,
+    title: item.title,
+    category: item.category || null,
+    brand: item.brand || null,
+    manufacturer: item.manufacturer || null,
+    model: item.model || null,
+    sku: item.sku || null,
+    product_code: item.productCode || null,
+    supplier: item.supplier || null,
+    supplier_sku: item.supplierSku || null,
+    care_instructions: item.careInstructions || null,
+    manual_document_id: item.manualDocumentId || null,
+    manual_url: item.manualUrl || null,
+    warranty_information: item.warrantyInformation || null,
+    warranty_document_id: item.warrantyDocumentId || null,
+    warranty_guidance_is_general: item.warrantyGuidanceIsGeneral || false,
+    invoice_document_id: item.invoiceDocumentId || null,
+    invoice_data: item.invoiceData || null,
+    code_compliance_document_id: item.codeComplianceDocumentId || null,
+    code_compliance_information: item.codeComplianceInformation || null,
+    supporting_document_ids: item.supportingDocumentIds,
+    extra_notes: item.extraNotes || null,
+    section_statuses: item.sectionStatuses,
+    value_sources: item.valueSources,
+    source_metadata: item.sourceMetadata,
+    status: item.status,
+    completion_summary: item.completionSummary || null,
+    accepted_incomplete_reason: item.acceptedIncompleteReason || null,
+    accepted_incomplete_at: item.acceptedIncompleteAt || null,
+    accepted_incomplete_by: item.acceptedIncompleteBy || null,
+    created_by: item.createdBy || null,
+    last_edited_by: item.lastEditedBy || null,
+  };
+}
+
+function getStringFromRecord(record: Record<string, unknown> | undefined, key: string) {
+  const value = record?.[key];
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function mapExtractedWorkflowItemToChecklistInput(item: ExtractedWorkflowItem) {
+  const raw = item.rawExtractedData || {};
+  const title =
+    item.productName ||
+    getStringFromRecord(raw, "productName") ||
+    getStringFromRecord(raw, "title") ||
+    item.category ||
+    "Extracted handover item";
+  const category = item.builderApprovedCategory || item.category || item.aiSuggestedCategory;
+  const careInstructions = item.maintenanceText || getStringFromRecord(raw, "careInstructions");
+  const warrantyInformation = item.warrantyText || getStringFromRecord(raw, "warrantyInformation");
+  const notes = [
+    item.location ? `Location: ${item.location}` : null,
+    item.quantity ? `Quantity: ${item.quantity}` : null,
+    item.variantOrFinish ? `Variant/finish: ${item.variantOrFinish}` : null,
+    item.sourcePage ? `Source page: ${item.sourcePage}` : null,
+    item.sourceSection ? `Source section: ${item.sourceSection}` : null,
+    item.sourceSnippet ? `Evidence: ${item.sourceSnippet}` : null,
+  ].filter(Boolean).join("\n");
+  const sectionStatuses = {
+    ...defaultChecklistSectionStatuses,
+    careInstructions: careInstructions ? "autofilled_needs_review" as const : "missing" as const,
+    manual: item.manualSourceVersionId ? "autofilled_needs_review" as const : "missing" as const,
+    warranty: warrantyInformation || item.warrantySourceVersionId ? "autofilled_needs_review" as const : "missing" as const,
+    invoice: item.quoteReferenceStatus && item.quoteReferenceStatus !== "not_applicable" ? "autofilled_needs_review" as const : "not_required" as const,
+    codeCompliance: "not_required" as const,
+    supportingDocuments: item.sourceDocumentId ? "autofilled_needs_review" as const : "missing" as const,
+  };
+
+  return {
+    projectId: item.projectId,
+    sourceExtractedItemId: item.id,
+    sourceDocumentId: item.sourceDocumentId,
+    extractionJobId: item.extractionJobId,
+    title,
+    category,
+    brand: item.brand,
+    manufacturer: item.manufacturer || item.brand,
+    model: item.model,
+    supplier: item.supplierName || item.supplier,
+    supplierSku: item.supplierSku,
+    careInstructions,
+    warrantyInformation,
+    supportingDocumentIds: item.sourceDocumentId ? [item.sourceDocumentId] : [],
+    extraNotes: notes || undefined,
+    sectionStatuses,
+    valueSources: ["extracted_document" as const],
+    sourceMetadata: {
+      extracted_item_id: item.id,
+      source_document_id: item.sourceDocumentId,
+      extraction_job_id: item.extractionJobId,
+      match_status: item.matchStatus,
+      review_status: item.reviewStatus,
+      matched_product_id: item.matchedProductId,
+      source_page: item.sourcePage,
+      source_section: item.sourceSection,
+      source_snippet: item.sourceSnippet,
+      raw_extracted_data: item.rawExtractedData,
+    },
+  };
+}
+
+function buildChecklistFromExtractedItem(item: ExtractedWorkflowItem, actorId?: string) {
+  return buildProjectHandoverChecklistItem(mapExtractedWorkflowItemToChecklistInput(item), {
+    id: `checklist-from-${item.id}`,
+    actorId,
+  });
+}
+
+async function syncSupabaseChecklistItemsFromExtractedItems(
+  context: BuilderActionContext,
+  items: ExtractedWorkflowItem[],
+) {
+  const checklistItems = items
+    .filter((item) => item.reviewStatus !== "excluded")
+    .map((item) => buildChecklistFromExtractedItem(item, context.userId));
+
+  if (checklistItems.length === 0) {
+    return { upsertedCount: 0 };
+  }
+
+  const payload = checklistItems.map((item) => ({
+    ...getChecklistInsertPayload(item),
+    updated_at: new Date().toISOString(),
+  }));
+  const { data, error } = await context.supabase
+    .from("project_handover_checklist_items")
+    .upsert(payload, { onConflict: "source_extracted_item_id" })
+    .select("id,project_id,source_extracted_item_id,status");
+
+  if (error) {
+    if (isMissingProjectHandoverChecklistTable(error)) {
+      return { upsertedCount: 0, skippedReason: "checklist-table-missing" };
+    }
+
+    throw new Error(error.message);
+  }
+
+  const eventRows = (data || []).map((row) => ({
+    project_id: row.project_id,
+    checklist_item_id: row.id,
+    event_type: "created",
+    actor_id: context.userId,
+    notes: "Checklist item synced from document extraction.",
+    metadata: {
+      source_extracted_item_id: row.source_extracted_item_id,
+      status: row.status,
+      source: "extracted_document",
+    },
+  }));
+
+  if (eventRows.length > 0) {
+    await context.supabase.from("project_handover_checklist_events").insert(eventRows);
+  }
+
+  return { upsertedCount: data?.length || 0 };
+}
+
+async function syncLocalChecklistItemsFromExtractedItems(items: ExtractedWorkflowItem[]) {
+  let upsertedCount = 0;
+
+  for (const item of items.filter((entry) => entry.reviewStatus !== "excluded")) {
+    const checklist = buildChecklistFromExtractedItem(item, "local-scaffold");
+    const existing = await getLocalProjectHandoverChecklistItems(item.projectId);
+    const existingItem = existing.find((entry) => entry.sourceExtractedItemId === item.id);
+
+    if (existingItem) {
+      await updateLocalProjectHandoverChecklistItem(existingItem.id, checklist, "local-scaffold", "Checklist item synced from document extraction.");
+    } else {
+      await saveLocalProjectHandoverChecklistItem(mapExtractedWorkflowItemToChecklistInput(item), "local-scaffold");
+    }
+
+    upsertedCount += 1;
+  }
+
+  return { upsertedCount };
+}
+
+function redirectChecklistSaved(storage: "supabase" | "stub" | "local-fallback"): never {
+  redirect(`/builder/projects?draft=checklist-item-saved&storage=${storage}`);
+}
+
+function redirectChecklistError(error: string): never {
+  redirect(`/builder/projects?error=${error}`);
+}
+
+export async function createProjectHandoverChecklistItemAction(formData: FormData) {
+  const input = buildChecklistInputFromForm(formData);
+  const context = await getBuilderContext();
+
+  if (!context) {
+    await saveLocalProjectHandoverChecklistItem(input);
+    redirectChecklistSaved("stub");
+  }
+
+  const timestamp = new Date().toISOString();
+  const item = buildProjectHandoverChecklistItem(input, {
+    id: "pending-supabase-checklist-item",
+    actorId: context.userId,
+    timestamp,
+  });
+  const payload = getChecklistInsertPayload(item);
+  const { data, error } = await context.supabase
+    .from("project_handover_checklist_items")
+    .insert(payload)
+    .select("id")
+    .single();
+
+  if (error || !data) {
+    if (isMissingProjectHandoverChecklistTable(error)) {
+      await saveLocalProjectHandoverChecklistItem(input, context.userId);
+      redirectChecklistSaved("local-fallback");
+    }
+
+    redirectChecklistError("create-checklist-item-failed");
+  }
+
+  await context.supabase.from("project_handover_checklist_events").insert({
+    project_id: item.projectId,
+    checklist_item_id: data.id,
+    event_type: "created",
+    actor_id: context.userId,
+    notes: "Project handover checklist item created.",
+    metadata: {
+      status: item.status,
+      value_sources: item.valueSources,
+    },
+  });
+
+  redirectChecklistSaved("supabase");
+}
+
+export async function updateProjectHandoverChecklistItemAction(formData: FormData) {
+  const itemId = getRequired(formData, "itemId");
+  const input = buildChecklistInputFromForm(formData);
+  const update = buildProjectHandoverChecklistItem(input, {
+    id: itemId,
+    actorId: "__current_user__",
+  });
+  const status = deriveProjectHandoverChecklistStatus(update);
+  const context = await getBuilderContext();
+
+  if (!context) {
+    await updateLocalProjectHandoverChecklistItem(itemId, { ...update, status }, "local-scaffold");
+    redirectChecklistSaved("stub");
+  }
+
+  const payload = {
+    ...getChecklistInsertPayload({ ...update, status, lastEditedBy: context.userId }),
+    updated_at: new Date().toISOString(),
+  };
+  delete (payload as Record<string, unknown>).project_id;
+  const { error } = await context.supabase
+    .from("project_handover_checklist_items")
+    .update(payload)
+    .eq("id", itemId)
+    .eq("project_id", input.projectId);
+
+  if (error) {
+    if (isMissingProjectHandoverChecklistTable(error)) {
+      await updateLocalProjectHandoverChecklistItem(itemId, { ...update, status }, context.userId);
+      redirectChecklistSaved("local-fallback");
+    }
+
+    redirectChecklistError("update-checklist-item-failed");
+  }
+
+  await context.supabase.from("project_handover_checklist_events").insert({
+    project_id: input.projectId,
+    checklist_item_id: itemId,
+    event_type: "updated",
+    actor_id: context.userId,
+    notes: "Project handover checklist item updated.",
+    metadata: { status },
+  });
+
+  redirectChecklistSaved("supabase");
+}
+
+export async function acceptProjectHandoverChecklistItemIncompleteAction(formData: FormData) {
+  const itemId = getRequired(formData, "itemId");
+  const projectId = getRequired(formData, "projectId");
+  const reason = getRequired(formData, "acceptedIncompleteReason");
+  const timestamp = new Date().toISOString();
+  const context = await getBuilderContext();
+
+  if (!context) {
+    await updateLocalProjectHandoverChecklistItem(itemId, {
+      status: "user_accepted_incomplete",
+      acceptedIncompleteReason: reason,
+      acceptedIncompleteAt: timestamp,
+      acceptedIncompleteBy: "local-scaffold",
+      sectionStatuses: {
+        careInstructions: "accepted_incomplete",
+        manual: "accepted_incomplete",
+        warranty: "accepted_incomplete",
+        invoice: "accepted_incomplete",
+        codeCompliance: "accepted_incomplete",
+        supportingDocuments: "accepted_incomplete",
+      },
+    }, "local-scaffold", reason);
+    redirectChecklistSaved("stub");
+  }
+
+  const update = {
+    status: "user_accepted_incomplete",
+    accepted_incomplete_reason: reason,
+    accepted_incomplete_at: timestamp,
+    accepted_incomplete_by: context.userId,
+    last_edited_by: context.userId,
+    section_statuses: {
+      careInstructions: "accepted_incomplete",
+      manual: "accepted_incomplete",
+      warranty: "accepted_incomplete",
+      invoice: "accepted_incomplete",
+      codeCompliance: "accepted_incomplete",
+      supportingDocuments: "accepted_incomplete",
+    },
+    updated_at: timestamp,
+  };
+  const { error } = await context.supabase
+    .from("project_handover_checklist_items")
+    .update(update)
+    .eq("id", itemId)
+    .eq("project_id", projectId);
+
+  if (error) {
+    if (isMissingProjectHandoverChecklistTable(error)) {
+      await updateLocalProjectHandoverChecklistItem(itemId, {
+        status: "user_accepted_incomplete",
+        acceptedIncompleteReason: reason,
+        acceptedIncompleteAt: timestamp,
+        acceptedIncompleteBy: context.userId,
+      }, context.userId, reason);
+      redirectChecklistSaved("local-fallback");
+    }
+
+    redirectChecklistError("accept-checklist-incomplete-failed");
+  }
+
+  await context.supabase.from("project_handover_checklist_events").insert({
+    project_id: projectId,
+    checklist_item_id: itemId,
+    event_type: "accepted_incomplete",
+    actor_id: context.userId,
+    notes: reason,
+    metadata: {
+      accepted_incomplete_at: timestamp,
+    },
+  });
+
+  redirectChecklistSaved("supabase");
 }
 
 function getSafeBuilderNext(value: FormDataEntryValue | string | null) {
@@ -2256,6 +2718,7 @@ async function processSupabaseDocumentExtractionJob(
     }
 
     const completedAt = new Date().toISOString();
+    const checklistSync = await syncSupabaseChecklistItemsFromExtractedItems(context, matchedItems);
     const usageMetrics = buildExtractionUsageMetrics({
       items: extractedItems,
       extractor: extraction.extractor,
@@ -2285,6 +2748,7 @@ async function processSupabaseDocumentExtractionJob(
         rejectedItemCount: sourceCandidateBreakdown.rejected.length,
       },
       cloudflarePipeline,
+      checklistSync,
     };
     const nextJobStatus = getWorkflowJobStatusForItems(matchedItems);
     const nextDocumentStatus = nextJobStatus === "package_ready" ? "package_ready" : "needs_review";
@@ -2445,6 +2909,7 @@ async function processLocalDocumentExtractionJob(input: {
         : item;
     });
     const completedAt = new Date().toISOString();
+    const checklistSync = await syncLocalChecklistItemsFromExtractedItems(matchedItems);
     const usageMetrics = buildExtractionUsageMetrics({
       items: extractedItems,
       extractor: extraction.extractor,
@@ -2478,6 +2943,7 @@ async function processLocalDocumentExtractionJob(input: {
           rejectedItemCount: sourceCandidateBreakdown.rejected.length,
         },
         cloudflarePipeline,
+        checklistSync,
       },
     });
     await updateLocalUploadedDocumentStatus(
@@ -3464,6 +3930,131 @@ export async function createSpecificationUploadAction(formData: FormData) {
   }
 
   redirect(`/builder/specifications?draft=saved&storage=${hasSupabaseConfig() ? "supabase" : "stub"}`);
+}
+
+
+const SOURCE_SEARCH_ATTEMPT_MARKER = "[source-search-attempted]";
+
+function getStructuredExtractedValue(text: string | null | undefined, label: string) {
+  const match = (text || "").match(new RegExp(`${label}:\\s*([^\\n]+)`, "i"));
+  return match?.[1]?.trim() || "";
+}
+
+function buildSourceSearchAttemptNote(input: {
+  previousReviewReason?: string | null;
+  foundSource: boolean;
+  sourceTitle?: string;
+}) {
+  const base = input.foundSource
+    ? `Source lookup attempted once with current product wording and found ${input.sourceTitle || "a candidate source"}. Review the source-backed draft before approval.`
+    : "Source lookup attempted once with current product wording and did not find a verified source. Add the brand/model/source information manually instead of retrying this item.";
+  const previous = input.previousReviewReason && !input.previousReviewReason.includes(SOURCE_SEARCH_ATTEMPT_MARKER)
+    ? ` Previous note: ${input.previousReviewReason}`
+    : "";
+
+  return `${SOURCE_SEARCH_ATTEMPT_MARKER} ${base}${previous}`.slice(0, 900);
+}
+
+export async function overrideContextForSourceSearchAction(formData: FormData) {
+  const itemId = getRequired(formData, "itemId");
+  const context = await getBuilderContext();
+
+  if (context) {
+    const { data: item, error: itemError } = await context.supabase
+      .from("extracted_handover_items")
+      .select("id,specification_upload_id,item_type,title,category,location,extracted_text,source_snippet,review_reason,matched_existing_record,confidence_score,status")
+      .eq("id", itemId)
+      .single();
+
+    if (itemError || !item) {
+      redirect("/builder/specifications/review?error=item-not-found");
+    }
+
+    if (item.item_type !== "product") {
+      redirect("/builder/specifications/review?error=source-search-products-only");
+    }
+
+    if ((item.review_reason || "").includes(SOURCE_SEARCH_ATTEMPT_MARKER)) {
+      redirect("/builder/specifications/review?error=source-search-already-used");
+    }
+
+    const enrichment = enrichExtractedProduct({
+      id: item.id,
+      specificationId: item.specification_upload_id,
+      itemType: item.item_type,
+      title: item.title,
+      category: item.category || "Product",
+      location: item.location || "",
+      extractedText: [
+        item.extracted_text || "",
+        item.source_snippet || "",
+        getStructuredExtractedValue(item.extracted_text, "Manufacturer/Supplier"),
+        getStructuredExtractedValue(item.extracted_text, "ProductCode"),
+      ].filter(Boolean).join("\n"),
+      matchedExistingRecord: item.matched_existing_record,
+      confidenceScore: item.confidence_score,
+      status: item.status,
+    });
+    const foundSource = enrichment.sources.length > 0;
+    const nextStatus = foundSource ? "admin_review" : "needs_model_code";
+    const nextReason = buildSourceSearchAttemptNote({
+      previousReviewReason: item.review_reason,
+      foundSource,
+      sourceTitle: enrichment.sources[0]?.title,
+    });
+
+    const { error: updateError } = await context.supabase
+      .from("extracted_handover_items")
+      .update({
+        status: nextStatus,
+        review_reason: nextReason,
+        confidence_score: foundSource ? Math.max(item.confidence_score, enrichment.confidenceScore) : item.confidence_score,
+        matched_existing_record: foundSource ? item.matched_existing_record || enrichment.brand : item.matched_existing_record,
+      })
+      .eq("id", itemId);
+
+    if (updateError) {
+      redirect("/builder/specifications/review?error=source-search-update-failed");
+    }
+  } else {
+    const item = await getLocalExtractedItem(itemId);
+
+    if (!item) {
+      redirect("/builder/specifications/review?error=item-not-found");
+    }
+
+    if (item.itemType !== "product") {
+      redirect("/builder/specifications/review?error=source-search-products-only");
+    }
+
+    if ((item.reviewReason || "").includes(SOURCE_SEARCH_ATTEMPT_MARKER)) {
+      redirect("/builder/specifications/review?error=source-search-already-used");
+    }
+
+    const enrichment = enrichExtractedProduct({
+      ...item,
+      extractedText: [
+        item.extractedText,
+        item.sourceSnippet || "",
+        getStructuredExtractedValue(item.extractedText, "Manufacturer/Supplier"),
+        getStructuredExtractedValue(item.extractedText, "ProductCode"),
+      ].filter(Boolean).join("\n"),
+    });
+    const foundSource = enrichment.sources.length > 0;
+    await updateLocalExtractedItemReviewState({
+      itemId,
+      status: foundSource ? "admin_review" : "needs_model_code",
+      reviewReason: buildSourceSearchAttemptNote({
+        previousReviewReason: item.reviewReason,
+        foundSource,
+        sourceTitle: enrichment.sources[0]?.title,
+      }),
+      matchedExistingRecord: foundSource ? item.matchedExistingRecord || enrichment.brand : item.matchedExistingRecord,
+      confidenceScore: foundSource ? Math.max(item.confidenceScore, enrichment.confidenceScore) : item.confidenceScore,
+    });
+  }
+
+  redirect(`/builder/specifications/review?draft=saved&storage=${hasSupabaseConfig() ? "supabase" : "stub"}`);
 }
 
 export async function acceptExtractedItemAction(formData: FormData) {

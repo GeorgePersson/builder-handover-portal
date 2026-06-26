@@ -90,33 +90,45 @@ homeowner product experience.
 ## Core Product Flow
 
 1. Builder creates or opens a project.
-2. Builder uploads one or more project specs or supporting documents.
-3. The app creates an upload/document record and an extraction job.
-4. Text is extracted from PDF, CSV, image, Word, or Excel input.
-5. The document is converted into readable, grounded context. The preferred
-   adapter may be the current local extractor, Azure AI Document Intelligence
-   layout, or Azure AI Content Understanding depending on file quality and
-   feature flags.
-6. AI or Azure schema extraction extracts products, documents, and maintenance
-   tasks into a strict context-first handover schema. The schema records
-   document evidence, missing fields, builder info needed, and a classification
-   for source readiness.
-7. Known products are matched against the approved product identity cache before
+2. The project page acts as a handover checklist dashboard. Each item tracks
+   identity, care instructions, manuals, warranty information, invoice data, Code
+   of Compliance information where relevant, uploaded supporting documents,
+   notes, completion state, and audit trail.
+3. Builder adds items manually, selects database suggestions, or uploads one or
+   more project specs, quotes, invoices, manuals, warranties, supplier schedules,
+   photos, or supporting documents to populate checklist candidates.
+4. The app creates upload/document records and extraction jobs for uploaded
+   documents.
+5. Text is extracted from PDF, CSV, image, Word, or Excel input.
+6. The document is converted into readable, grounded context. The preferred
+   adapter may be the current local extractor, Docling local/VPS, Azure AI
+   Document Intelligence layout, or Azure AI Content Understanding depending on
+   file quality and feature flags.
+7. AI/schema extraction extracts candidate products, documents, maintenance
+   tasks, and source evidence into checklist items or checklist review
+   candidates. The schema records document evidence, missing fields, builder info
+   needed, and a classification for source readiness.
+8. Known products are matched against the approved product identity cache before
    any internet search.
-8. High-confidence known matches are shown to the builder for accept/edit/
-   reject and do not go to source search.
-9. Low-confidence rows ask the builder for more context before any internet
-   search. Clarified rows are matched against the database again.
-10. Rows that are not source-ready become builder/admin review prompts rather
-   than paid internet-search work.
-11. Builder-supplied or unfindable items are stored as project-specific reviewed
-   records and can become reusable/global knowledge only after admin review.
-12. Optional official-source/web/PDF enrichment runs only for source-ready
-   unknown identities after cache lookup, builder confirmation, and cost guards.
-13. Builder/admin reviews source-enriched results before package inclusion or
-   global reuse.
-14. Builder reviews unresolved items and approves the final handover package.
-15. Client sees only published homeowner-safe handover data.
+9. High-confidence known matches can autofill checklist fields but remain
+   editable and reviewable. Ambiguous matches require builder selection; the app
+   must not guess.
+10. Low-confidence or vague items ask the builder for more context before any
+    internet search. Clarified rows are matched against the database again.
+11. Items without enough identity detail are marked `Not enough information to
+    search` and prompt for brand/manufacturer/supplier/model/SKU/invoice/photo/
+    document upload or manual entry.
+12. Builder-supplied or unfindable items are stored as project-specific reviewed
+    records and can become reusable/global knowledge only after admin review.
+13. Optional official-source/web/PDF enrichment runs only for source-ready
+    unknown identities after cache lookup, builder confirmation, and cost guards.
+14. Builder/admin reviews source-enriched results before checklist completion,
+    package inclusion, or global reuse.
+15. Builder reviews unresolved items, uploads or enters missing care/manual/
+    warranty/invoice/Code-of-Compliance information, or explicitly accepts
+    incomplete with a paper trail.
+16. Builder approves the final handover package.
+17. Client sees only published homeowner-safe handover data.
 
 ## Data Ownership
 

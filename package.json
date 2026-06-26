@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "dev:docling": "set DOCUMENT_CONTEXT_PROVIDER=docling_local&& next dev",
+    "dev:unstructured": "set DOCUMENT_CONTEXT_PROVIDER=unstructured&& next dev",
     "build": "next build",
     "demo:generate-100-item-spec": "node scripts/generate-100-item-spec.mjs",
     "cloudflare:dev": "npx.cmd wrangler dev --config cloudflare/handover-pipeline/wrangler.jsonc",
@@ -18,6 +19,13 @@
     "document-context:readiness": "node scripts/check-document-context-readiness.mjs",
     "docling:smoke:local": "node scripts/smoke-docling-local.mjs",
     "spec-extract:fixtures": "node scripts/check-spec-extract-fixtures.mjs",
+    "spec-candidates:fixtures": "node scripts/check-spec-candidate-fixtures.mjs",
+    "spec-llm:fixtures": "node scripts/check-spec-llm-application-fixtures.mjs",
+    "spec-normalizer:fixtures": "node scripts/check-spec-text-normalizer-fixtures.mjs",
+    "spec-normalizer:smoke": "node scripts/smoke-spec-text-normalizer.mjs",
+    "spec-final-quality:fixtures": "node scripts/check-spec-final-quality-fixtures.mjs",
+    "spec-quality-audit:fixtures": "node scripts/check-spec-quality-audit-fixtures.mjs",
+    "spec-route:quality-smoke": "node scripts/smoke-spec-route-quality.mjs",
     "spec-extract:smoke": "node scripts/smoke-spec-extract.mjs",
     "spec-extract:llm-smoke": "node scripts/smoke-spec-extract-llm.mjs"
   },

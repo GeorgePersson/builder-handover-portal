@@ -1,0 +1,361 @@
+[
+  {
+    "name": "needs builder context adds lane and reason",
+    "proposal": {
+      "item_type": "product",
+      "title": "Bathroom wall tiling",
+      "category": "Tiles",
+      "location": "Bathrooms",
+      "extracted_text": "Selected ceramic tiles from the Builder's range. All walls tiled floor to ceiling.",
+      "source_snippet": "Selected ceramic tiles from the Builder's range. All walls tiled floor to ceiling.",
+      "source_page": null,
+      "matched_existing_record": null,
+      "confidence_score": 82,
+      "recommended_action": "review_new_product"
+    },
+    "classification": {
+      "candidate_id": "candidate_001",
+      "keep": true,
+      "title": "Bathroom wall tiling",
+      "item_type": "product",
+      "review_lane": "needs_builder_context",
+      "category": "Tiles",
+      "location": "Bathrooms",
+      "manufacturer": "",
+      "model_or_code": "",
+      "source_quote": "Selected ceramic tiles from the Builder's range",
+      "confidence": 88,
+      "reason": "Builder range selection needs confirmation before source lookup.",
+      "accepted": true,
+      "validation_errors": [],
+      "recommended_action": "request_more_context"
+    },
+    "expectedCount": 1,
+    "expectedAction": "request_more_context",
+    "expectedTextIncludes": [
+      "Description: Selected ceramic tiles from the Builder's range. All walls tiled floor to ceiling."
+    ],
+    "forbiddenTextIncludes": [
+      "LLMReviewLane",
+      "LLMReviewReason"
+    ],
+    "expectedSourceIncludes": "Selected ceramic tiles from the Builder's range. All walls tiled floor to ceiling."
+  },
+  {
+    "name": "needs model or code changes action",
+    "proposal": {
+      "item_type": "product",
+      "title": "Ducted air conditioning",
+      "category": "Heating/Cooling",
+      "location": "External unit",
+      "extracted_text": "air conditioning unit supplied and installed by AirConditioning contractor",
+      "source_snippet": "air conditioning unit supplied and installed by AirConditioning contractor",
+      "source_page": null,
+      "matched_existing_record": null,
+      "confidence_score": 76,
+      "recommended_action": "review_new_product"
+    },
+    "classification": {
+      "candidate_id": "candidate_001",
+      "keep": true,
+      "title": "Ducted air conditioning",
+      "item_type": "product",
+      "review_lane": "needs_model_or_code",
+      "category": "Heating/Cooling",
+      "location": "External unit",
+      "manufacturer": "",
+      "model_or_code": "",
+      "source_quote": "air conditioning unit supplied and installed by AirConditioning contractor",
+      "confidence": 86,
+      "reason": "The system is real but lacks brand/model details.",
+      "accepted": true,
+      "validation_errors": [],
+      "recommended_action": "needs_model_code"
+    },
+    "expectedCount": 1,
+    "expectedAction": "needs_model_code",
+    "expectedTextIncludes": [
+      "Description: air conditioning unit supplied and installed by air conditioning contractor"
+    ],
+    "forbiddenTextIncludes": [
+      "LLMReviewLane",
+      "LLMReviewReason"
+    ]
+  },
+  {
+    "name": "keep false note drops proposal",
+    "proposal": {
+      "item_type": "product",
+      "title": "Please Note:",
+      "category": "Electrical",
+      "location": "Project",
+      "extracted_text": "Final positions of all electrical items will be determined onsite by the electrician.",
+      "source_snippet": "Final positions of all electrical items will be determined onsite by the electrician.",
+      "source_page": null,
+      "matched_existing_record": null,
+      "confidence_score": 60,
+      "recommended_action": "manual_review"
+    },
+    "classification": {
+      "candidate_id": "candidate_001",
+      "keep": false,
+      "title": "Please Note:",
+      "item_type": "note",
+      "review_lane": "admin_review",
+      "category": "Electrical",
+      "location": "Project",
+      "manufacturer": "",
+      "model_or_code": "",
+      "source_quote": "Final positions of all electrical items will be determined onsite by the electrician.",
+      "confidence": 92,
+      "reason": "Pure note about onsite positioning.",
+      "accepted": true,
+      "validation_errors": [],
+      "recommended_action": "review_new_product"
+    },
+    "expectedCount": 0
+  },
+  {
+    "name": "invalid ungrounded source quote leaves deterministic proposal unchanged",
+    "proposal": {
+      "item_type": "product",
+      "title": "Kitchen mixer",
+      "category": "Tapware",
+      "location": "Kitchen",
+      "extracted_text": "Grohe Essence Kitchen Mixer with pullout spray",
+      "source_snippet": "Grohe Essence Kitchen Mixer with pullout spray",
+      "source_page": null,
+      "matched_existing_record": null,
+      "confidence_score": 74,
+      "recommended_action": "needs_model_code"
+    },
+    "classification": {
+      "candidate_id": "candidate_001",
+      "keep": true,
+      "title": "Invented tap",
+      "item_type": "product",
+      "review_lane": "needs_model_or_code",
+      "category": "Tapware",
+      "location": "Kitchen",
+      "manufacturer": "Imaginary",
+      "model_or_code": "XYZ999",
+      "source_quote": "This quote is not in the source text",
+      "confidence": 95,
+      "reason": "Ungrounded classification should be rejected.",
+      "accepted": false,
+      "validation_errors": [
+        "source_quote_not_grounded"
+      ],
+      "recommended_action": "needs_model_code"
+    },
+    "expectedCount": 1,
+    "expectedAction": "needs_model_code",
+    "expectedTitle": "Kitchen mixer",
+    "forbiddenTextIncludes": [
+      "LLMReviewReason",
+      "Imaginary"
+    ]
+  },
+  {
+    "name": "llm enhanced evidence is cleaned after classification",
+    "proposal": {
+      "item_type": "product",
+      "title": "PDL Iconic Series-Silver Shadow(SH)& Crowne(CE) Whitefaceplates",
+      "category": "Electrical",
+      "location": "Project",
+      "extracted_text": "Electrical Switching PDLIconic Series-Silver Shadow(SH)& Crowne(CE) Whitefaceplates PDLlconicSeries,theirresistiblybeautiful newstandard inresidential electrical accessoriesthatdeliverscleverefficiencyto thehome.Winnerofthe2017GoldDesign Award,thelconicrangeisfuture-proofedwith simplesmarthomeconnectivityoptions,such as Bluetoothconnectivity andUSB charging options,tomakelivingamodernconnected life easy.Bluetooth and USBcharging availableasanextracostupgrade.",
+      "source_snippet": "Electrical Switching PDLIconic Series-Silver Shadow(SH)& Crowne(CE) Whitefaceplates PDLlconicSeries,theirresistiblybeautiful newstandard inresidential electrical accessoriesthatdeliverscleverefficiencyto thehome.Winnerofthe2017GoldDesign Award,thelconicrangeisfuture-proofedwith simplesmarthomeconnectivityoptions,such as Bluetoothconnectivity andUSB charging options,tomakelivingamodernconnected life easy.Bluetooth and USBcharging availableasanextracostupgrade.",
+      "source_page": null,
+      "matched_existing_record": null,
+      "confidence_score": 72,
+      "recommended_action": "review_new_product"
+    },
+    "classification": {
+      "candidate_id": "candidate_001",
+      "keep": true,
+      "title": "PDL Iconic Series-Silver Shadow(SH)& Crowne(CE) Whitefaceplates",
+      "item_type": "product",
+      "review_lane": "admin_review",
+      "category": "Electrical",
+      "location": "Project",
+      "manufacturer": "PDL",
+      "model_or_code": "Iconic Series",
+      "source_quote": "Electrical Switching PDLIconic Series-Silver Shadow(SH)& Crowne(CE) Whitefaceplates PDLlconicSeries,theirresistiblybeautiful newstandard inresidential electrical accessoriesthatdeliverscleverefficiencyto thehome.Winnerofthe2017GoldDesign Award,thelconicrangeisfuture-proofedwith simplesmarthomeconnectivityoptions,such as Bluetoothconnectivity andUSB charging options,tomakelivingamodernconnected life easy.Bluetooth and USBcharging availableasanextracostupgrade.",
+      "confidence": 88,
+      "reason": "Manufacturer and series are present.",
+      "accepted": true,
+      "validation_errors": [],
+      "recommended_action": "review_new_product"
+    },
+    "expectedCount": 1,
+    "expectedAction": "review_new_product",
+    "expectedTextIncludes": [
+      "accessories that deliver clever efficiency",
+      "Winner of the 2017 Gold Design Award",
+      "simple smart home connectivity options",
+      "USB charging available as an extra cost upgrade"
+    ],
+    "forbiddenTextIncludes": [
+      "accessoriesthat",
+      "deliverscleverefficiency",
+      "Winnerof",
+      "lconicrange",
+      "USBcharging",
+      "availableasan"
+    ]
+  },
+  {
+    "name": "producer statements and code compliance bundle is dropped as non item",
+    "proposal": {
+      "item_type": "document",
+      "title": "Producer statements and code compliance documents",
+      "category": "Source documents",
+      "location": "Project",
+      "extracted_text": "Producer statements and code compliance documents to be provided at completion.",
+      "source_snippet": "Producer statements and code compliance documents to be provided at completion.",
+      "source_page": null,
+      "matched_existing_record": null,
+      "confidence_score": 72,
+      "recommended_action": "request_document"
+    },
+    "classification": {
+      "candidate_id": "candidate_001",
+      "keep": false,
+      "title": "Producer statements and code compliance documents",
+      "item_type": "note",
+      "review_lane": "admin_review",
+      "category": "Source documents",
+      "location": "Project",
+      "manufacturer": "",
+      "model_or_code": "",
+      "source_quote": "Producer statements and code compliance documents to be provided at completion.",
+      "confidence": 94,
+      "reason": "This is a broad supporting-document/admin bundle, not a specific handover item.",
+      "accepted": true,
+      "validation_errors": [],
+      "recommended_action": "review_new_product"
+    },
+    "expectedCount": 0
+  },
+  {
+    "name": "specific product needing warranty source document is kept",
+    "proposal": {
+      "item_type": "product",
+      "title": "Kitchen mixer warranty document",
+      "category": "Tapware",
+      "location": "Kitchen",
+      "extracted_text": "Grohe Essence Kitchen Mixer warranty certificate to be supplied by installer.",
+      "source_snippet": "Grohe Essence Kitchen Mixer warranty certificate to be supplied by installer.",
+      "source_page": null,
+      "matched_existing_record": null,
+      "confidence_score": 74,
+      "recommended_action": "request_document"
+    },
+    "classification": {
+      "candidate_id": "candidate_001",
+      "keep": true,
+      "title": "Grohe Essence Kitchen Mixer",
+      "item_type": "product",
+      "review_lane": "needs_source_document",
+      "category": "Tapware",
+      "location": "Kitchen",
+      "manufacturer": "Grohe",
+      "model_or_code": "Essence",
+      "source_quote": "Grohe Essence Kitchen Mixer warranty certificate to be supplied by installer.",
+      "confidence": 89,
+      "reason": "Specific product is present; warranty certificate/source document should be attached.",
+      "accepted": true,
+      "validation_errors": [],
+      "recommended_action": "needs_source_document"
+    },
+    "expectedCount": 1,
+    "expectedAction": "needs_source_document",
+    "expectedTitle": "Grohe Essence Kitchen Mixer",
+    "expectedTextIncludes": [
+      "Name: Grohe Essence Kitchen Mixer",
+      "Manufacturer/Supplier: Grohe",
+      "ProductCode: Essence",
+      "Description: Grohe Essence Kitchen Mixer warranty certificate to be supplied by installer."
+    ],
+    "forbiddenTextIncludes": [
+      "LLMReviewLane",
+      "LLMReviewReason"
+    ]
+  },
+  {
+    "name": "merged towel rail and insinkerator source row splits into two items",
+    "proposal": {
+      "item_type": "product",
+      "title": "Heated Towel Rail",
+      "category": "Heating/cooling",
+      "location": "ensuite bed 1&2",
+      "extracted_text": "Name: Heated Towel Rail\nManufacturer/Supplier: Heirloom\nProductCode: Genesis 510 Slimline Towel warmer Chrome WG 510 S\nFinish: Chrome\nCategory: Tapware\nLocation: ensuite bed 1&2\nDescription: Heated Towel Rail ensuite bed 1&2 1 x Insinkera tor multitap Heirloom Genesis 510 Slimline Towel warmer Chrome WG 510 S With Energy Saver Pulse, Eco Warm Timer, Timekeeperplustimer Concealedwiring to HTR",
+      "source_snippet": "Heated Towel Rail ensuite bed 1&2 1 x Insinkera tor multitap Heirloom Genesis 510 Slimline Towel warmer Chrome WG 510 S With Energy Saver Pulse, Eco Warm Timer, Timekeeperplustimer Concealedwiring to HTR",
+      "source_page": null,
+      "matched_existing_record": null,
+      "confidence_score": 84,
+      "recommended_action": "review_new_product"
+    },
+    "classifications": [
+      {
+        "candidate_id": "candidate_001",
+        "keep": true,
+        "title": "Heated Towel Rail",
+        "item_type": "product",
+        "review_lane": "admin_review",
+        "category": "Heating/cooling",
+        "location": "ensuite bed 1&2",
+        "manufacturer": "Heirloom",
+        "model_or_code": "Genesis 510 Slimline Towel warmer Chrome WG 510 S",
+        "source_quote": "Heirloom Genesis 510 Slimline Towel warmer Chrome WG 510 S With Energy Saver Pulse, Eco Warm Timer, Timekeeperplustimer Concealedwiring to HTR",
+        "confidence": 94,
+        "reason": "Specific heated towel rail product and model/code are present.",
+        "accepted": true,
+        "validation_errors": [],
+        "recommended_action": "review_new_product"
+      },
+      {
+        "candidate_id": "candidate_001",
+        "keep": true,
+        "title": "Insinkerator Multitap",
+        "item_type": "product",
+        "review_lane": "needs_model_or_code",
+        "category": "Tapware",
+        "location": "ensuite bed 1&2",
+        "manufacturer": "Insinkerator",
+        "model_or_code": "",
+        "source_quote": "1 x Insinkera tor multitap",
+        "confidence": 78,
+        "reason": "A separate multitap item is present in the merged OCR row, but the exact model/code is unclear due to OCR splitting.",
+        "accepted": true,
+        "validation_errors": [],
+        "recommended_action": "needs_model_code"
+      }
+    ],
+    "expectedCount": 2,
+    "expectedItems": [
+      {
+        "expectedTitle": "Heated Towel Rail",
+        "expectedAction": "review_new_product",
+        "expectedTextIncludes": [
+          "Name: Heated Towel Rail",
+          "Genesis 510 Slimline Towel warmer Chrome WG 510 S"
+        ],
+        "forbiddenTextIncludes": [
+          "Insinkera tor multitap"
+        ]
+      },
+      {
+        "expectedTitle": "Insinkerator Multitap",
+        "expectedAction": "needs_model_code",
+        "expectedTextIncludes": [
+          "Name: Insinkerator Multitap",
+          "Description: 1 x Insinkerator multitap"
+        ],
+        "forbiddenTextIncludes": [
+          "Heirloom Genesis 510"
+        ]
+      }
+    ]
+  }
+]

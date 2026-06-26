@@ -167,16 +167,32 @@ export async function updateLocalExtractedItemStatus(
   itemId: string,
   status: ExtractedHandoverItem["status"],
 ) {
+  return updateLocalExtractedItemReviewState({ itemId, status });
+}
+
+export async function updateLocalExtractedItemReviewState(input: {
+  itemId: string;
+  status: ExtractedHandoverItem["status"];
+  reviewReason?: string;
+  matchedExistingRecord?: string | null;
+  confidenceScore?: number;
+}) {
   const store = await readStore();
   let didUpdate = false;
 
   const extractedItems = store.extractedItems.map((item) => {
-    if (item.id !== itemId) {
+    if (item.id !== input.itemId) {
       return item;
     }
 
     didUpdate = true;
-    return { ...item, status };
+    return {
+      ...item,
+      status: input.status,
+      reviewReason: input.reviewReason ?? item.reviewReason,
+      matchedExistingRecord: input.matchedExistingRecord ?? item.matchedExistingRecord,
+      confidenceScore: input.confidenceScore ?? item.confidenceScore,
+    };
   });
 
   if (didUpdate) {

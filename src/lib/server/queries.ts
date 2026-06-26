@@ -26,6 +26,12 @@ import type {
   UploadedProjectDocument,
   WorkflowHandoverItem,
 } from "@/lib/document-workflow";
+import type {
+  HandoverChecklistSectionStatuses,
+  HandoverChecklistValueSource,
+  ProjectHandoverChecklistItem,
+} from "@/lib/project-handover-checklist";
+import { defaultChecklistSectionStatuses } from "@/lib/project-handover-checklist";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
   getLocalExtractedItems,
@@ -43,6 +49,7 @@ import {
   getLocalWorkflowHandoverItems,
   recordLocalHandoverOpen,
 } from "@/lib/server/local-store/uploaded-documents";
+import { getLocalProjectHandoverChecklistItems } from "@/lib/server/local-store/project-handover-checklist";
 
 function hasSupabaseConfig() {
   return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
@@ -321,6 +328,46 @@ function mapWorkflowHandoverItemRows(data: WorkflowHandoverItemRow[]): WorkflowH
   }));
 }
 
+function checklistItemToPackageItem(item: ProjectHandoverChecklistItem): ExtractedHandoverItem {
+  const metadata = item.sourceMetadata || {};
+  const location = typeof metadata.location === "string" ? metadata.location : "";
+  const finish = typeof metadata.finish === "string" ? metadata.finish : "";
+  const colour = typeof metadata.colour === "string" ? metadata.colour : "";
+  const quantity = typeof metadata.quantity === "string" ? metadata.quantity : "";
+  const supportingDocumentsNote = typeof metadata.supporting_documents_note === "string" ? metadata.supporting_documents_note : "";
+  const detailText = [
+    item.brand || item.manufacturer ? `Manufacturer/brand: ${item.brand || item.manufacturer}` : null,
+    item.model || item.productCode || item.sku ? `Model/SKU/code: ${[item.model, item.sku, item.productCode].filter(Boolean).join(" / ")}` : null,
+    item.supplier ? `Supplier: ${item.supplier}${item.supplierSku ? ` (${item.supplierSku})` : ""}` : null,
+    quantity ? `Quantity: ${quantity}` : null,
+    finish || colour ? `Finish/colour: ${[finish, colour].filter(Boolean).join(" / ")}` : null,
+    item.careInstructions ? `Care: ${item.careInstructions}` : null,
+    item.manualUrl ? `Manual: ${item.manualUrl}` : null,
+    item.warrantyInformation ? `Warranty: ${item.warrantyInformation}` : null,
+    item.invoiceData ? `Purchase info: ${item.invoiceData}` : null,
+    item.codeComplianceInformation ? `Compliance: ${item.codeComplianceInformation}` : null,
+    supportingDocumentsNote ? `Supporting documents: ${supportingDocumentsNote}` : null,
+    item.extraNotes ? `Builder note: ${item.extraNotes}` : null,
+  ].filter(Boolean).join("\n");
+
+  return {
+    id: item.id,
+    specificationId: item.projectId,
+    itemType: "product",
+    title: item.title,
+    category: item.category || "Project handover item",
+    location,
+    extractedText: detailText || "Builder-reviewed project handover item.",
+    matchedExistingRecord: typeof metadata.matched_product_id === "string" ? metadata.matched_product_id : null,
+    confidenceScore: 100,
+    status: item.status === "complete" ? "accepted" : "builder_approved",
+  };
+}
+
+function isChecklistPackageReady(item: ProjectHandoverChecklistItem) {
+  return item.status === "complete" || item.status === "user_accepted_incomplete" || item.sectionStatuses.careInstructions === "reviewed" || item.sectionStatuses.manual === "reviewed" || item.sectionStatuses.warranty === "reviewed";
+}
+
 function workflowHandoverItemToPackageItem(item: WorkflowHandoverItem): ExtractedHandoverItem {
   const careGuidanceLabel = formatCareGuidanceSourceType(item.careGuidanceSourceType, item.careGuidanceSourceLabel);
   const detailText = [
@@ -552,6 +599,80 @@ export async function recordHandoverOpen(projectId: string, userAgent?: string) 
     .maybeSingle();
 
   return data;
+}
+
+function getChecklistArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
+}
+
+function getChecklistSectionStatuses(row: LooseDbRow): HandoverChecklistSectionStatuses {
+  return {
+    ...defaultChecklistSectionStatuses,
+    ...getRowObject(row, "section_statuses"),
+  } as HandoverChecklistSectionStatuses;
+}
+
+export async function getProjectHandoverChecklistItems(projectId?: string): Promise<ProjectHandoverChecklistItem[]> {
+  if (!hasSupabaseConfig()) {
+    return getLocalProjectHandoverChecklistItems(projectId);
+  }
+
+  const supabase = await createSupabaseServerClient();
+  let query = supabase
+    .from("project_handover_checklist_items")
+    .select("id,project_id,source_extracted_item_id,source_document_id,extraction_job_id,title,category,brand,manufacturer,model,sku,product_code,supplier,supplier_sku,care_instructions,manual_document_id,manual_url,warranty_information,warranty_document_id,warranty_guidance_is_general,invoice_document_id,invoice_data,code_compliance_document_id,code_compliance_information,supporting_document_ids,extra_notes,section_statuses,value_sources,source_metadata,status,completion_summary,accepted_incomplete_reason,accepted_incomplete_at,accepted_incomplete_by,created_by,last_edited_by,created_at,updated_at")
+    .order("created_at", { ascending: false });
+
+  if (projectId) {
+    query = query.eq("project_id", projectId);
+  }
+
+  const { data, error } = await query;
+
+  if (error || !data) {
+    return getLocalProjectHandoverChecklistItems(projectId);
+  }
+
+  return (data as unknown as LooseDbRow[]).map((row) => ({
+    id: getRowString(row, "id") || "",
+    projectId: getRowString(row, "project_id") || "",
+    sourceExtractedItemId: getRowString(row, "source_extracted_item_id"),
+    sourceDocumentId: getRowString(row, "source_document_id"),
+    extractionJobId: getRowString(row, "extraction_job_id"),
+    title: getRowString(row, "title") || "Untitled handover item",
+    category: getRowString(row, "category"),
+    brand: getRowString(row, "brand"),
+    manufacturer: getRowString(row, "manufacturer"),
+    model: getRowString(row, "model"),
+    sku: getRowString(row, "sku"),
+    productCode: getRowString(row, "product_code"),
+    supplier: getRowString(row, "supplier"),
+    supplierSku: getRowString(row, "supplier_sku"),
+    careInstructions: getRowString(row, "care_instructions"),
+    manualDocumentId: getRowString(row, "manual_document_id"),
+    manualUrl: getRowString(row, "manual_url"),
+    warrantyInformation: getRowString(row, "warranty_information"),
+    warrantyDocumentId: getRowString(row, "warranty_document_id"),
+    warrantyGuidanceIsGeneral: getRowBoolean(row, "warranty_guidance_is_general"),
+    invoiceDocumentId: getRowString(row, "invoice_document_id"),
+    invoiceData: getRowString(row, "invoice_data"),
+    codeComplianceDocumentId: getRowString(row, "code_compliance_document_id"),
+    codeComplianceInformation: getRowString(row, "code_compliance_information"),
+    supportingDocumentIds: getChecklistArray(row.supporting_document_ids),
+    extraNotes: getRowString(row, "extra_notes"),
+    sectionStatuses: getChecklistSectionStatuses(row),
+    valueSources: getChecklistArray(row.value_sources) as HandoverChecklistValueSource[],
+    sourceMetadata: getRowObject(row, "source_metadata"),
+    status: getRowString(row, "status") as ProjectHandoverChecklistItem["status"],
+    completionSummary: getRowString(row, "completion_summary"),
+    acceptedIncompleteReason: getRowString(row, "accepted_incomplete_reason"),
+    acceptedIncompleteAt: getRowString(row, "accepted_incomplete_at"),
+    acceptedIncompleteBy: getRowString(row, "accepted_incomplete_by"),
+    createdBy: getRowString(row, "created_by"),
+    lastEditedBy: getRowString(row, "last_edited_by"),
+    createdAt: getRowString(row, "created_at") || "",
+    updatedAt: getRowString(row, "updated_at") || "",
+  }));
 }
 
 export async function getUploadedProjectDocuments(projectId?: string): Promise<UploadedProjectDocument[]> {
@@ -1059,10 +1180,11 @@ export async function getExtractedHandoverItems(
 }
 
 export async function getAcceptedHandoverPackagePreview() {
-  const [items, projectList, workflowHandoverItems] = await Promise.all([
+  const [items, projectList, workflowHandoverItems, checklistItems] = await Promise.all([
     getExtractedHandoverItems(),
     getProjects(),
     getWorkflowHandoverItems(),
+    getProjectHandoverChecklistItems(),
   ]);
   const project = projectList[0];
   const workflowPreviewItems = project
@@ -1070,8 +1192,12 @@ export async function getAcceptedHandoverPackagePreview() {
         .filter((item) => item.projectId === project.id)
         .map(workflowHandoverItemToPackageItem)
     : workflowHandoverItems.map(workflowHandoverItemToPackageItem);
+  const checklistPreviewItems = (project
+    ? checklistItems.filter((item) => item.projectId === project.id)
+    : checklistItems
+  ).filter(isChecklistPackageReady).map(checklistItemToPackageItem);
   const acceptedItems = items.filter(isPackageReadyExtractedItem);
-  const previewItems = workflowPreviewItems.length ? workflowPreviewItems : acceptedItems;
+  const previewItems = checklistPreviewItems.length ? checklistPreviewItems : workflowPreviewItems.length ? workflowPreviewItems : acceptedItems;
 
   return {
     project,
@@ -1079,7 +1205,7 @@ export async function getAcceptedHandoverPackagePreview() {
     documents: previewItems.filter((item) => item.itemType === "document"),
     maintenance: previewItems.filter((item) => item.itemType === "maintenance"),
     acceptedItems: previewItems,
-    builderOnlyPreview: workflowPreviewItems.length > 0,
+    builderOnlyPreview: workflowPreviewItems.length > 0 || checklistPreviewItems.length > 0,
   };
 }
 
@@ -1123,10 +1249,11 @@ async function getProjectExtractedHandoverItems(projectId: string) {
 
 export async function getPublishedClientPackagePreview(projectId?: string) {
   if (!hasSupabaseConfig()) {
-    const [{ items, publishedAt }, projectList, workflowHandoverItems] = await Promise.all([
+    const [{ items, publishedAt }, projectList, workflowHandoverItems, checklistItems] = await Promise.all([
       getLocalPublishedItems(projectId),
       getProjects(),
       getWorkflowHandoverItems(projectId),
+      getProjectHandoverChecklistItems(projectId),
     ]);
     const project = projectId
       ? projectList.find((candidate) => candidate.id === projectId)
@@ -1134,7 +1261,10 @@ export async function getPublishedClientPackagePreview(projectId?: string) {
     const workflowItems = publishedAt
       ? workflowHandoverItems.map(workflowHandoverItemToPackageItem)
       : [];
-    const publishedItems = workflowItems.length ? workflowItems : items;
+    const checklistPackageItems = publishedAt
+      ? checklistItems.filter(isChecklistPackageReady).map(checklistItemToPackageItem)
+      : [];
+    const publishedItems = checklistPackageItems.length ? checklistPackageItems : workflowItems.length ? workflowItems : items;
 
     return {
       project,
@@ -1145,10 +1275,11 @@ export async function getPublishedClientPackagePreview(projectId?: string) {
     };
   }
 
-  const [items, projectList, workflowHandoverItems] = await Promise.all([
+  const [items, projectList, workflowHandoverItems, checklistItems] = await Promise.all([
     projectId ? getProjectExtractedHandoverItems(projectId) : getExtractedHandoverItems(),
     getProjects(),
     getWorkflowHandoverItems(projectId),
+    getProjectHandoverChecklistItems(projectId),
   ]);
   const project = projectId
     ? projectList.find((candidate) => candidate.id === projectId)
@@ -1156,11 +1287,16 @@ export async function getPublishedClientPackagePreview(projectId?: string) {
   const workflowItems = project?.publishedAt || !projectId
     ? workflowHandoverItems.map(workflowHandoverItemToPackageItem)
     : [];
-  const acceptedItems = workflowItems.length
-    ? workflowItems
-    : project?.publishedAt || !projectId
-      ? items.filter(isPackageReadyExtractedItem)
-      : [];
+  const checklistPackageItems = project?.publishedAt || !projectId
+    ? checklistItems.filter(isChecklistPackageReady).map(checklistItemToPackageItem)
+    : [];
+  const acceptedItems = checklistPackageItems.length
+    ? checklistPackageItems
+    : workflowItems.length
+      ? workflowItems
+      : project?.publishedAt || !projectId
+        ? items.filter(isPackageReadyExtractedItem)
+        : [];
 
   return {
     project,

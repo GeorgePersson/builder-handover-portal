@@ -1,0 +1,92 @@
+[
+  {
+    "name": "unmatched joinery does not skip llm because deterministic confidence is high-ish",
+    "proposal": {
+      "item_type": "product",
+      "title": "Aluminium window and door joinery",
+      "category": "Joinery",
+      "location": "Exterior openings",
+      "extracted_text": "Window Joinery Finish Hardware Jamb Liners Glass Aluminium Selected standard powdercoat Translucentlaminate to W/C & bathrooms",
+      "source_snippet": "Window Joinery Finish Hardware Jamb Liners Glass Aluminium Selected standard powdercoat Translucentlaminate to W/C & bathrooms",
+      "source_page": null,
+      "matched_existing_record": null,
+      "confidence_score": 78,
+      "recommended_action": "review_new_product"
+    },
+    "expectedNeedsLlm": true,
+    "expectedReasonIncludes": "source-backed",
+    "expectedMinPriority": 80
+  },
+  {
+    "name": "general selected finish still goes to llm for context lane confirmation",
+    "proposal": {
+      "item_type": "product",
+      "title": "Bathroom wall and mirror tiling",
+      "category": "Tiles",
+      "location": "Bathrooms",
+      "extracted_text": "Selected ceramic tiles from the Builder's range. All walls tiled floor to ceiling.",
+      "source_snippet": "Selected ceramic tiles from the Builder's range. All walls tiled floor to ceiling.",
+      "source_page": null,
+      "matched_existing_record": null,
+      "confidence_score": 82,
+      "recommended_action": "review_new_product"
+    },
+    "expectedNeedsLlm": true,
+    "expectedReasonIncludes": "context",
+    "expectedMinPriority": 90
+  },
+  {
+    "name": "already matched exact record skips llm",
+    "proposal": {
+      "item_type": "product",
+      "title": "Known appliance",
+      "category": "Appliances",
+      "location": "Kitchen",
+      "extracted_text": "Known appliance ProductCode: ABC123",
+      "source_snippet": "Known appliance ProductCode: ABC123",
+      "source_page": null,
+      "matched_existing_record": "products:known-appliance",
+      "confidence_score": 90,
+      "recommended_action": "attach_existing_product"
+    },
+    "expectedNeedsLlm": false,
+    "expectedReasonIncludes": "existing",
+    "expectedPriority": 0
+  },
+  {
+    "name": "obvious please note row skips llm",
+    "proposal": {
+      "item_type": "product",
+      "title": "Please Note:",
+      "category": "Electrical",
+      "location": "Project",
+      "extracted_text": "Final positions of all electrical items will be determined onsite by the electrician.",
+      "source_snippet": "Final positions of all electrical items will be determined onsite by the electrician.",
+      "source_page": null,
+      "matched_existing_record": null,
+      "confidence_score": 60,
+      "recommended_action": "manual_review"
+    },
+    "expectedNeedsLlm": false,
+    "expectedReasonIncludes": "noise",
+    "expectedPriority": 0
+  },
+  {
+    "name": "deterministic source document goes to llm for validity adjudication",
+    "proposal": {
+      "item_type": "document",
+      "title": "Producer statements and code compliance documents",
+      "category": "Source documents",
+      "location": "Project",
+      "extracted_text": "Producer statements and code compliance documents to be provided at completion.",
+      "source_snippet": "Producer statements and code compliance documents to be provided at completion.",
+      "source_page": null,
+      "matched_existing_record": null,
+      "confidence_score": 72,
+      "recommended_action": "request_document"
+    },
+    "expectedNeedsLlm": true,
+    "expectedReasonIncludes": "document",
+    "expectedMinPriority": 85
+  }
+]

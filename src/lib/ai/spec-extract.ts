@@ -22,6 +22,9 @@ export type ProposedSpecItem = {
   source_page?: number | null;
   matched_existing_record: string | null;
   confidence_score: number;
+  llm_review_lane?: string;
+  llm_review_reason?: string;
+  quality_review_note?: string;
   recommended_action:
     | "attach_existing_product"
     | "attach_existing_task"
@@ -128,11 +131,40 @@ export function getInitialExtractedItemStatus(
 }
 
 export function getInitialExtractedItemReviewReason(item: ProposedSpecItem) {
-  return getReviewReasonForLane(item);
+  const notes = [getReviewReasonForLane(item)];
+  if (item.llm_review_lane || item.llm_review_reason) {
+    notes.push(`AI review classification: ${[item.llm_review_lane, item.llm_review_reason].filter(Boolean).join(" - ")}`);
+  }
+  if (item.quality_review_note) {
+    notes.push(item.quality_review_note);
+  }
+  return notes.filter(Boolean).join("\n");
 }
 
 function proposalKey(itemType: ProposedSpecItem["item_type"], title: string) {
   return `${itemType}:${compactForMatching(title)}`;
+}
+
+function compactEvidenceKey(text: string) {
+  return compactForMatching(text).slice(0, 220);
+}
+
+function isGenericDuplicateTitle(title: string) {
+  return /^(ceramic\s+tiles?\s+area|cavity\s+batten|fittings|raft\s+slab|bathroom&|paint|.*splashback)/i.test(title.trim());
+}
+
+function hasSimilarSourceProposal(proposals: ProposedSpecItem[], rowText: string, category: string, title: string) {
+  const rowKey = compactEvidenceKey(rowText);
+  if (rowKey.length < 40) return false;
+
+  return proposals.some((proposal) => {
+    if (proposal.item_type !== "product") return false;
+    const sourceKey = compactEvidenceKey(proposal.source_snippet || proposal.extracted_text);
+    if (sourceKey.length < 40) return false;
+    const sameSource = sourceKey.includes(rowKey) || rowKey.includes(sourceKey);
+    if (!sameSource) return false;
+    return isGenericDuplicateTitle(title);
+  });
 }
 
 function findServiceAssetPattern(text: string) {
@@ -191,6 +223,10 @@ function addProposal(proposals: ProposedSpecItem[], seen: Set<string>, rule: Ext
 
   const cleanedEvidence = cleanEvidenceText(evidence);
   const extractedText = cleanedEvidence.length > 500 ? `${cleanedEvidence.slice(0, 497)}...` : cleanedEvidence;
+
+  if (rule.item_type !== "document" && isPureSourceDocumentReferenceRow([rule.title, cleanedEvidence], cleanedEvidence)) {
+    return;
+  }
 
   if (shouldExcludeAsAdminNoise(extractedText)) {
     return;
@@ -286,9 +322,60 @@ function findKnownBrand(text: string) {
   return knownBrands.find((brand) => compact.includes(compactForMatching(brand))) || "";
 }
 
+function isLikelyFalseProductCode(code: string, text: string) {
+  const normalized = code.trim();
+  const year = normalized.match(/^(?:19|20)\d{2}$/);
+  if (year) {
+    const escaped = normalized.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const contextPattern = new RegExp(`(?:winner|award|design|standard|range|series).{0,60}\\b${escaped}\\b|\\b${escaped}\\b.{0,60}(?:winner|award|design|standard|range|series)`, "i");
+    if (contextPattern.test(text)) return true;
+  }
+
+  return false;
+}
+
 function extractProductCodes(text: string) {
   const matches = text.match(/\b[A-Z]{1,5}\s?\d{2,6}[A-Z0-9.-]*\b|\b\d{4,6}[A-Z]{0,3}\d?\b/g) || [];
-  return Array.from(new Set(matches)).slice(0, 4).join(", ");
+  const directCodes = Array.from(new Set(matches))
+    .filter((code) => !isLikelyFalseProductCode(code, text))
+    .slice(0, 4)
+    .join(", ");
+
+  if (directCodes) {
+    return directCodes;
+  }
+
+  return extractDescriptiveModel(text);
+}
+
+function extractDescriptiveModel(text: string) {
+  const brand = findKnownBrand(text);
+  if (!brand) {
+    return "";
+  }
+
+  const source = cleanEvidenceText(text);
+  const brandIndex = source.toLowerCase().indexOf(brand.toLowerCase());
+  if (brandIndex < 0) {
+    return "";
+  }
+
+  const afterBrand = source.slice(brandIndex + brand.length).trim();
+  const stopMatch = afterBrand.match(/\b(?:When standing|When|refer floor plan|Niche to face|Chrome Hardware|Tiled Brushed|Builder|Client|All walls|Concealed wiring|with Energy Saver)\b/i);
+  const candidate = (stopMatch ? afterBrand.slice(0, stopMatch.index) : afterBrand)
+    .replace(/^[-,:\s]+/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!candidate || candidate.length < 6) {
+    return "";
+  }
+
+  if (!/\b(?:shower|mixer|basin|vanity|toilet|waste|hook|holder|mirror|light|towel|warmer|range|series|sliding|hinged|wall|suite|trimset|column)\b/i.test(candidate)) {
+    return "";
+  }
+
+  return candidate.slice(0, 120);
 }
 
 function extractSize(text: string) {
@@ -301,23 +388,30 @@ function extractFinish(text: string) {
   );
 }
 
+function hasElectricalCategorySignal(text: string) {
+  return /\b(?:led|lights?|downlights?|pendants?|pdl|power\s*point|powerpoint|power|switch(?:ing)?|sensor|wire|electrical|circuit|outlet|rj\s*45|patch\s*panel|cat\s*6)\b/i.test(text);
+}
+
 function inferCategory(text: string) {
   const serviceAsset = findServiceAssetPattern(text);
   if (serviceAsset) return serviceAsset.category;
 
   const lower = text.toLowerCase();
 
+  if (hasElectricalCategorySignal(text)) return "Electrical";
+  if (/\b(?:cavity\s+slider|door\s+handles?|lever\s+handles?|privacy\s+sets?|door\s+stops?|hinges?)\b/i.test(text)) return "Doors and hardware";
+  if (/engineered\s+timber|timber\s+veneer|\bflooring\b|carpet/.test(lower)) return "Flooring";
+  if (/\bst\s*michel\b/i.test(text) && /\b(?:vanity|drawer|vessel\s+basin|top\s+panels?|accent\s+strip|copper\s+terazzo)\b/i.test(text)) return "Bathroom fixtures";
+  if (/tile|tiling|splashback|hearth/.test(lower)) return "Tiles";
+  if (/accoya|cavity\s*batten|cavitybatten|brick|brickery|cladding|weatherboard/.test(lower)) return "Cladding";
+  if (/paint|finish/.test(lower)) return "Paint and finishes";
+  if (/pvc\s*traps|traps\s*and\s*wastes|plumbing\s*stacks/.test(lower)) return "Plumbing fixtures";
   if (/mixer|tap|waste/.test(lower)) return "Tapware";
   if (/vanity|basin|toilet|bath|robe hook|mirror|shower/.test(lower)) return "Bathroom fixtures";
-  if (/tile|splashback|hearth/.test(lower)) return "Tiles";
-  if (/floor|carpet/.test(lower)) return "Flooring";
   if (/door|handle|hinge|hardware/.test(lower)) return "Doors and hardware";
   if (/window|joinery/.test(lower)) return "Joinery";
-  if (/paint|finish|colour/.test(lower)) return "Paint and finishes";
   if (/gib|ceiling|lining/.test(lower)) return "Linings";
-  if (/light|pdl|power|switch/.test(lower)) return "Electrical";
   if (/air\s*conditioning|airconditioning|ducted|heat\s*pump|heating|cooling|hvac/.test(lower)) return "Heating/cooling";
-  if (/cladding|weatherboard/.test(lower)) return "Cladding";
   if (/slab|concrete|membrane/.test(lower)) return "Structural/foundation";
   if (/appliance|cooktop|oven|dishwasher|rangehood/.test(lower)) return "Appliance";
 
@@ -357,12 +451,32 @@ function rowHasProductSignal(rowText: string) {
   );
 }
 
+function isPureSourceDocumentReferenceRow(cells: string[], rowText: string) {
+  const label = (cells[0] || "").trim();
+  const valueText = cells.slice(1).join(" ").trim();
+  const combined = `${label} ${valueText}`;
+  const hasSourceDocumentReference = /\b(?:as\s+per|refer(?:s)?\s+to|see)\b.*\b(?:quote|invoice|schedule|manual|warranty|certificate)\b/i.test(combined) ||
+    /\b(?:quote|invoice|supplier\s+schedule|selection\s+schedule)\b/i.test(valueText);
+
+  if (!hasSourceDocumentReference) {
+    return false;
+  }
+
+  const hasSpecificProductIdentifier = Boolean(
+    extractProductCodes(rowText) ||
+      /\b(?:model|sku|code|series|range)\b/i.test(rowText) ||
+      /\b(?:mixer|basin|toilet|shower|vanity|mirror|robe\s*hook|towel\s*rail|heater|cylinder|pump|security|patch\s*panel)\b/i.test(label),
+  );
+
+  return !hasSpecificProductIdentifier;
+}
+
 function makeReadableTitle(cells: string[], rowText: string) {
   const label = cells[0] || "Specification item";
   const brand = findKnownBrand(rowText);
   const compactLabel = compactForMatching(label);
 
-  if (/interior\s+colour\s+scheme|semi-gloss\s+paint|flat\s+acrylic\s+paint/i.test(rowText)) {
+  if (/interior\s+colour\s+scheme|\bgloss\s+paint\s+finish\b|semi-gloss\s+paint|flat\s+acrylic\s+paint/i.test(rowText)) {
     return "Interior paint finish and colour scheme";
   }
 
@@ -370,9 +484,21 @@ function makeReadableTitle(cells: string[], rowText: string) {
     return "GIB board ceiling linings";
   }
 
+  if (/carpet[-\s]*custom\s+rug|custom\s+rug\s+carpet|\bbremworth\b/i.test(rowText)) {
+    return "Custom rug carpet";
+  }
+
   const serviceAsset = findServiceAssetPattern(rowText);
   if (serviceAsset) {
     return serviceAsset.title;
+  }
+
+  if (/\bshowers?\b/i.test(label) && /\btype\b.*\bmodel\b.*\bsize\b/i.test(label)) {
+    return normalizeExtractedTitle(label.replace(/\bType\b.*$/i, "").trim() || "Shower system");
+  }
+
+  if (/\bst\s*michel\b/i.test(rowText) && /\b(?:vanity|drawer|vessel\s+basin|top\s+panels?|accent\s+strip|copper\s+terazzo)\b/i.test(rowText)) {
+    return "St Michel Vanity";
   }
 
   if (brand && /mixer|basin|vanity|mirror|toilet|hook|waste|shower|door|light/.test(rowText.toLowerCase())) {
@@ -398,6 +524,30 @@ function cleanStructuredDescription(cells: string[]) {
   return dedupeCells(cells).join(" | ");
 }
 
+function extractHeaderValuePairs(cells: string[], rowText: string) {
+  const label = cells[0] || "";
+  const value = cells.slice(1).join(" ") || rowText;
+  const fields: Array<[string, string]> = [];
+
+  if (/\btype\b.*\bmodel\b.*\bsize\b.*\bdoor\b/i.test(label) && /shower/i.test(rowText)) {
+    const manufacturer = findKnownBrand(rowText);
+    const size = extractSize(rowText);
+    const finish = extractFinish(rowText);
+    const model = manufacturer ? extractDescriptiveModel(rowText).replace(/^shower\s+/i, "") : "";
+    const door = value.match(/\b(?:Hinged\s+(?:RH|LH)|Sliding\s+Door(?:\s+Left\s+to\s+Right|\s+Right\s+to\s+Left)?)\b/i)?.[0] || "";
+    const niche = value.match(/\b(?:\d+\s*x\s*\d+\s*x\s*\d+\s*shelf[^.]*|Niche\s+to\s+face\s+shower\s+door)\b/i)?.[0] || "";
+
+    fields.push(["Type", "Selected shower system"]);
+    if (model) fields.push(["Model", model]);
+    if (size) fields.push(["Size", size]);
+    if (door) fields.push(["Door", door]);
+    if (niche) fields.push(["Niche", niche]);
+    if (finish) fields.push(["Hardware/Finish", finish]);
+  }
+
+  return fields;
+}
+
 function buildStructuredEvidence(cells: string[], rowText: string) {
   const title = makeReadableTitle(cells, rowText);
   const manufacturer = findKnownBrand(rowText);
@@ -406,11 +556,8 @@ function buildStructuredEvidence(cells: string[], rowText: string) {
   const size = extractSize(rowText);
   const category = inferCategory(rowText);
   const location = inferLocation(rowText);
-  const description = cleanStructuredDescription(cells);
-  const hasIdentifier = Boolean(manufacturer && (productCode || /model|series|range|essence|dante|allure|city|heiko|linfa/i.test(rowText)));
-  const suggestedSearchQuery = hasIdentifier
-    ? [manufacturer, productCode || title, "manual warranty specification"].filter(Boolean).join(" ")
-    : "";
+  const description = cleanEvidenceText(rowText) || cleanStructuredDescription(cells);
+  const headerFields = extractHeaderValuePairs(cells, rowText);
 
   return [
     `Name: ${title}`,
@@ -418,11 +565,10 @@ function buildStructuredEvidence(cells: string[], rowText: string) {
     productCode ? `ProductCode: ${productCode}` : "",
     finish ? `Finish: ${finish}` : "",
     size ? `Size: ${size}` : "",
+    ...headerFields.map(([label, value]) => `${label}: ${value}`),
     `Category: ${category}`,
     location ? `Location: ${location}` : "",
     `Description: ${description}`,
-    `HasIdentifier: ${hasIdentifier ? "true" : "false"}`,
-    suggestedSearchQuery ? `SuggestedSearchQuery: ${suggestedSearchQuery}` : "",
   ]
     .filter(Boolean)
     .join("\n");
@@ -441,6 +587,7 @@ function addSchemaRowProposals(proposals: ProposedSpecItem[], seen: Set<string>,
       rowText.length > 1_400 ||
       isRepeatedLowValueRow(cells, rowText) ||
       /^please\s+note:?$/i.test(label) ||
+      isPureSourceDocumentReferenceRow(uniqueCells, rowText) ||
       !rowHasProductSignal(rowText) ||
       shouldExcludeAsAdminNoise(rowText)
     ) {
@@ -462,7 +609,7 @@ function addSchemaRowProposals(proposals: ProposedSpecItem[], seen: Set<string>,
     const recommendedAction = reviewLaneToRecommendedAction(reviewLane);
     const key = proposalKey("product", title);
 
-    if (seen.has(key)) {
+    if (seen.has(key) || hasSimilarSourceProposal(proposals, rowText, category, title)) {
       continue;
     }
 
@@ -505,6 +652,7 @@ export function buildSpecificationExtractionAudit(extractedText: string, proposa
       rowText.length > 1_400 ? "too_long" :
       isRepeatedLowValueRow(cells, rowText) ? "repeated_low_value" :
       /^please\s+note:?$/i.test(label) ? "please_note" :
+      isPureSourceDocumentReferenceRow(uniqueCells, rowText) ? "source_document_reference" :
       !hasSignal ? "no_product_signal" :
       shouldExcludeAsAdminNoise(rowText) ? "admin_noise" :
       "";
@@ -772,18 +920,6 @@ const extractionRules: ExtractionRule[] = [
     confidence_score: 82,
     recommended_action: "attach_existing_task",
     fallbackEvidence: "Specification references roof drainage components that should be maintained.",
-  },
-  {
-    item_type: "maintenance",
-    title: "Wash exterior cladding and painted finishes",
-    category: "Maintenance",
-    location: "Exterior envelope",
-    patterns: [/weather\s*board/i, /painted/i, /exterior.*paint/i, /cladding/i, /accoya/i],
-    evidenceTerms: ["weatherboard", "painted", "Accoya", "exterior"],
-    matched_existing_record: "Wash exterior cladding",
-    confidence_score: 84,
-    recommended_action: "attach_existing_task",
-    fallbackEvidence: "Exterior painted cladding finishes require regular cleaning/maintenance.",
   },
   {
     item_type: "maintenance",

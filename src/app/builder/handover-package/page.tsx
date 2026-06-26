@@ -46,10 +46,10 @@ export default async function HandoverPackagePage({
               </Link>
             </>
           }
-          description="This preview shows package-ready items: known database matches, project-only builder approvals, and globally approved admin records."
+          description="This preview shows builder-reviewed manual checklist items, database-autofilled items that were reviewed, and any optional imported/extracted items that are package-ready."
           eyebrow={project?.name || "Generated handover"}
           icon={Send}
-          title="Handover package preview"
+          title="Manual handover package preview"
         />
         <StatusBanner
           draft={params.published ? "saved" : undefined}
@@ -66,10 +66,9 @@ export default async function HandoverPackagePage({
 
         {total === 0 ? (
           <section className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-5">
-            <p className="font-semibold text-amber-950">No package-ready extraction items yet.</p>
+            <p className="font-semibold text-amber-950">No package-ready manual checklist items yet.</p>
             <p className="mt-2 text-sm leading-6 text-amber-800">
-              Upload a specification PDF. Known matches can be pre-approved, while new items can be
-              approved for this project by the builder or globally by platform admin.
+              Open a project, add handover items manually, use database autofill where helpful, then review/complete or accept incomplete sections before previewing the homeowner package.
             </p>
           </section>
         ) : null}

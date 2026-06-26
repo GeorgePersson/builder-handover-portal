@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
+import { buildSpecExtractionCandidates } from "@/lib/ai/spec-candidates";
 import { buildSpecificationProposals } from "@/lib/ai/spec-extract";
 import { maybeEnhanceSpecificationProposalsWithLlm } from "@/lib/ai/spec-llm";
+import { maybeNormalizeSpecTextWithLlm } from "@/lib/ai/spec-text-normalizer";
+import { cleanFinalSpecificationEvidence } from "@/lib/ai/spec-final-cleanup";
 import { extractDocumentContext } from "@/lib/server/document-context";
 import { buildSpecificationExtractionResponse } from "@/lib/server/specification-response";
 
@@ -30,11 +33,18 @@ export async function POST(request: Request) {
     fileName: file.name,
     mimeType: file.type || "application/pdf",
   });
-  const deterministicItems = buildSpecificationProposals(parsed.text);
-  const { proposedItems, candidates, llmResult } = await maybeEnhanceSpecificationProposalsWithLlm(deterministicItems).catch((error) => {
-    console.warn("Spec LLM classifier failed; falling back to deterministic extraction", error);
-    return { proposedItems: deterministicItems, candidates: [], llmResult: null };
+  const normalized = await maybeNormalizeSpecTextWithLlm(parsed.text).catch((error) => {
+    console.warn("Spec text normalizer failed; falling back to raw parsed text", error);
+    return { text: parsed.text, normalizationResult: null };
   });
+  const deterministicItems = buildSpecificationProposals(normalized.text);
+  const llmEnhancement = await maybeEnhanceSpecificationProposalsWithLlm(deterministicItems).catch((error) => {
+    console.warn("Spec LLM classifier failed; falling back to deterministic extraction", error);
+    return { proposedItems: deterministicItems, candidates: buildSpecExtractionCandidates(deterministicItems), llmResult: null };
+  });
+  const finalEvidenceCleanup = await cleanFinalSpecificationEvidence(llmEnhancement.proposedItems);
+  const proposedItems = finalEvidenceCleanup.items;
+  const { candidates, llmResult } = llmEnhancement;
 
   console.info("Specification preview extraction summary", {
     provider: parsed.provider,
@@ -53,6 +63,8 @@ export async function POST(request: Request) {
       proposedItems,
       candidates,
       llmResult,
+      normalizationResult: normalized.normalizationResult,
+      finalEvidenceCleanupResult: finalEvidenceCleanup.result,
       file: {
         name: file.name,
         size: file.size,

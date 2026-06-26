@@ -1,0 +1,69 @@
+[
+  {
+    "name": "flags_internal_diagnostic_leak",
+    "input": {
+      "extracted_text": "Name: Hot water cylinder\nDescription: readable text\nLLMReviewLane: needs_model_or_code",
+      "source_snippet": "readable source"
+    },
+    "expectedStatus": "needs_cleanup",
+    "expectedIssues": [
+      "diagnostic_leak"
+    ]
+  },
+  {
+    "name": "flags_split_and_glued_ocr_text",
+    "input": {
+      "extracted_text": "Name: Hot water cylinder\nDescription: 180 lmainspressureelectric with 3 kwelement and the rmostat",
+      "source_snippet": "stand ing outside shower with throostat"
+    },
+    "expectedStatus": "needs_human_review",
+    "expectedIssues": [
+      "ocr_spacing",
+      "glued_words",
+      "ocr_misspelling"
+    ]
+  },
+  {
+    "name": "passes_clean_readable_text",
+    "input": {
+      "extracted_text": "Name: Hot water cylinder\nDescription: 180L mains pressure electric with 3 kW element and thermostat",
+      "source_snippet": "Hot water cylinder 180L mains pressure electric with 3 kW element and thermostat"
+    },
+    "expectedStatus": "pass",
+    "expectedIssues": []
+  },
+  {
+    "name": "flags_glued_shower_direction_tokens",
+    "input": {
+      "extracted_text": "Name: Shower\nDescription: overlapsbothfixedpanels if stand ingfacing shower door outsideof shower shelfon sideonend bemountedonback",
+      "source_snippet": "RHWhen lookingat fixedpanel mm-slides NB:Slide"
+    },
+    "expectedStatus": "needs_human_review",
+    "expectedIssues": [
+      "ocr_spacing",
+      "glued_words"
+    ]
+  },
+  {
+    "name": "flags_unseen_generic_glued_direction_tokens",
+    "input": {
+      "extracted_text": "Name: Shower\nDescription: mountedonleftsidewall slidesfromrighttoleftwhenfacingdoor shelftobemountedonrearwall",
+      "source_snippet": "mountedonleftsidewall slidesfromrighttoleftwhenfacingdoor shelftobemountedonrearwall"
+    },
+    "expectedStatus": "needs_human_review",
+    "expectedIssues": [
+      "glued_words"
+    ]
+  },
+  {
+    "name": "flags_unreadable_suspicious_token_density",
+    "input": {
+      "extracted_text": "Name: Unclear\nDescription: xqzmountdwall blorfsidepanel nnqshowerdoor qqqrearwall",
+      "source_snippet": "xqzmountdwall blorfsidepanel nnqshowerdoor qqqrearwall"
+    },
+    "expectedStatus": "needs_human_review",
+    "expectedIssues": [
+      "suspicious_token_density"
+    ]
+  }
+]

@@ -71,6 +71,10 @@ for (const fixture of fixtures) {
     failures.push(`${fixture.name}: expected action ${fixture.expectedAction}, got ${proposal.recommended_action}`);
   }
 
+  if (fixture.expectedCategory && proposal.category !== fixture.expectedCategory) {
+    failures.push(`${fixture.name}: expected category ${fixture.expectedCategory}, got ${proposal.category}`);
+  }
+
   for (const expected of fixture.expectedSourceIncludes || []) {
     if (!source.includes(expected) && !proposal.extracted_text.includes(expected)) {
       failures.push(`${fixture.name}: expected source/text to include ${JSON.stringify(expected)}. Got ${JSON.stringify(source)}`);

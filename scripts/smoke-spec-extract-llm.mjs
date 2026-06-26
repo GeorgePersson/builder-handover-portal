@@ -52,6 +52,7 @@ function rewriteAliases(source) {
     .replaceAll('from "@/lib/ai/spec-classify"', 'from "./spec-classify.mjs"')
     .replaceAll('from "@/lib/ai/spec-candidates"', 'from "./spec-candidates.mjs"')
     .replaceAll('from "@/lib/ai/spec-llm"', 'from "./spec-llm.mjs"')
+    .replaceAll('from "@/lib/ai/spec-text-normalizer"', 'from "./spec-text-normalizer.mjs"')
     .replaceAll('from "@/lib/ai/spec-extract"', 'from "./spec-extract.mjs"');
 }
 
@@ -76,20 +77,26 @@ for (const name of [
   "spec-extract",
   "spec-candidates",
   "spec-llm",
+  "spec-text-normalizer",
 ]) {
   transpileToMjs(`src/lib/ai/${name}.ts`, `${name}.mjs`);
 }
 
 const { buildSpecificationProposals } = await import(pathToFileURL(path.join(tmpDir, "spec-extract.mjs")));
-const { buildSpecExtractionCandidates } = await import(pathToFileURL(path.join(tmpDir, "spec-candidates.mjs")));
-const { applySpecLlmClassifications, classifySpecCandidatesWithOpenAi } = await import(pathToFileURL(path.join(tmpDir, "spec-llm.mjs")));
+const { maybeEnhanceSpecificationProposalsWithLlm } = await import(pathToFileURL(path.join(tmpDir, "spec-llm.mjs")));
+const { maybeNormalizeSpecTextWithLlm } = await import(pathToFileURL(path.join(tmpDir, "spec-text-normalizer.mjs")));
 
 const markdown = fs.readFileSync(inputPath, "utf-8");
-const proposals = buildSpecificationProposals(markdown);
-const candidates = buildSpecExtractionCandidates(proposals);
-const llmCandidates = candidates.filter((candidate) => candidate.needs_llm).slice(0, Math.max(1, limit));
-const result = await classifySpecCandidatesWithOpenAi({ candidates: llmCandidates });
-const llmEnhancedProposals = applySpecLlmClassifications(proposals, candidates, result.classifications);
+const normalized = await maybeNormalizeSpecTextWithLlm(markdown);
+const proposals = buildSpecificationProposals(normalized.text);
+process.env.OPENAI_SPEC_CLASSIFIER_ENABLED = "true";
+process.env.OPENAI_SPEC_CLASSIFIER_LIMIT = String(limit);
+const { proposedItems: llmEnhancedProposals, candidates, llmResult: result } = await maybeEnhanceSpecificationProposalsWithLlm(proposals);
+
+if (!result) {
+  console.error("LLM classifier did not run.");
+  process.exit(3);
+}
 
 const actionCounts = proposals.reduce((acc, item) => {
   acc[item.recommended_action] = (acc[item.recommended_action] || 0) + 1;
@@ -99,10 +106,19 @@ const actionCounts = proposals.reduce((acc, item) => {
 console.log(JSON.stringify({
   input: inputPath,
   deterministicProposalCount: proposals.length,
+  normalizer: normalized.normalizationResult ? {
+    selectedRowCount: normalized.normalizationResult.selectedRowCount,
+    acceptedCount: normalized.normalizationResult.acceptedCount,
+    rejectedCount: normalized.normalizationResult.rejectedCount,
+    changedRowCount: normalized.normalizationResult.rows.filter((row) => row.accepted && row.normalized_text !== row.source_text).length,
+    tokenUsage: normalized.normalizationResult.tokenUsage,
+  } : null,
   deterministicActionCounts: actionCounts,
   candidateCount: candidates.length,
   llmEligibleCount: candidates.filter((candidate) => candidate.needs_llm).length,
   llmSentCount: result.sentCandidateCount,
+  llmSentCandidateIds: result.sentCandidateIds,
+  batchSize: process.env.OPENAI_SPEC_CLASSIFIER_BATCH_SIZE || "20",
   llmAcceptedCount: result.acceptedCount,
   llmRejectedCount: result.rejectedCount,
   llmEnhancedProposalCount: llmEnhancedProposals.length,

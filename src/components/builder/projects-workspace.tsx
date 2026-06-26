@@ -5,10 +5,8 @@ import type { ComponentType } from "react";
 import {
   AlertTriangle,
   Bell,
-  Bot,
   CalendarCheck2,
   FileText,
-  FileSearch,
   HelpCircle,
   Layers3,
   Link2,
@@ -35,23 +33,16 @@ import {
   createClientInviteAction,
   createDocumentAction,
   createProjectAction,
-  createSpecificationUploadAction,
-  approveWorkflowItemAction,
-  editWorkflowItemAction,
-  excludeWorkflowItemAction,
-  markWorkflowItemBuilderSuppliedAction,
+  createProjectHandoverChecklistItemAction,
+  updateProjectHandoverChecklistItemAction,
+  acceptProjectHandoverChecklistItemIncompleteAction,
   publishHandoverPackageAction,
-  retryDocumentExtractionJobAction,
-  retryCloudflarePipelineFailedBatchesAction,
   revokeClientInviteAction,
   sendClientInviteEmailAction,
-  syncCloudflarePipelineStatusAction,
   updateProjectAction,
-  uploadWorkflowItemSupportingDocumentAction,
 } from "@/lib/server/actions";
 import { formatDate } from "@/lib/utils";
 import {
-  aiHandoverApprovalText,
   builderHandoverApprovalText,
 } from "@/lib/handover-approval";
 import type {
@@ -64,10 +55,9 @@ import type {
   Project,
   SpecificationUpload,
 } from "@/lib/types";
-import {
-  getWorkflowPublishReadiness,
-  hasSourceGapSignals,
-} from "@/lib/workflow-readiness";
+
+import type { ProjectHandoverChecklistItem } from "@/lib/project-handover-checklist";
+import { getMissingChecklistSections, hasEnoughIdentityToSearch } from "@/lib/project-handover-checklist";
 
 type ProjectsWorkspaceProps = {
   draft?: string;
@@ -82,6 +72,7 @@ type ProjectsWorkspaceProps = {
   };
   downloadEvents: DocumentDownloadEvent[];
   handoverOpenEvents: HandoverOpenEvent[];
+  checklistItems: ProjectHandoverChecklistItem[];
   documents: HandoverDocument[];
   projects: Project[];
   specifications: SpecificationUpload[];
@@ -94,12 +85,16 @@ type ProjectsWorkspaceProps = {
   uploadedDocuments: UploadedProjectDocument[];
 };
 
-type ModalMode = "create" | "edit" | "send" | "help" | null;
+type ModalMode = "create" | "send" | "help" | "clientAccess" | "addItem" | null;
+type ProjectWorkspaceTab = "overview" | "items" | "documents" | "automation";
 
-const packageReadyStatuses = new Set(["accepted", "auto_approved", "builder_approved", "global_approved"]);
-const adminReviewStatuses = new Set(["admin_review", "edited", "proposed"]);
-const unresolvedWorkflowReviewStatuses = new Set(["needs_review", "low_confidence", "unmatched"]);
-const approvedWorkflowReviewStatuses = new Set(["verified_match", "approved", "edited_by_builder", "builder_supplied"]);
+const projectWorkspaceTabs: Array<{ id: ProjectWorkspaceTab; label: string; href: string }> = [
+  { id: "overview", label: "Overview", href: "#project-overview" },
+  { id: "items", label: "Items", href: "#project-items" },
+  { id: "documents", label: "Documents", href: "#project-documents" },
+  { id: "automation", label: "Spec automation", href: "#project-spec-automation" },
+];
+
 
 const handoverCategoryOptions = [
   { label: "Kitchen", value: "Kitchen" },
@@ -115,22 +110,13 @@ const handoverCategoryOptions = [
   { label: "General", value: "General" },
 ];
 
-const careGuidanceSourceOptions = [
-  { label: "Manufacturer", value: "manufacturer" },
-  { label: "Supplier", value: "supplier" },
-  { label: "Builder supplied", value: "builder_supplied" },
-  { label: "General AI care guidance", value: "general_ai" },
-  { label: "Unknown source", value: "unknown" },
-];
+function getCategoryOptions(category?: string | null) {
+  if (!category || handoverCategoryOptions.some((option) => option.value === category)) {
+    return handoverCategoryOptions;
+  }
 
-type ContextSchemaMetadata = {
-  itemType?: string;
-  sourceEvidenceText?: string;
-  missingFields: string[];
-  builderInfoNeeded: string[];
-  contextClassification?: string;
-  classificationReason?: string;
-};
+  return [{ label: category, value: category }, ...handoverCategoryOptions];
+}
 
 const projectTypeOptions = [
   { label: "New residential build", value: "New residential build" },
@@ -149,34 +135,23 @@ export function ProjectsWorkspace({
   creditStatus,
   downloadEvents,
   handoverOpenEvents,
+  checklistItems,
   documents,
   projects,
-  specifications,
-  extractedItems,
-  extractedWorkflowItems,
-  extractionJobs,
   maintenanceTasks,
   productVersions,
-  productMatches,
-  uploadedDocuments,
 }: ProjectsWorkspaceProps) {
   const [mode, setMode] = useState<ModalMode>(null);
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(projects[0]?.id ?? null);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
   const [productQuery, setProductQuery] = useState("");
 
-  const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? projects[0] ?? null;
+  const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? null;
   const invitePath = inviteToken ? `/client/accept-invite?token=${encodeURIComponent(inviteToken)}` : null;
 
   const projectSnapshots = useMemo(
     () =>
       projects.map((project) => {
-        const projectSpecificationIds = new Set(
-          specifications.filter((specification) => specification.projectId === project.id).map((specification) => specification.id),
-        );
-        const projectItems = extractedItems.filter((item) => projectSpecificationIds.has(item.specificationId));
-        const readyItems = projectItems.filter((item) => packageReadyStatuses.has(item.status));
-        const awaitingAdmin = projectItems.filter((item) => adminReviewStatuses.has(item.status));
         const tasks = maintenanceTasks.filter((task) => task.projectId === project.id);
         const projectDocuments = documents.filter((document) => document.projectId === project.id);
         const projectDownloadEvents = downloadEvents.filter((event) => event.projectId === project.id);
@@ -184,40 +159,25 @@ export function ProjectsWorkspace({
         const firstHandoverOpenEvent = [...projectHandoverOpenEvents].sort((left, right) =>
           left.firstOpenedAt.localeCompare(right.firstOpenedAt),
         )[0];
-        const workflowDocuments = uploadedDocuments.filter((document) => document.projectId === project.id);
-        const workflowJobs = extractionJobs.filter((job) => job.projectId === project.id);
-        const workflowItems = extractedWorkflowItems.filter((item) => item.projectId === project.id);
-        const workflowItemIds = new Set(workflowItems.map((item) => item.id));
-        const workflowMatches = productMatches.filter((match) => workflowItemIds.has(match.extractedItemId));
+        const checklist = checklistItems.filter((item) => item.projectId === project.id);
 
         return {
           project,
-          awaitingAdmin,
           downloadEvents: projectDownloadEvents,
           firstHandoverOpenEvent,
           handoverOpenEvents: projectHandoverOpenEvents,
           documents: projectDocuments,
-          readyItems,
-          specifications: specifications.filter((specification) => specification.projectId === project.id),
+          checklist,
           tasks,
-          workflowDocuments,
-          workflowItems,
-          workflowJobs,
-          workflowMatches,
         };
       }),
     [
       documents,
+      checklistItems,
       downloadEvents,
       handoverOpenEvents,
-      extractedItems,
-      extractedWorkflowItems,
-      extractionJobs,
       maintenanceTasks,
-      productMatches,
       projects,
-      specifications,
-      uploadedDocuments,
     ],
   );
 
@@ -250,19 +210,19 @@ export function ProjectsWorkspace({
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 px-5 py-8 text-slate-950 sm:px-8">
-      <div className="mx-auto max-w-6xl">
+    <main className="min-h-screen bg-slate-50 px-4 py-5 text-[13px] text-slate-950 sm:px-6">
+      <div className="w-full max-w-none">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-sm font-semibold text-cyan-700">Builder workspace</p>
-            <h1 className="mt-1 text-2xl font-semibold tracking-normal">Projects</h1>
+            <h1 className="mt-1 text-xl font-semibold tracking-normal">Projects</h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-              Create, review, package, and send handover projects from one workspace.
+              Create, manage, package, and send handover projects from one workspace.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <button
-              className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
               onClick={() => open("help")}
               type="button"
             >
@@ -270,7 +230,7 @@ export function ProjectsWorkspace({
               Help
             </button>
             <button
-              className="inline-flex h-10 items-center gap-2 rounded-md bg-cyan-700 px-3 text-sm font-semibold text-white hover:bg-cyan-800"
+              className="inline-flex h-9 items-center gap-1.5 rounded-md bg-cyan-700 px-3 text-xs font-semibold text-white hover:bg-cyan-800"
               onClick={() => open("create")}
               type="button"
             >
@@ -290,13 +250,10 @@ export function ProjectsWorkspace({
             "credit-deduct-failed": "The project credit could not be deducted.",
             "credit-event-failed": "The project credit event could not be recorded.",
             "create-client-invite-failed": "The client invite link could not be created.",
-            "create-extraction-job-failed": "The document uploaded, but the extraction job could not be created.",
-            "create-uploaded-document-audit-failed": "The document was uploaded, but the workflow audit log could not be recorded.",
-            "create-uploaded-document-failed": "The document was uploaded, but the workflow status record could not be created. Check the Phase 1 migration.",
             "create-request-failed": "The missing item request could not be created.",
-            "extraction-job-not-found": "That extraction job could not be found.",
-            "extraction-job-not-retryable": "Only failed extraction jobs can be retried.",
-            "handover-ai-approval-required": "Confirm the AI-assisted information has been reviewed before release.",
+            "create-checklist-item-failed": "The handover checklist item could not be created.",
+            "update-checklist-item-failed": "The handover checklist item could not be updated.",
+            "accept-checklist-incomplete-failed": "The incomplete acceptance could not be recorded.",
             "handover-approval-record-failed": "The final approval record could not be saved. Run the Phase 9 Supabase migration if needed.",
             "handover-approval-required": "Confirm the final builder approval before release.",
             "invalid-document-upload": "That file type is not supported. Upload a PDF, image, Word, Excel, or CSV file.",
@@ -310,13 +267,8 @@ export function ProjectsWorkspace({
             "project-credit-not-confirmed": "Confirm project credit use before creating the project.",
             "update-project-failed": "The project could not be updated.",
             "upload-document-failed": "The document file could not be uploaded.",
-            "uploaded-document-download-failed": "The uploaded document could not be loaded for extraction retry.",
-            "uploaded-document-not-found": "The uploaded document for that extraction job could not be found.",
-            "workflow-item-not-found": "That extracted item could not be found.",
-            "workflow-publish-blocked": "This project is not ready to publish yet. Resolve workflow processing and review blockers first.",
-            "workflow-review-action-failed": "The review action could not be saved.",
-            "workflow-review-update-failed": "The extracted item could not be updated.",
-            "workflow-source-gap-approval-blocked": "Resolve missing fields, quote references, or builder-info prompts before approving the item as correct. Use Builder supplied for project-only approval if the evidence is builder-provided.",
+            "uploaded-document-download-failed": "The uploaded document could not be loaded.",
+            "uploaded-document-not-found": "The uploaded document could not be found.",
             "publish-readiness-check-failed": "The project readiness check could not be completed.",
           }}
           storage={storage}
@@ -342,77 +294,99 @@ export function ProjectsWorkspace({
           </div>
         ) : null}
 
-        <section className="mt-6 grid gap-4 md:grid-cols-5">
-          <Metric icon={PackageCheck} label="Projects" value={projects.length} />
-          <Metric icon={FileText} label="Client docs" value={documents.filter((document) => document.visibleToClient).length} />
-          <Metric icon={Bot} label="Awaiting admin" value={projectSnapshots.reduce((sum, snapshot) => sum + snapshot.awaitingAdmin.length, 0)} />
-          <Metric icon={Send} label="Package-ready items" value={projectSnapshots.reduce((sum, snapshot) => sum + snapshot.readyItems.length, 0)} />
-          <Metric icon={CalendarCheck2} label="Maintenance tasks" value={maintenanceTasks.length} />
-        </section>
+        {selectedProject && selectedSnapshot ? (
+          <ProjectEditPanel
+            onAddItem={() => open("addItem", selectedProject.id)}
+            onBack={() => {
+              setSelectedProjectId(null);
+              setIsDirty(false);
+              setProductQuery("");
+            }}
+            onClientAccess={() => open("clientAccess", selectedProject.id)}
+            onSend={() => open("send", selectedProject.id)}
+            project={selectedProject}
+            setDirty={setIsDirty}
+            snapshot={selectedSnapshot}
+          />
+        ) : (
+          <>
+            <section className="mt-4 grid gap-3 md:grid-cols-4">
+              <Metric icon={PackageCheck} label="Projects" value={projects.length} />
+              <Metric icon={FileText} label="Client docs" value={documents.filter((document) => document.visibleToClient).length} />
+              <Metric icon={Send} label="Package-ready items" value={projectSnapshots.reduce((sum, snapshot) => sum + snapshot.checklist.filter((item) => item.status === "complete" || item.status === "user_accepted_incomplete").length, 0)} />
+              <Metric icon={CalendarCheck2} label="Maintenance tasks" value={maintenanceTasks.length} />
+            </section>
 
-        <section className="mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <div className="grid gap-3 border-b border-slate-100 px-5 py-4 md:grid-cols-[1fr_auto] md:items-center">
-            <div>
-              <h2 className="font-semibold text-slate-950">Project list</h2>
-              <p className="mt-1 text-sm text-slate-500">Open a project to edit details, upload specs, review package items, or send the handover pack.</p>
-            </div>
-            <button
-              className="inline-flex h-9 items-center justify-center rounded-md border border-slate-200 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-              onClick={() => open("create")}
-              type="button"
-            >
-              Add project
-            </button>
-          </div>
-
-          <div className="divide-y divide-slate-100">
-            {projectSnapshots.map(({ project, awaitingAdmin, firstHandoverOpenEvent, readyItems, specifications: projectSpecs, tasks }) => (
-              <article className="grid gap-4 p-5 xl:grid-cols-[1fr_auto]" key={project.id}>
+            <section className="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+              <div className="grid gap-2 border-b border-slate-100 px-4 py-3 md:grid-cols-[1fr_auto] md:items-center">
                 <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="font-semibold text-slate-950">{project.name}</h3>
-                    <StatusPill variant={project.status} />
-                    {awaitingAdmin.length ? <InlineFlag icon={Bell} label={`${awaitingAdmin.length} awaiting admin`} /> : null}
-                  </div>
-                  <p className="mt-1 text-sm text-slate-600">{project.address}</p>
-                  <p className="mt-2 text-xs text-slate-500">
-                    {project.clientName} - {project.projectType} - Handover {formatDate(project.handoverDate)}
-                  </p>
-                  <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-600">
-                    <span className="rounded-md bg-slate-100 px-2.5 py-1">{projectSpecs.length} spec uploads</span>
-                    <span className="rounded-md bg-slate-100 px-2.5 py-1">
-                      {documents.filter((document) => document.projectId === project.id).length} documents
-                    </span>
-                    <span className="rounded-md bg-slate-100 px-2.5 py-1">{readyItems.length} package-ready</span>
-                    <span className="rounded-md bg-slate-100 px-2.5 py-1">{tasks.length ? `${tasks.length} maintenance tasks` : "No maintenance tasks"}</span>
-                    <span className="rounded-md bg-slate-100 px-2.5 py-1">Invite: {formatInviteStatus(project.clientInviteStatus, project.clientInvitedAt)}</span>
-                    <span className="rounded-md bg-slate-100 px-2.5 py-1">
-                      {project.publishedAt ? firstOpenLabel(firstHandoverOpenEvent) : "Not published yet"}
-                    </span>
-                  </div>
+                  <h2 className="font-semibold text-slate-950">Project browser</h2>
+                  <p className="mt-1 text-sm text-slate-500">Choose a project to open its dedicated handover workspace. Manual items and database autofill are the main demo path.</p>
                 </div>
-                <div className="flex flex-wrap gap-2 xl:justify-end">
-                  <button
-                    className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                    onClick={() => open("edit", project.id)}
-                    type="button"
-                  >
-                    <Pencil className="size-4" />
-                    Edit
-                  </button>
-                  <button
-                    className="inline-flex h-10 items-center gap-2 rounded-md bg-slate-950 px-3 text-sm font-semibold text-white hover:bg-slate-800"
-                    onClick={() => open("send", project.id)}
-                    type="button"
-                  >
-                    <Send className="size-4" />
-                    Send package
-                  </button>
-                </div>
-              </article>
-            ))}
-          </div>
-        </section>
+                <button
+                  className="inline-flex h-9 items-center justify-center rounded-md border border-slate-200 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                  onClick={() => open("create")}
+                  type="button"
+                >
+                  Add project
+                </button>
+              </div>
+
+              <div className="divide-y divide-slate-100">
+                {projectSnapshots.map(({ project, checklist, firstHandoverOpenEvent, tasks }) => {
+                  const checklistReady = checklist.filter((item) => item.status === "complete" || item.status === "user_accepted_incomplete").length;
+                  const incompleteCount = checklist.filter((item) => item.status !== "complete" && item.status !== "user_accepted_incomplete").length;
+
+                  return (
+                    <article className="grid gap-3 p-4 transition hover:bg-slate-50 xl:grid-cols-[1fr_auto]" key={project.id}>
+                      <button className="text-left" onClick={() => setSelectedProjectId(project.id)} type="button">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="font-semibold text-slate-950">{project.name}</h3>
+                          <StatusPill variant={project.status} />
+                          {incompleteCount ? <InlineFlag icon={Bell} label={`${incompleteCount} to complete`} /> : <InlineFlag icon={PackageCheck} label="Ready-looking" />}
+                        </div>
+                        <p className="mt-1 text-sm text-slate-600">{project.address}</p>
+                        <p className="mt-2 text-xs text-slate-500">
+                          {project.clientName} - {project.projectType} - Handover {formatDate(project.handoverDate)}
+                        </p>
+                        <div className="mt-3 flex flex-wrap gap-1.5 text-[11px] text-slate-600">
+                          <span className="rounded-md bg-slate-100 px-2.5 py-1">{checklist.length} checklist items</span>
+                          <span className="rounded-md bg-slate-100 px-2.5 py-1">{checklistReady} manual ready</span>
+                          <span className="rounded-md bg-slate-100 px-2.5 py-1">
+                            {documents.filter((document) => document.projectId === project.id).length} documents
+                          </span>
+                          <span className="rounded-md bg-slate-100 px-2.5 py-1">{tasks.length ? `${tasks.length} maintenance tasks` : "No maintenance tasks"}</span>
+                          <span className="rounded-md bg-slate-100 px-2.5 py-1">Invite: {formatInviteStatus(project.clientInviteStatus, project.clientInvitedAt)}</span>
+                          <span className="rounded-md bg-slate-100 px-2.5 py-1">
+                            {project.publishedAt ? firstOpenLabel(firstHandoverOpenEvent) : "Not published yet"}
+                          </span>
+                        </div>
+                      </button>
+                      <div className="flex flex-wrap gap-2 xl:justify-end">
+                        <button
+                          className="inline-flex h-9 items-center gap-1.5 rounded-md bg-cyan-700 px-3 text-xs font-semibold text-white hover:bg-cyan-800"
+                          onClick={() => setSelectedProjectId(project.id)}
+                          type="button"
+                        >
+                          <Pencil className="size-4" />
+                          Open workspace
+                        </button>
+                        <button
+                          className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                          onClick={() => open("send", project.id)}
+                          type="button"
+                        >
+                          <Send className="size-4" />
+                          Send package
+                        </button>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
+          </>
+        )}
       </div>
 
       {mode ? (
@@ -450,18 +424,14 @@ export function ProjectsWorkspace({
                   setProductQuery={setProductQuery}
                 />
               ) : null}
-              {mode === "edit" && selectedProject && selectedSnapshot ? (
-                <ProjectEditPanel
-                  filteredProducts={filteredProducts}
-                  productQuery={productQuery}
-                  project={selectedProject}
-                  setDirty={setIsDirty}
-                  setProductQuery={setProductQuery}
-                  snapshot={selectedSnapshot}
-                />
-              ) : null}
               {mode === "send" && selectedProject && selectedSnapshot ? (
                 <SendPackagePanel project={selectedProject} snapshot={selectedSnapshot} />
+              ) : null}
+              {mode === "clientAccess" && selectedProject && selectedSnapshot ? (
+                <ClientAccessPanel project={selectedProject} snapshot={selectedSnapshot} />
+              ) : null}
+              {mode === "addItem" && selectedProject ? (
+                <AddHandoverItemForm productVersions={filteredProducts} projectId={selectedProject.id} setDirty={setIsDirty} />
               ) : null}
             </div>
           </section>
@@ -486,7 +456,7 @@ function ProjectCreateForm({
 }) {
   return (
     <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
-      <form action={createProjectAction} className="rounded-lg border border-slate-200 p-5" onChange={() => setDirty(true)}>
+      <form action={createProjectAction} className="rounded-lg border border-slate-200 p-4" onChange={() => setDirty(true)}>
         <h3 className="font-semibold text-slate-950">Project and client</h3>
         <div className="mt-5 grid gap-5 md:grid-cols-2">
           <TextField label="Project name" name="name" placeholder="Bayview Road New Build" required />
@@ -496,21 +466,11 @@ function ProjectCreateForm({
           <TextField label="Client name" name="clientName" placeholder="Amelia and Noah Smith" required />
           <TextField label="Client email" name="clientEmail" placeholder="client@example.co.nz" required type="email" />
         </div>
-        <label className="mt-5 block">
-          <span className="text-sm font-medium text-slate-700">Optional specification PDF</span>
-          <input
-            className="mt-2 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-slate-700"
-            name="specificationPdf"
-            type="file"
-            accept="application/pdf"
-          />
-        </label>
-        <div className="mt-4 rounded-md border border-cyan-100 bg-cyan-50 p-3 text-sm leading-6 text-cyan-900">
-          If a PDF is attached, it is registered against the project after save. Extraction and review
-          details will populate in this project workspace as they are processed.
+        <div className="mt-5 rounded-md border border-cyan-100 bg-cyan-50 p-3 text-sm leading-6 text-cyan-900">
+          Save the project first, then add handover items from the project workspace. Spec sheet automation is coming later.
         </div>
         <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <p className="text-sm font-semibold text-slate-950">Project credit confirmation</p>
               <p className="mt-1 text-sm leading-6 text-slate-600">
@@ -529,7 +489,7 @@ function ProjectCreateForm({
             <span>I confirm this project can use one project credit.</span>
           </label>
         </div>
-        <div className="mt-6 flex justify-end">
+        <div className="mt-4 flex justify-end">
           <SubmitButton icon={Plus} label="Save project" />
         </div>
       </form>
@@ -543,348 +503,164 @@ function ProjectCreateForm({
 }
 
 function ProjectEditPanel({
-  filteredProducts,
-  productQuery,
+  onAddItem,
+  onBack,
+  onClientAccess,
+  onSend,
   project,
   setDirty,
-  setProductQuery,
   snapshot,
 }: {
-  filteredProducts: ProductVersion[];
-  productQuery: string;
+  onAddItem: () => void;
+  onBack: () => void;
+  onClientAccess: () => void;
+  onSend: () => void;
   project: Project;
   setDirty: (dirty: boolean) => void;
-  setProductQuery: (value: string) => void;
   snapshot: {
-    awaitingAdmin: ExtractedHandoverItem[];
     downloadEvents: DocumentDownloadEvent[];
     firstHandoverOpenEvent?: HandoverOpenEvent;
     handoverOpenEvents: HandoverOpenEvent[];
     documents: HandoverDocument[];
-    readyItems: ExtractedHandoverItem[];
-    specifications: SpecificationUpload[];
+    checklist: ProjectHandoverChecklistItem[];
     tasks: MaintenanceTask[];
-    workflowDocuments: UploadedProjectDocument[];
-    workflowItems: ExtractedWorkflowItem[];
-    workflowJobs: DocumentExtractionJob[];
-    workflowMatches: ProductMatch[];
   };
 }) {
-  const manualItems = snapshot.awaitingAdmin.filter((item) => item.status !== "admin_review");
   return (
-    <div className="space-y-5">
-      <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
-        <form action={updateProjectAction} className="rounded-lg border border-slate-200 p-5" onChange={() => setDirty(true)}>
-          <input name="projectId" type="hidden" value={project.id} />
-          <h3 className="font-semibold text-slate-950">Project details</h3>
-          <div className="mt-5 grid gap-5 md:grid-cols-2">
-            <TextField label="Project name" name="name" defaultValue={project.name} required />
-            <SelectField label="Project type" name="projectType" defaultValue={project.projectType} options={projectTypeOptions} required />
-            <TextField label="Property address" name="address" defaultValue={project.address} required />
-            <TextField label="Target handover date" name="handoverDate" defaultValue={project.handoverDate?.slice(0, 10)} type="date" />
-            <TextField label="Client name" name="clientName" defaultValue={project.clientName} required />
-            <TextField label="Client email" name="clientEmail" defaultValue={project.clientEmail} required type="email" />
-          </div>
-          <div className="mt-6 flex justify-end">
-            <SubmitButton icon={Pencil} label="Save changes" />
-          </div>
-        </form>
-        <div className="space-y-5">
-          <form action={createSpecificationUploadAction} className="rounded-lg border border-slate-200 p-5" onChange={() => setDirty(true)}>
-            <input name="projectId" type="hidden" value={project.id} />
-            <h3 className="font-semibold text-slate-950">Specification upload</h3>
-            <label className="mt-4 block">
-              <span className="text-sm font-medium text-slate-700">Add spec PDF</span>
-              <input
-                className="mt-2 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-slate-700"
-                name="specificationPdf"
-                type="file"
-                accept="application/pdf"
-              />
-            </label>
-            <div className="mt-4 flex justify-end">
-              <SubmitButton icon={Upload} label="Register PDF" />
+    <div className="mt-4 space-y-4">
+      <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm" id="project-overview">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <button className="text-sm font-semibold text-cyan-700 hover:text-cyan-900" onClick={onBack} type="button">
+              ← Back to projects
+            </button>
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <h2 className="text-xl font-semibold tracking-normal text-slate-950">{project.name}</h2>
+              <StatusPill variant={project.status} />
             </div>
-          </form>
-          <section className="rounded-lg border border-slate-200 p-5">
-            <h3 className="font-semibold text-slate-950">Client access</h3>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
-              Invite status: {formatInviteStatus(project.clientInviteStatus, project.clientInvitedAt)}
+            <p className="mt-2 text-sm leading-6 text-slate-600">{project.address}</p>
+            <p className="mt-1 text-sm text-slate-500">
+              {project.clientName} · {project.projectType} · Target handover {formatDate(project.handoverDate)}
             </p>
-            <p className="mt-1 text-sm leading-6 text-slate-600">
-              Handover first opened: {project.publishedAt ? firstOpenDate(snapshot.firstHandoverOpenEvent) : "Not published yet"}
-            </p>
-            {snapshot.firstHandoverOpenEvent ? (
-              <p className="mt-1 text-xs leading-5 text-slate-500">
-                Privacy-light package record only: opened {snapshot.firstHandoverOpenEvent.openCount} time{snapshot.firstHandoverOpenEvent.openCount === 1 ? "" : "s"} total. No page or item-level tracking is shown here.
-              </p>
-            ) : null}
-            <div className="mt-4 flex flex-wrap gap-2">
-              {project.clientInviteStatus === "accepted" ? null : (
-                <>
-                  <form action={sendClientInviteEmailAction}>
-                    <input name="projectId" type="hidden" value={project.id} />
-                    <SubmitButton
-                      icon={Send}
-                      label={project.clientInviteStatus === "invited" ? "Resend invite email" : "Email invite"}
-                    />
-                  </form>
-                  <form action={createClientInviteAction}>
-                    <input name="projectId" type="hidden" value={project.id} />
-                    <SubmitButton
-                      icon={Link2}
-                      label={project.clientInviteStatus === "invited" ? "Regenerate link" : "Create link"}
-                    />
-                  </form>
-                </>
-              )}
-              {project.clientInviteStatus === "invited" ? (
-                <form action={revokeClientInviteAction}>
-                  <input name="projectId" type="hidden" value={project.id} />
-                  <button
-                    className="inline-flex h-10 items-center justify-center rounded-md border border-rose-200 px-3 text-sm font-semibold text-rose-700 hover:bg-rose-50"
-                    type="submit"
-                  >
-                    Revoke
-                  </button>
-                </form>
-              ) : null}
-            </div>
-          </section>
-          <section className="rounded-lg border border-slate-200 p-5">
-            <h3 className="font-semibold text-slate-950">Client documents</h3>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
-              Upload warranties, manuals, certificates, photos, or other files that the client should receive with this handover.
-            </p>
-            <form action={createDocumentAction} className="mt-4 space-y-4" onChange={() => setDirty(true)}>
-              <input name="projectId" type="hidden" value={project.id} />
-              <div className="grid gap-4 md:grid-cols-2">
-                <TextField label="Document name" name="name" placeholder="Window warranty schedule.pdf" />
-                <SelectField
-                  label="Document type"
-                  name="documentType"
-                  options={[
-                    { label: "Consent", value: "consent" },
-                    { label: "Manual", value: "manual" },
-                    { label: "Warranty", value: "warranty" },
-                    { label: "Producer statement", value: "producer_statement" },
-                    { label: "Photo", value: "photo" },
-                    { label: "Other", value: "other" },
-                  ]}
-                  required
-                />
-              </div>
-              <label className="block">
-                <span className="text-sm font-medium text-slate-700">Upload file</span>
-                <input
-                  className="mt-2 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-slate-700"
-                  name="documentFile"
-                  type="file"
-                  accept=".csv,.doc,.docx,.gif,.jpeg,.jpg,.pdf,.png,.webp,.xls,.xlsx,application/pdf,image/gif,image/jpeg,image/png,image/webp,text/csv,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                />
-              </label>
-              <label className="flex gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-                <input className="mt-1 size-4 accent-cyan-700" defaultChecked name="visibleToClient" type="checkbox" />
-                <span>Show this document to the client in their handover portal.</span>
-              </label>
-              <div className="flex justify-end">
-                <SubmitButton icon={Upload} label="Save document" />
-              </div>
-            </form>
-          </section>
-          <ProjectSideTools
-            filteredProducts={filteredProducts}
-            productQuery={productQuery}
-            projectId={project.id}
-            setProductQuery={setProductQuery}
-          />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              onClick={onClientAccess}
+              type="button"
+            >
+              <Link2 className="size-4" />
+              Client access
+            </button>
+            <button
+              className="inline-flex h-9 items-center gap-1.5 rounded-md bg-slate-950 px-3 text-xs font-semibold text-white hover:bg-slate-800"
+              onClick={onSend}
+              type="button"
+            >
+              <Send className="size-4" />
+              Send package
+            </button>
+          </div>
         </div>
-      </div>
-
-      <section className="grid gap-5 xl:grid-cols-3">
-        <ItemColumn icon={PackageCheck} items={snapshot.readyItems} title="Package-ready" empty="No pre-approved items yet." />
-        <ItemColumn icon={Bot} items={snapshot.awaitingAdmin} title="Awaiting admin" empty="No admin review items." showNudge />
-        <ItemColumn icon={FileText} items={manualItems} title="Manual or draft" empty="Manual entries will appear here." />
+        <div className="mt-4 grid gap-2 md:grid-cols-3">
+          <ChecklistMetric label="Checklist items" value={snapshot.checklist.length} />
+          <ChecklistMetric label="Ready / accepted" value={snapshot.checklist.filter((item) => item.status === "complete" || item.status === "user_accepted_incomplete").length} />
+          <ChecklistMetric label="Client docs" value={snapshot.documents.length} />
+        </div>
+        <nav className="mt-4 flex gap-1.5 overflow-x-auto border-t border-slate-100 pt-3" aria-label="Project workspace sections">
+          {projectWorkspaceTabs.map((tab) => (
+            <a
+              className="shrink-0 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-800"
+              href={tab.href}
+              key={tab.id}
+            >
+              {tab.label}
+            </a>
+          ))}
+        </nav>
       </section>
 
-      <WorkflowReviewQueue
-        items={snapshot.workflowItems}
-        matches={snapshot.workflowMatches}
-      />
-
-      <section className="rounded-lg border border-slate-200 p-5">
-        <h3 className="font-semibold text-slate-950">Documents in this project</h3>
-        <div className="mt-4">
-          <p className="text-sm font-semibold text-slate-700">Upload processing</p>
-          <div className="mt-3 grid gap-3 md:grid-cols-2">
-            {snapshot.workflowDocuments.length ? snapshot.workflowDocuments.map((document) => {
-              const jobs = snapshot.workflowJobs.filter((job) => job.uploadedDocumentId === document.id);
-              const latestJob = jobs[0];
-              const items = snapshot.workflowItems.filter((item) => item.sourceDocumentId === document.id);
-
-              return (
-                <div className="rounded-md border border-slate-200 p-4" key={document.id}>
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <p className="font-medium text-slate-950">{document.originalFilename}</p>
-                      <p className="mt-1 text-sm text-slate-600">
-                        {document.fileType?.toUpperCase() || document.mimeType}
-                      </p>
-                    </div>
-                    <WorkflowStatusPill status={document.processingStatus} />
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_20rem] 2xl:grid-cols-[minmax(0,1fr)_22rem]">
+        <div className="space-y-4">
+          <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm" id="project-documents">
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(20rem,0.9fr)]">
+              <form action={updateProjectAction} onChange={() => setDirty(true)}>
+                <input name="projectId" type="hidden" value={project.id} />
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="font-semibold text-slate-950">Project details</h3>
+                    <p className="mt-0.5 text-xs leading-5 text-slate-500">Core project and client information.</p>
                   </div>
-                  <p className="mt-3 text-xs text-slate-500">
-                    Uploaded {formatDate(document.createdAt)}
-                  </p>
-                  {latestJob ? (
-                    <div className="mt-3 rounded-md border border-slate-100 bg-slate-50 p-3">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div>
-                          <p className="text-xs font-semibold uppercase tracking-normal text-slate-500">Extraction job</p>
-                          <p className="mt-1 text-sm text-slate-700">
-                            {formatWorkflowJobStatus(latestJob.status)}
-                            {latestJob.retryCount ? ` - retry ${latestJob.retryCount}` : ""}
-                          </p>
-                        </div>
-                        <WorkflowJobStatusPill status={latestJob.status} />
-                      </div>
-                      {latestJob.errorMessage ? (
-                        <p className="mt-2 text-xs leading-5 text-rose-700">{latestJob.errorMessage}</p>
-                      ) : null}
-                      {(() => {
-                        const usage = getWorkflowUsageMetrics(latestJob, items);
-
-                        return usage ? (
-                          <div className="mt-3 grid gap-2 border-t border-slate-200 pt-3 text-xs text-slate-600 sm:grid-cols-2">
-                            <span>{formatUsageNumber(usage.extractedRowCount)} rows extracted</span>
-                            <span>{formatUsageNumber(usage.uniqueIdentityCount)} unique identities</span>
-                            <span>{formatUsageNumber(usage.duplicateIdentityCount)} duplicates</span>
-                            <span>
-                              {formatUsageNumber(usage.cacheHitCount)} cache hits / {formatUsageNumber(usage.cacheMissCount)} misses
-                            </span>
-                            {usage.openAiTotalTokens !== undefined ? (
-                              <span>{formatUsageNumber(usage.openAiTotalTokens)} AI tokens</span>
-                            ) : null}
-                            {usage.openAiRequestCount !== undefined ? (
-                              <span>{formatUsageNumber(usage.openAiRequestCount)} AI calls</span>
-                            ) : null}
-                            {usage.redactionReplacementCount !== undefined ? (
-                              <span>{formatUsageNumber(usage.redactionReplacementCount)} redactions</span>
-                            ) : null}
-                            {usage.estimatedOpenAiCostUsd !== undefined ? (
-                              <span>${usage.estimatedOpenAiCostUsd.toFixed(4)} estimated AI cost</span>
-                            ) : null}
-                            {usage.estimatedCostPerUniqueIdentityUsd !== undefined ? (
-                              <span>${usage.estimatedCostPerUniqueIdentityUsd.toFixed(4)} / unique item</span>
-                            ) : null}
-                            {usage.sourceEnrichableUniqueIdentityCount !== undefined ? (
-                              <span>{formatUsageNumber(usage.sourceEnrichableUniqueIdentityCount)} source-ready identities</span>
-                            ) : null}
-                            {usage.cloudflarePipeline ? (
-                              <span className="sm:col-span-2">
-                                {formatCloudflarePipelineLabel(usage.cloudflarePipeline)}: {formatCloudflarePipelineStatus(usage.cloudflarePipeline)}
-                              </span>
-                            ) : null}
-                            {usage.cloudflarePipeline?.budgetUsage ? (
-                              <span className="sm:col-span-2">
-                                Pipeline usage: {formatCloudflareBudgetUsage(usage.cloudflarePipeline.budgetUsage)}
-                              </span>
-                            ) : null}
-                            {usage.cloudflarePipeline?.sourceCacheReferences?.length ? (
-                              <span className="sm:col-span-2 break-all">
-                                Source cache dry-run: {formatCloudflareSourceCacheReferences(usage.cloudflarePipeline.sourceCacheReferences)}
-                              </span>
-                            ) : null}
-                            {usage.cloudflarePipeline?.lastSyncedAt ? (
-                              <span className="sm:col-span-2">
-                                Pipeline status checked {formatDate(usage.cloudflarePipeline.lastSyncedAt)}
-                              </span>
-                            ) : null}
-                          </div>
-                        ) : null;
-                      })()}
-                      {(() => {
-                        const usage = getWorkflowUsageMetrics(latestJob, items);
-
-                        return usage?.cloudflarePipeline?.jobId && usage.cloudflarePipeline.status !== "skipped" ? (
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            <form action={syncCloudflarePipelineStatusAction}>
-                              <input name="jobId" type="hidden" value={latestJob.id} />
-                              <button
-                                className="inline-flex h-8 items-center rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                                type="submit"
-                              >
-                                Refresh pipeline status
-                              </button>
-                            </form>
-                            {canRetryCloudflarePipeline(usage.cloudflarePipeline) ? (
-                              <form action={retryCloudflarePipelineFailedBatchesAction}>
-                                <input name="jobId" type="hidden" value={latestJob.id} />
-                                <button
-                                  className="inline-flex h-8 items-center rounded-md border border-amber-200 bg-white px-2 text-xs font-semibold text-amber-800 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-60"
-                                  type="submit"
-                                >
-                                  Retry failed batches
-                                </button>
-                              </form>
-                            ) : null}
-                          </div>
-                        ) : null;
-                      })()}
-                      {latestJob.status === "failed" ? (
-                        <form action={retryDocumentExtractionJobAction} className="mt-3">
-                          <input name="jobId" type="hidden" value={latestJob.id} />
-                          <button
-                            className="inline-flex h-8 items-center rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                            type="submit"
-                          >
-                            Retry extraction
-                          </button>
-                        </form>
-                      ) : null}
-                    </div>
-                  ) : null}
-                  {items.length ? (
-                    <div className="mt-3 space-y-2">
-                      {items.map((item) => (
-                        <div className="rounded-md border border-amber-100 bg-amber-50 p-3" key={item.id}>
-                          {(() => {
-                            const match = snapshot.workflowMatches.find((candidate) => candidate.extractedItemId === item.id);
-
-                            return match ? (
-                              <div className="mb-2 flex flex-wrap items-center gap-2">
-                                <WorkflowMatchStatusPill status={match.matchStatus} />
-                                <span className="text-xs text-amber-800">{match.matchConfidenceScore}% match</span>
-                              </div>
-                            ) : null;
-                          })()}
-                          <p className="text-sm font-semibold text-amber-950">{item.productName || "Extracted item"}</p>
-                          <p className="mt-1 text-xs text-amber-800">
-                            {item.category || "Uncategorised"} - {item.reviewStatus.replaceAll("_", " ")}
-                          </p>
-                          {(() => {
-                            const match = snapshot.workflowMatches.find((candidate) => candidate.extractedItemId === item.id);
-
-                            return match?.matchReason ? (
-                              <p className="mt-2 text-xs leading-5 text-amber-900">{match.matchReason}</p>
-                            ) : null;
-                          })()}
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
+                  <SubmitButton icon={Pencil} label="Save" />
                 </div>
-              );
-            }) : <p className="text-sm text-slate-500">No workflow uploads have been registered yet.</p>}
-          </div>
-        </div>
-        <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <TextField label="Project name" name="name" defaultValue={project.name} required />
+                  <SelectField label="Project type" name="projectType" defaultValue={project.projectType} options={projectTypeOptions} required />
+                  <TextField label="Property address" name="address" defaultValue={project.address} required />
+                  <TextField label="Target handover date" name="handoverDate" defaultValue={project.handoverDate?.slice(0, 10)} type="date" />
+                  <TextField label="Client name" name="clientName" defaultValue={project.clientName} required />
+                  <TextField label="Client email" name="clientEmail" defaultValue={project.clientEmail} required type="email" />
+                </div>
+              </form>
+
+              <form action={createDocumentAction} className="rounded-md border border-slate-200 bg-slate-50 p-3" encType="multipart/form-data" onChange={() => setDirty(true)}>
+                <input name="projectId" type="hidden" value={project.id} />
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="font-semibold text-slate-950">Add client document</h3>
+                    <p className="mt-0.5 text-xs leading-5 text-slate-500">Warranty, manual, consent, photo, or reference.</p>
+                  </div>
+                  <SubmitButton icon={Upload} label="Save" />
+                </div>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <TextField label="Title" name="name" placeholder="Window warranty" />
+                  <SelectField
+                    label="Type"
+                    name="documentType"
+                    options={[
+                      { label: "Consent", value: "consent" },
+                      { label: "Manual", value: "manual" },
+                      { label: "Warranty", value: "warranty" },
+                      { label: "Producer statement", value: "producer_statement" },
+                      { label: "Photo", value: "photo" },
+                      { label: "Other", value: "other" },
+                    ]}
+                    required
+                  />
+                  <input name="visibleToClient" type="hidden" value="on" />
+                  <label className="block sm:col-span-2">
+                    <span className="text-sm font-medium text-slate-700">File</span>
+                    <input
+                      className="mt-1 block h-9 w-full cursor-pointer rounded-md border border-dashed border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-700 file:mr-3 file:h-6 file:rounded-md file:border-0 file:bg-cyan-700 file:px-3 file:text-xs file:font-semibold file:text-white hover:border-cyan-300"
+                      name="documentFile"
+                      required
+                      type="file"
+                    />
+                  </label>
+                </div>
+              </form>
+            </div>
+          </section>
+
+      <div id="project-items">
+        <ProjectHandoverChecklistSection
+          checklist={snapshot.checklist}
+          onAddItem={onAddItem}
+          setDirty={setDirty}
+        />
+      </div>
+
+      <SpecAutomationComingSoon />
+
+      <section className="rounded-lg border border-slate-200 p-4">
+        <h3 className="font-semibold text-slate-950">Documents in this project</h3>
+        <div className="mt-3 grid gap-2 md:grid-cols-3">
           {snapshot.documents.length ? snapshot.documents.map((document) => {
             const documentDownloads = snapshot.downloadEvents.filter((event) => event.documentId === document.id);
             const latestDownload = documentDownloads[0];
 
             return (
-              <div className="rounded-md border border-slate-200 p-4" key={document.id}>
+              <div className="rounded-md border border-slate-200 p-3" key={document.id}>
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <p className="font-medium text-slate-950">{document.name}</p>
@@ -914,11 +690,11 @@ function ProjectEditPanel({
         </div>
       </section>
 
-      <section className="rounded-lg border border-slate-200 p-5">
+      <section className="rounded-lg border border-slate-200 p-4">
         <h3 className="font-semibold text-slate-950">Maintenance in this project</h3>
-        <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <div className="mt-3 grid gap-2 md:grid-cols-3">
           {snapshot.tasks.length ? snapshot.tasks.map((task) => (
-            <div className="rounded-md border border-slate-200 p-4" key={task.id}>
+            <div className="rounded-md border border-slate-200 p-3" key={task.id}>
               <p className="font-medium text-slate-950">{task.title}</p>
               <p className="mt-1 text-sm text-slate-600">{task.relatedProduct}</p>
               <p className="mt-2 text-xs text-slate-500">Due {formatDate(task.dueDate)} - {task.cadence}</p>
@@ -926,382 +702,869 @@ function ProjectEditPanel({
           )) : <p className="text-sm text-slate-500">No maintenance tasks have been created for this project yet.</p>}
         </div>
       </section>
+        </div>
+        <ProjectWorkspaceSidebar onClientAccess={onClientAccess} project={project} snapshot={snapshot} />
+      </div>
     </div>
   );
 }
 
-function WorkflowReviewQueue({
-  items,
-  matches,
-}: {
-  items: ExtractedWorkflowItem[];
-  matches: ProductMatch[];
-}) {
-  const lanes = getWorkflowReviewLanes(items, matches);
-  const unresolvedCount = lanes.readyToAccept.length + lanes.needsDetail.length + lanes.projectDocuments.length + lanes.searchResultsReady.length;
-
+function SpecAutomationComingSoon() {
   return (
-    <section className="rounded-lg border border-slate-200 p-5">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h3 className="font-semibold text-slate-950">Builder review lanes</h3>
-          <p className="mt-1 text-sm leading-6 text-slate-600">
-            Accept known matches, add missing detail, attach project documents, and keep non-handover rows out of the client pack.
-          </p>
-        </div>
-        <span className="w-fit rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-900">
-          {unresolvedCount} waiting for builder
-        </span>
-      </div>
-
-      {items.length ? (
-        <div className="mt-5 grid gap-4 xl:grid-cols-2">
-          <WorkflowReviewLane
-            empty="No high-confidence matches are waiting."
-            icon={PackageCheck}
-            items={lanes.readyToAccept}
-            matches={matches}
-            tone="emerald"
-            title="Ready to accept"
-          />
-          <WorkflowReviewLane
-            empty="No rows currently need more detail."
-            icon={HelpCircle}
-            items={lanes.needsDetail}
-            matches={matches}
-            tone="amber"
-            title="Needs detail"
-          />
-          <WorkflowReviewLane
-            empty="No quote, invoice, manual, or certificate placeholders."
-            icon={FileText}
-            items={lanes.projectDocuments}
-            matches={matches}
-            tone="cyan"
-            title="Project documents/quotes"
-          />
-          <WorkflowReviewLane
-            empty="Search remains paused until source results are wired in."
-            icon={FileSearch}
-            items={lanes.searchResultsReady}
-            matches={matches}
-            tone="slate"
-            title="Search results ready"
-          />
-          <WorkflowReviewLane
-            empty="No rows have been marked outside handover scope."
-            icon={Layers3}
-            items={lanes.notHandover}
-            matches={matches}
-            tone="rose"
-            title="Not handover"
-          />
-        </div>
-      ) : (
-        <p className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
-          No workflow items have been extracted for this project yet.
-        </p>
-      )}
+    <section className="rounded-xl border border-dashed border-cyan-300 bg-cyan-50/70 p-4" id="project-spec-automation">
+      <p className="text-sm font-semibold text-cyan-800">Spec sheet automation</p>
+      <h3 className="mt-1 text-base font-semibold text-slate-950">Coming soon</h3>
+      <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-700">
+        Automated spec sheet reading, checking, and pre-filled handover suggestions will return later as a separate module. For this demo branch, the reliable path is manual item entry plus product-database autofill.
+      </p>
     </section>
   );
 }
 
-function WorkflowReviewLane({
-  empty,
-  icon: Icon,
-  items,
-  matches,
-  title,
-  tone,
+function ClientAccessPanel({
+  project,
+  snapshot,
 }: {
-  empty: string;
-  icon: ComponentType<{ className?: string }>;
-  items: ExtractedWorkflowItem[];
-  matches: ProductMatch[];
-  title: string;
-  tone: "emerald" | "amber" | "cyan" | "slate" | "rose";
+  project: Project;
+  snapshot: {
+    firstHandoverOpenEvent?: HandoverOpenEvent;
+  };
 }) {
-  const toneStyles = {
-    emerald: "border-emerald-200 bg-emerald-50 text-emerald-900",
+  return (
+    <section className="space-y-4">
+      <div>
+        <p className="text-sm font-semibold text-cyan-700">Client portal access</p>
+        <h3 className="mt-1 text-base font-semibold text-slate-950">Invite and access controls</h3>
+        <p className="mt-2 text-sm leading-6 text-slate-600">
+          Keep client access separate from the main project page. Use this only when you are ready to invite, resend, revoke, or check package access.
+        </p>
+      </div>
+      <div className="grid gap-3 md:grid-cols-2">
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <p className="text-xs font-semibold uppercase tracking-normal text-slate-500">Invite status</p>
+          <p className="mt-2 text-sm font-semibold text-slate-950">{formatInviteStatus(project.clientInviteStatus, project.clientInvitedAt)}</p>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <p className="text-xs font-semibold uppercase tracking-normal text-slate-500">Handover first opened</p>
+          <p className="mt-2 text-sm font-semibold text-slate-950">{project.publishedAt ? firstOpenDate(snapshot.firstHandoverOpenEvent) : "Not published yet"}</p>
+        </div>
+      </div>
+      {snapshot.firstHandoverOpenEvent ? (
+        <p className="rounded-md border border-slate-200 bg-white p-3 text-sm leading-6 text-slate-600">
+          Privacy-light package record only: opened {snapshot.firstHandoverOpenEvent.openCount} time{snapshot.firstHandoverOpenEvent.openCount === 1 ? "" : "s"} total. No page or item-level tracking is shown here.
+        </p>
+      ) : null}
+      <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-4">
+        {project.clientInviteStatus === "accepted" ? (
+          <p className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-800">
+            The client has accepted this invite.
+          </p>
+        ) : (
+          <>
+            <form action={sendClientInviteEmailAction}>
+              <input name="projectId" type="hidden" value={project.id} />
+              <SubmitButton
+                icon={Send}
+                label={project.clientInviteStatus === "invited" ? "Resend invite email" : "Email invite"}
+              />
+            </form>
+            <form action={createClientInviteAction}>
+              <input name="projectId" type="hidden" value={project.id} />
+              <SubmitButton
+                icon={Link2}
+                label={project.clientInviteStatus === "invited" ? "Regenerate link" : "Create link"}
+              />
+            </form>
+          </>
+        )}
+        {project.clientInviteStatus === "invited" ? (
+          <form action={revokeClientInviteAction}>
+            <input name="projectId" type="hidden" value={project.id} />
+            <button
+              className="inline-flex h-10 items-center justify-center rounded-md border border-rose-200 px-3 text-sm font-semibold text-rose-700 hover:bg-rose-50"
+              type="submit"
+            >
+              Revoke
+            </button>
+          </form>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function ProjectWorkspaceSidebar({
+  onClientAccess,
+  project,
+  snapshot,
+}: {
+  onClientAccess: () => void;
+  project: Project;
+  snapshot: {
+    checklist: ProjectHandoverChecklistItem[];
+    documents: HandoverDocument[];
+    firstHandoverOpenEvent?: HandoverOpenEvent;
+  };
+}) {
+  const incompleteItems = snapshot.checklist.filter((item) => item.status !== "complete" && item.status !== "user_accepted_incomplete");
+  const needsReviewItems = snapshot.checklist.filter((item) => item.status === "needs_review" || item.sectionStatuses.careInstructions === "autofilled_needs_review" || item.sectionStatuses.manual === "autofilled_needs_review" || item.sectionStatuses.warranty === "autofilled_needs_review");
+  const missingManualCount = snapshot.checklist.filter((item) => item.sectionStatuses.manual === "missing" || item.status === "missing_manual").length;
+  const missingWarrantyCount = snapshot.checklist.filter((item) => item.sectionStatuses.warranty === "missing" || item.status === "missing_warranty_information").length;
+  const missingComplianceCount = snapshot.checklist.filter((item) => item.sectionStatuses.codeCompliance === "missing" || item.status === "missing_code_compliance_information").length;
+  const categoryCounts = Array.from(
+    snapshot.checklist.reduce((counts, item) => {
+      const category = item.category || "Uncategorised";
+      const current = counts.get(category) || { total: 0, ready: 0 };
+      current.total += 1;
+      if (item.status === "complete" || item.status === "user_accepted_incomplete") {
+        current.ready += 1;
+      }
+      counts.set(category, current);
+      return counts;
+    }, new Map<string, { total: number; ready: number }>()),
+  ).sort((left, right) => right[1].total - left[1].total || left[0].localeCompare(right[0]));
+  const hasDocumentType = (type: HandoverDocument["type"]) => snapshot.documents.some((document) => document.type === type && document.visibleToClient);
+  const documentRequirements = [
+    {
+      label: "Code Compliance Certificate / consent",
+      present: hasDocumentType("consent") || missingComplianceCount === 0 && snapshot.checklist.length > 0,
+      note: "Confirm CCC, consents, producer statements, or compliance evidence before handover.",
+    },
+    {
+      label: "Product warranties",
+      present: hasDocumentType("warranty") || missingWarrantyCount === 0 && snapshot.checklist.length > 0,
+      note: "Attach warranty files or review warranty text for items where required.",
+    },
+    {
+      label: "Manuals and care guides",
+      present: hasDocumentType("manual") || missingManualCount === 0 && snapshot.checklist.length > 0,
+      note: "Upload manufacturer manuals or confirm reviewed care guidance.",
+    },
+    {
+      label: "Producer statements / inspection records",
+      present: hasDocumentType("producer_statement"),
+      note: "Add PS documents, inspection records, or mark as not required where applicable.",
+    },
+    {
+      label: "Photos / supporting evidence",
+      present: hasDocumentType("photo") || snapshot.checklist.some((item) => item.sectionStatuses.supportingDocuments !== "missing"),
+      note: "Photos are useful for finishes, locations, installed products, and client context.",
+    },
+  ];
+
+  return (
+    <aside className="space-y-3 xl:sticky xl:top-6 xl:self-start">
+      <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-slate-950">Client access</p>
+            <p className="mt-1 text-xs leading-5 text-slate-500">{formatInviteStatus(project.clientInviteStatus, project.clientInvitedAt)}</p>
+            <p className="mt-1 text-xs leading-5 text-slate-500">
+              First opened: {project.publishedAt ? firstOpenDate(snapshot.firstHandoverOpenEvent) : "Not published yet"}
+            </p>
+          </div>
+          <button
+            className="shrink-0 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            onClick={onClientAccess}
+            type="button"
+          >
+            Manage
+          </button>
+        </div>
+      </section>
+
+      <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+        <p className="text-sm font-semibold text-slate-950">To be completed</p>
+        <p className="mt-1 text-xs leading-5 text-slate-500">Builder-facing checklist only. These do not need editing here; use the item cards on the left.</p>
+        <div className="mt-3 space-y-1.5">
+          <SidebarStatusRow label="Items still incomplete" value={incompleteItems.length} tone={incompleteItems.length ? "amber" : "emerald"} />
+          <SidebarStatusRow label="Autofill checks" value={needsReviewItems.length} tone={needsReviewItems.length ? "amber" : "emerald"} />
+          <SidebarStatusRow label="Manuals missing" value={missingManualCount} tone={missingManualCount ? "rose" : "emerald"} />
+          <SidebarStatusRow label="Warranties missing" value={missingWarrantyCount} tone={missingWarrantyCount ? "rose" : "emerald"} />
+          <SidebarStatusRow label="Compliance docs missing" value={missingComplianceCount} tone={missingComplianceCount ? "rose" : "emerald"} />
+        </div>
+      </section>
+
+      <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+        <p className="text-sm font-semibold text-slate-950">Documents to upload / confirm</p>
+        <p className="mt-1 text-xs leading-5 text-slate-500">Common NZ handover/legal pack items to confirm with the builder. Not legal advice.</p>
+        <div className="mt-3 space-y-2">
+          {documentRequirements.map((requirement) => (
+            <div className="rounded-md border border-slate-200 bg-slate-50 p-2.5" key={requirement.label}>
+              <div className="flex items-start justify-between gap-3">
+                <p className="text-sm font-semibold text-slate-800">{requirement.label}</p>
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${requirement.present ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-900"}`}>
+                  {requirement.present ? "Covered" : "Check"}
+                </span>
+              </div>
+              <p className="mt-1 text-xs leading-5 text-slate-500">{requirement.note}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+        <p className="text-sm font-semibold text-slate-950">Item categories</p>
+        <p className="mt-1 text-xs leading-5 text-slate-500">Category spread for this project checklist.</p>
+        <div className="mt-3 space-y-1.5">
+          {categoryCounts.length ? categoryCounts.map(([category, counts]) => (
+            <div className="flex items-center justify-between gap-2 rounded-md border border-slate-200 px-2.5 py-1.5 text-xs" key={category}>
+              <span className="font-medium text-slate-700">{category}</span>
+              <span className="text-xs text-slate-500">{counts.ready}/{counts.total} ready</span>
+            </div>
+          )) : <p className="rounded-md border border-dashed border-slate-300 p-3 text-sm text-slate-500">No item categories yet.</p>}
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-cyan-200 bg-cyan-50 p-4">
+        <p className="text-sm font-semibold text-cyan-950">Spec sheet automation</p>
+        <p className="mt-2 text-xs leading-5 text-cyan-900">
+          Coming soon. This branch is focused on manual item entry and database autofill only.
+        </p>
+      </section>
+    </aside>
+  );
+}
+
+function SidebarStatusRow({ label, tone, value }: { label: string; tone: "amber" | "emerald" | "rose"; value: number }) {
+  const toneClasses = {
     amber: "border-amber-200 bg-amber-50 text-amber-900",
-    cyan: "border-cyan-200 bg-cyan-50 text-cyan-900",
-    slate: "border-slate-200 bg-slate-50 text-slate-800",
-    rose: "border-rose-200 bg-rose-50 text-rose-900",
+    emerald: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    rose: "border-rose-200 bg-rose-50 text-rose-800",
   };
 
   return (
-    <section className={`rounded-lg border p-4 ${toneStyles[tone]}`}>
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Icon className="size-4" />
-          <h4 className="font-semibold">{title}</h4>
+    <div className={`flex items-center justify-between rounded-md border px-2.5 py-1.5 text-xs ${toneClasses[tone]}`}>
+      <span className="font-medium">{label}</span>
+      <span className="text-sm font-semibold">{value}</span>
+    </div>
+  );
+}
+
+function getChecklistMetadataValue(item: ProjectHandoverChecklistItem, key: string) {
+  const value = item.sourceMetadata?.[key];
+  return typeof value === "string" ? value : "";
+}
+
+function getChecklistSourceLabel(item: ProjectHandoverChecklistItem) {
+  if (item.valueSources.includes("database_autofill")) return "Database autofill";
+  if (item.valueSources.includes("extracted_document")) return "Previous import";
+  if (item.valueSources.includes("manual_upload")) return "Manual upload";
+  return "Manual";
+}
+
+function getChecklistSourceFilter(item: ProjectHandoverChecklistItem) {
+  if (item.valueSources.includes("database_autofill")) return "database_autofill";
+  if (item.valueSources.includes("extracted_document")) return "imported";
+  return "manual";
+}
+
+function productToChecklistDraft(product: ProductVersion) {
+  const manualSource = product.sources.find((source) => source.sourceType.includes("manual")) || product.sources[0];
+  const warrantyText = [
+    product.warrantyPeriod ? `Warranty: ${product.warrantyPeriod}` : null,
+    product.voidConditions && product.voidConditions !== "Not captured yet" ? `Notes/void conditions: ${product.voidConditions}` : null,
+  ].filter(Boolean).join("\n");
+
+  return {
+    title: product.productName,
+    category: product.category,
+    brand: product.brand,
+    manufacturer: product.brand,
+    model: "",
+    productCode: "",
+    supplier: "",
+    supplierSku: "",
+    location: product.location,
+    quantity: "",
+    finish: "",
+    colour: "",
+    careInstructions: product.maintenanceSummary,
+    manualUrl: manualSource?.url || "",
+    warrantyInformation: warrantyText,
+    invoiceData: "",
+    codeComplianceInformation: "",
+    supportingDocumentsNote: product.sources.length ? `Database sources available: ${product.sources.map((source) => source.title).join(", ")}` : "",
+    extraNotes: product.reviewReason,
+  };
+}
+
+function formatProductSuggestion(product: ProductVersion) {
+  return [product.productName, product.brand, product.category].filter(Boolean).join(" · ");
+}
+
+function formatChecklistStatus(status: ProjectHandoverChecklistItem["status"]) {
+  const labels: Record<ProjectHandoverChecklistItem["status"], string> = {
+    complete: "Complete",
+    needs_review: "Needs checking",
+    missing_manual: "Missing manual",
+    missing_care_instructions: "Missing care instructions",
+    missing_warranty_information: "Missing warranty information",
+    missing_invoice_information: "Missing invoice information",
+    missing_code_compliance_information: "Missing Code of Compliance",
+    not_enough_information_to_search: "Not enough information to search",
+    documents_uploaded_manually: "Documents uploaded manually",
+    user_accepted_incomplete: "User accepted incomplete",
+  };
+
+  return labels[status] || status.replaceAll("_", " ");
+}
+
+function checklistStatusStyles(status: ProjectHandoverChecklistItem["status"]) {
+  if (status === "complete") return "border-emerald-200 bg-emerald-50 text-emerald-800";
+  if (status === "user_accepted_incomplete") return "border-purple-200 bg-purple-50 text-purple-800";
+  if (status === "not_enough_information_to_search") return "border-amber-200 bg-amber-50 text-amber-900";
+  if (status.startsWith("missing_")) return "border-rose-200 bg-rose-50 text-rose-800";
+  if (status === "documents_uploaded_manually") return "border-cyan-200 bg-cyan-50 text-cyan-800";
+  return "border-slate-200 bg-slate-50 text-slate-700";
+}
+
+function AddHandoverItemForm({
+  productVersions,
+  projectId,
+  setDirty,
+}: {
+  productVersions: ProductVersion[];
+  projectId: string;
+  setDirty: (dirty: boolean) => void;
+}) {
+  const emptyDraft = {
+    title: "",
+    category: "",
+    brand: "",
+    manufacturer: "",
+    model: "",
+    productCode: "",
+    supplier: "",
+    supplierSku: "",
+    location: "",
+    quantity: "",
+    finish: "",
+    colour: "",
+    careInstructions: "",
+    manualUrl: "",
+    warrantyInformation: "",
+    invoiceData: "",
+    codeComplianceInformation: "",
+    supportingDocumentsNote: "",
+    extraNotes: "",
+  };
+  const [draft, setDraft] = useState(emptyDraft);
+  const [selectedProduct, setSelectedProduct] = useState<ProductVersion | null>(null);
+  const approvedProducts = productVersions.filter((product) => product.status === "approved");
+  const productMatches = approvedProducts
+    .filter((product) => {
+      const query = draft.title.trim().toLowerCase();
+      if (!query) return false;
+      return `${product.productName} ${product.brand} ${product.category} ${product.reviewReason}`.toLowerCase().includes(query);
+    })
+    .slice(0, 6);
+
+  function updateDraft(key: keyof typeof draft, value: string) {
+    setDraft((current) => ({ ...current, [key]: value }));
+    setDirty(true);
+  }
+
+  function applySuggestion(product: ProductVersion) {
+    setSelectedProduct(product);
+    setDraft(productToChecklistDraft(product));
+    setDirty(true);
+  }
+
+  function clearSuggestion() {
+    setSelectedProduct(null);
+    setDraft(emptyDraft);
+    setDirty(false);
+  }
+
+  const submitLabel = selectedProduct ? "Add with database autofill" : "Add item";
+
+  return (
+    <form action={createProjectHandoverChecklistItemAction} className="space-y-4" onChange={() => setDirty(true)}>
+      <input name="projectId" type="hidden" value={projectId} />
+      <input name="selectedProductId" type="hidden" value={selectedProduct?.id || ""} />
+      <input name="selectedProductLabel" type="hidden" value={selectedProduct ? formatProductSuggestion(selectedProduct) : ""} />
+      <div>
+        <p className="text-sm font-semibold text-cyan-700">Database autofill + manual entry</p>
+        <h3 className="mt-1 text-base font-semibold text-slate-950">Add handover item</h3>
+        <p className="mt-2 text-sm leading-6 text-slate-600">
+          Type the item details below. Matching database suggestions appear automatically and can autofill known fields, or you can keep typing and add the item manually.
+        </p>
+      </div>
+      <div className="grid gap-3 md:grid-cols-2">
+        <ChecklistTextInput label="Item name" name="title" onChange={(value) => updateDraft("title", value)} placeholder="e.g. Fisher & Paykel oven" required value={draft.title} />
+        <ChecklistSelectInput label="Category" name="category" onChange={(value) => updateDraft("category", value)} options={handoverCategoryOptions} value={draft.category} />
+        <ChecklistTextInput label="Location" name="location" onChange={(value) => updateDraft("location", value)} placeholder="Kitchen, ensuite, exterior" value={draft.location} />
+        <ChecklistTextInput label="Brand / manufacturer" name="brand" onChange={(value) => updateDraft("brand", value)} placeholder="Fisher & Paykel" value={draft.brand} />
+        <ChecklistTextInput label="Model" name="model" onChange={(value) => updateDraft("model", value)} placeholder="OB60..." value={draft.model} />
+        <ChecklistTextInput label="SKU / product code" name="productCode" onChange={(value) => updateDraft("productCode", value)} value={draft.productCode} />
+        <ChecklistTextInput label="Supplier" name="supplier" onChange={(value) => updateDraft("supplier", value)} value={draft.supplier} />
+        <ChecklistTextInput label="Supplier SKU" name="supplierSku" onChange={(value) => updateDraft("supplierSku", value)} value={draft.supplierSku} />
+        <ChecklistTextInput label="Quantity" name="quantity" onChange={(value) => updateDraft("quantity", value)} value={draft.quantity} />
+        <ChecklistTextInput label="Finish / colour" name="finish" onChange={(value) => updateDraft("finish", value)} value={draft.finish} />
+        <input name="colour" type="hidden" value={draft.colour} />
+      </div>
+
+      {draft.title.trim() ? (
+        <div className="rounded-md border border-cyan-200 bg-cyan-50 p-3">
+          <p className="text-xs font-semibold uppercase tracking-normal text-cyan-800">Database suggestions</p>
+          <div className="mt-3 space-y-2">
+            {productMatches.length ? productMatches.map((product) => (
+              <button
+                className={`w-full rounded-md border p-3 text-left text-sm hover:border-cyan-400 hover:bg-white ${selectedProduct?.id === product.id ? "border-cyan-500 bg-white" : "border-slate-200 bg-white/80"}`}
+                key={product.id}
+                onClick={() => applySuggestion(product)}
+                type="button"
+              >
+                <span className="font-semibold text-slate-950">{product.productName}</span>
+                <span className="mt-1 block text-xs text-slate-600">{product.brand} · {product.category} · {product.confidenceScore}% approved database record</span>
+                <span className="mt-1 block text-xs text-cyan-800">Autofills care/manual/warranty where known; builder must check.</span>
+              </button>
+            )) : <p className="text-sm text-slate-500">No approved product suggestion yet. You can still create the item manually.</p>}
+          </div>
+          {selectedProduct ? (
+            <button className="mt-3 text-xs font-semibold text-slate-600 underline" onClick={clearSuggestion} type="button">
+              Clear selected suggestion and continue manually
+            </button>
+          ) : null}
         </div>
-        <span className="rounded-md bg-white/80 px-2.5 py-1 text-xs font-semibold">{items.length}</span>
+      ) : null}
+
+      <div className="grid gap-3">
+        <ChecklistTextarea label="Care instructions" name="careInstructions" onChange={(value) => updateDraft("careInstructions", value)} value={draft.careInstructions} />
+        <ChecklistTextInput label="Manual link/reference" name="manualUrl" onChange={(value) => updateDraft("manualUrl", value)} value={draft.manualUrl} />
+        <ChecklistTextarea label="Warranty information" name="warrantyInformation" onChange={(value) => updateDraft("warrantyInformation", value)} value={draft.warrantyInformation} />
+        <ChecklistTextarea label="Invoice / purchase info" name="invoiceData" onChange={(value) => updateDraft("invoiceData", value)} value={draft.invoiceData} />
+        <ChecklistTextarea label="Code of Compliance / compliance docs" name="codeComplianceInformation" onChange={(value) => updateDraft("codeComplianceInformation", value)} value={draft.codeComplianceInformation} />
+        <ChecklistTextarea label="Supporting documents/photos note" name="supportingDocumentsNote" onChange={(value) => updateDraft("supportingDocumentsNote", value)} value={draft.supportingDocumentsNote} />
+        <ChecklistTextarea label="Builder notes" name="extraNotes" onChange={(value) => updateDraft("extraNotes", value)} value={draft.extraNotes} />
       </div>
-      <div className="mt-4 space-y-3">
-        {items.length === 0 ? <p className="text-sm opacity-80">{empty}</p> : null}
-        {items.map((item) => (
-          <WorkflowReviewCard item={item} key={item.id} match={matches.find((candidate) => candidate.extractedItemId === item.id)} />
-        ))}
+      <div className="flex justify-end border-t border-slate-100 pt-4">
+        <SubmitButton icon={Plus} label={submitLabel} />
       </div>
+    </form>
+  );
+}
+
+function ProjectHandoverChecklistSection({
+  checklist,
+  onAddItem,
+  setDirty,
+}: {
+  checklist: ProjectHandoverChecklistItem[];
+  onAddItem: () => void;
+  setDirty: (dirty: boolean) => void;
+}) {
+  const [filters, setFilters] = useState({
+    search: "",
+    status: "all",
+    category: "all",
+    missing: "all",
+    source: "all",
+    review: "all",
+  });
+  const completeCount = checklist.filter((item) => item.status === "complete").length;
+  const acceptedIncompleteCount = checklist.filter((item) => item.status === "user_accepted_incomplete").length;
+  const missingCount = checklist.filter((item) => item.status.startsWith("missing_")).length;
+  const notEnoughCount = checklist.filter((item) => item.status === "not_enough_information_to_search").length;
+  const needsReviewCount = checklist.filter((item) => item.status === "needs_review" || item.status === "documents_uploaded_manually").length;
+  const categoryOptions = Array.from(new Set(checklist.map((item) => item.category).filter(Boolean) as string[])).sort();
+  const filteredChecklist = checklist.filter((item) => {
+    const searchHaystack = [
+      item.title,
+      item.category,
+      item.brand,
+      item.manufacturer,
+      item.model,
+      item.productCode,
+      item.sku,
+      item.supplier,
+      getChecklistMetadataValue(item, "location"),
+      getChecklistMetadataValue(item, "finish"),
+      getChecklistMetadataValue(item, "colour"),
+    ].filter(Boolean).join(" ").toLowerCase();
+    const missingSections = getMissingChecklistSections(item);
+    const source = getChecklistSourceFilter(item);
+    const reviewState = item.status === "complete"
+      ? "complete"
+      : item.status === "user_accepted_incomplete"
+        ? "accepted_incomplete"
+        : item.status === "needs_review" || item.sectionStatuses.careInstructions === "autofilled_needs_review" || item.sectionStatuses.manual === "autofilled_needs_review" || item.sectionStatuses.warranty === "autofilled_needs_review"
+          ? "needs_review"
+          : "incomplete";
+
+    return (
+      (!filters.search || searchHaystack.includes(filters.search.toLowerCase())) &&
+      (filters.status === "all" || item.status === filters.status || (filters.status === "missing" && item.status.startsWith("missing_"))) &&
+      (filters.category === "all" || item.category === filters.category) &&
+      (filters.missing === "all" || missingSections.some((section) => section.toLowerCase().includes(filters.missing.toLowerCase()))) &&
+      (filters.source === "all" || source === filters.source) &&
+      (filters.review === "all" || reviewState === filters.review)
+    );
+  });
+
+
+  return (
+    <section className="rounded-lg border border-cyan-200 bg-white p-4 shadow-sm">
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-cyan-700">Manual project checklist</p>
+          <h3 className="mt-1 text-base font-semibold text-slate-950">Add, autofill, check, and complete handover items</h3>
+          <p className="mt-1 max-w-3xl text-xs leading-5 text-slate-600">
+            This branch makes manual entry the happy path. Product database suggestions can autofill care/manual/warranty fields, but every autofilled value remains editable before it reaches the homeowner portal. Spec sheet automation is parked in the coming-soon section.
+          </p>
+        </div>
+        <div className="space-y-3">
+          <button
+            className="inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-md bg-cyan-700 px-3 text-xs font-semibold text-white hover:bg-cyan-800"
+            onClick={onAddItem}
+            type="button"
+          >
+            <Plus className="size-4" />
+            Add handover item
+          </button>
+          <div className="grid min-w-64 grid-cols-3 gap-1.5 text-[11px] sm:grid-cols-5 xl:grid-cols-2">
+          <ChecklistMetric label="Items" value={checklist.length} />
+          <ChecklistMetric label="Complete" value={completeCount} />
+          <ChecklistMetric label="Needs checking" value={needsReviewCount} />
+          <ChecklistMetric label="Missing" value={missingCount} />
+          <ChecklistMetric label="Too vague" value={notEnoughCount} />
+          <ChecklistMetric label="Accepted incomplete" value={acceptedIncompleteCount} />
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-3 space-y-2">
+          <div className="rounded-lg border border-slate-200 bg-white p-3">
+            <p className="text-sm font-semibold text-slate-950">Checklist filters</p>
+            <div className="mt-2 grid gap-2 md:grid-cols-3 xl:grid-cols-6">
+              <ChecklistTextInput label="Search" name="filterSearch" onChange={(value) => setFilters((current) => ({ ...current, search: value }))} placeholder="Name, brand, room, supplier" value={filters.search} />
+              <ChecklistFilterSelect label="Status" onChange={(value) => setFilters((current) => ({ ...current, status: value }))} value={filters.status} options={[{ label: "All statuses", value: "all" }, { label: "Complete", value: "complete" }, { label: "Needs checking", value: "needs_review" }, { label: "Missing info", value: "missing" }, { label: "Accepted incomplete", value: "user_accepted_incomplete" }, { label: "Not enough identity", value: "not_enough_information_to_search" }]} />
+              <ChecklistFilterSelect label="Category" onChange={(value) => setFilters((current) => ({ ...current, category: value }))} value={filters.category} options={[{ label: "All categories", value: "all" }, ...categoryOptions.map((category) => ({ label: category, value: category }))]} />
+              <ChecklistFilterSelect label="Missing section" onChange={(value) => setFilters((current) => ({ ...current, missing: value }))} value={filters.missing} options={[{ label: "Any section", value: "all" }, { label: "Care", value: "care" }, { label: "Manual", value: "manual" }, { label: "Warranty", value: "warranty" }, { label: "Invoice", value: "invoice" }, { label: "Compliance", value: "Compliance" }, { label: "Supporting docs", value: "supporting" }]} />
+              <ChecklistFilterSelect label="Source" onChange={(value) => setFilters((current) => ({ ...current, source: value }))} value={filters.source} options={[{ label: "All sources", value: "all" }, { label: "Manual", value: "manual" }, { label: "Database autofill", value: "database_autofill" }, { label: "Previous import", value: "imported" }]} />
+              <ChecklistFilterSelect label="Completion state" onChange={(value) => setFilters((current) => ({ ...current, review: value }))} value={filters.review} options={[{ label: "Any completion state", value: "all" }, { label: "Needs checking", value: "needs_review" }, { label: "Complete", value: "complete" }, { label: "Accepted incomplete", value: "accepted_incomplete" }, { label: "Incomplete", value: "incomplete" }]} />
+            </div>
+          </div>
+          {filteredChecklist.length ? filteredChecklist.map((item) => <ProjectHandoverChecklistCard item={item} key={item.id} setDirty={setDirty} />) : (
+            <div className="rounded-lg border border-dashed border-slate-300 bg-white p-4 text-xs leading-6 text-slate-600">
+              No checklist items match these filters. Add a manual item or clear filters.
+            </div>
+          )}
+        </div>
     </section>
   );
 }
 
-function WorkflowReviewCard({
-  item,
-  match,
+function ChecklistTextInput({
+  label,
+  name,
+  onChange,
+  placeholder,
+  required,
+  value,
 }: {
-  item: ExtractedWorkflowItem;
-  match?: ProductMatch;
+  label: string;
+  name: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  required?: boolean;
+  value: string;
 }) {
-  const contextSchema = getContextSchemaMetadata(item);
-  const variation = getWorkflowVariationMetadata(item);
-  const aiCategory = getAiSuggestedCategory(item);
-  const quoteLike = isQuoteLikeWorkflowItem(item, contextSchema);
-  const careGuidanceSource = getCareGuidanceSource(item);
-  const comparisonRows = getWorkflowComparisonRows(item, variation, careGuidanceSource);
-  const hasSourceGap = hasSourceGapSignals(item);
+  return (
+    <label className="block">
+      <span className="text-sm font-medium text-slate-700">{label}</span>
+      <input
+        className="mt-1 h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-xs text-slate-950 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
+        name={name}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        required={required}
+        value={value}
+      />
+    </label>
+  );
+}
+
+function ChecklistTextarea({
+  label,
+  name,
+  onChange,
+  value,
+}: {
+  label: string;
+  name: string;
+  onChange: (value: string) => void;
+  value: string;
+}) {
+  return (
+    <label className="block">
+      <span className="text-sm font-medium text-slate-700">{label}</span>
+      <textarea
+        className="mt-1 min-h-16 w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
+        name={name}
+        onChange={(event) => onChange(event.target.value)}
+        value={value}
+      />
+    </label>
+  );
+}
+
+function ChecklistSelectInput({
+  label,
+  name,
+  onChange,
+  options,
+  value,
+}: {
+  label: string;
+  name: string;
+  onChange: (value: string) => void;
+  options: Array<{ label: string; value: string }>;
+  value: string;
+}) {
+  return (
+    <label className="block">
+      <span className="text-sm font-medium text-slate-700">{label}</span>
+      <select
+        className="mt-1 h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-xs text-slate-950 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
+        name={name}
+        onChange={(event) => onChange(event.target.value)}
+        value={value}
+      >
+        <option value="">Select...</option>
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>{option.label}</option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function ChecklistFilterSelect({
+  label,
+  onChange,
+  options,
+  value,
+}: {
+  label: string;
+  onChange: (value: string) => void;
+  options: Array<{ label: string; value: string }>;
+  value: string;
+}) {
+  return (
+    <label className="block">
+      <span className="text-sm font-medium text-slate-700">{label}</span>
+      <select
+        className="mt-1 h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-xs text-slate-950 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
+        onChange={(event) => onChange(event.target.value)}
+        value={value}
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>{option.label}</option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+const checklistSectionOptions = [
+  { label: "Missing", value: "missing" },
+  { label: "Provided", value: "provided" },
+  { label: "Autofilled - needs checking", value: "autofilled_needs_review" },
+  { label: "Checked / complete", value: "reviewed" },
+  { label: "Uploaded manually", value: "uploaded_manually" },
+  { label: "Accepted incomplete", value: "accepted_incomplete" },
+  { label: "Not required", value: "not_required" },
+];
+
+function ChecklistMetric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5">
+      <p className="text-[11px] font-semibold uppercase tracking-normal text-slate-500">{label}</p>
+      <p className="mt-1 text-base font-semibold text-slate-950">{value}</p>
+    </div>
+  );
+}
+
+function ProjectHandoverChecklistCard({ item, setDirty }: { item: ProjectHandoverChecklistItem; setDirty: (dirty: boolean) => void }) {
+  const missingSections = getMissingChecklistSections(item);
+  const searchable = hasEnoughIdentityToSearch(item);
+  const location = getChecklistMetadataValue(item, "location");
+  const quantity = getChecklistMetadataValue(item, "quantity");
+  const finish = getChecklistMetadataValue(item, "finish");
+  const colour = getChecklistMetadataValue(item, "colour");
+  const supportingDocumentsNote = getChecklistMetadataValue(item, "supporting_documents_note");
+  const identity = [item.brand || item.manufacturer, item.model || item.productCode || item.sku, item.supplier].filter(Boolean).join(" · ");
 
   return (
-    <article className="rounded-md border border-white/70 bg-white p-3 text-slate-900">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+    <article className="rounded-lg border border-slate-200 bg-white p-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            {match ? <WorkflowMatchStatusPill status={match.matchStatus} /> : null}
-            <span className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700">
-              {item.reviewStatus.replaceAll("_", " ")}
+            <h4 className="font-semibold text-slate-950">{item.title}</h4>
+            <span className={`rounded-md border px-2.5 py-1 text-xs font-semibold ${checklistStatusStyles(item.status)}`}>
+              {formatChecklistStatus(item.status)}
             </span>
-            <span className="text-xs text-slate-500">{item.confidenceScore}% extraction confidence</span>
+            <span className="rounded-md border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-xs font-semibold text-cyan-800">
+              {getChecklistSourceLabel(item)}
+            </span>
           </div>
-          <h5 className="mt-3 font-semibold text-slate-950">{item.productName || "Unnamed extracted item"}</h5>
           <p className="mt-1 text-sm text-slate-600">
-            {[item.manufacturer || item.brand, item.model, item.supplierName || item.supplier, item.location].filter(Boolean).join(" - ") || "Details need review"}
+            {identity || "No brand/model/supplier detail yet"}{item.category ? ` · ${item.category}` : ""}{location ? ` · ${location}` : ""}
           </p>
-          <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-600">
-            <span className="rounded-md bg-slate-100 px-2 py-1">AI category: {aiCategory || item.category || "Uncategorised"}</span>
-            <span className="rounded-md bg-slate-100 px-2 py-1">Approved category: {item.builderApprovedCategory || item.category || "Not set"}</span>
-            <span className="rounded-md bg-slate-100 px-2 py-1">{formatCareGuidanceSource(careGuidanceSource)}</span>
-          </div>
-          {match?.matchReason ? (
-            <p className="mt-2 max-w-3xl text-xs leading-5 text-slate-600">{match.matchReason}</p>
-          ) : null}
-          {contextSchema.classificationReason ? (
-            <p className="mt-2 max-w-3xl text-xs leading-5 text-slate-600">
-              {formatContextClassification(contextSchema.contextClassification)}: {contextSchema.classificationReason}
+          {[quantity, finish, colour].filter(Boolean).length ? (
+            <p className="mt-1 text-xs text-slate-500">
+              {[quantity ? `Qty: ${quantity}` : null, finish ? `Finish: ${finish}` : null, colour ? `Colour: ${colour}` : null].filter(Boolean).join(" · ")}
             </p>
           ) : null}
         </div>
-        <div className="flex flex-wrap gap-2">
-          <form action={approveWorkflowItemAction}>
-            <input name="itemId" type="hidden" value={item.id} />
-            <button
-              className="inline-flex h-9 items-center rounded-md bg-emerald-700 px-3 text-xs font-semibold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600"
-              disabled={hasSourceGap}
-              title={hasSourceGap ? "Resolve missing fields, quote references, or builder-info prompts before approving as correct." : undefined}
-              type="submit"
-            >
-              Approve
-            </button>
-          </form>
-        </div>
+        <span className="w-fit rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600">
+          Updated {formatDate(item.updatedAt)}
+        </span>
       </div>
 
-      {hasSourceGap ? (
-        <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
-          Approve is locked until source gaps are resolved. Edit the item to add the missing details,
-          upload supporting evidence, or mark it as builder supplied for project-only use.
+      {item.status === "not_enough_information_to_search" ? (
+        <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2.5 text-xs leading-5 text-amber-900">
+          <p className="font-semibold">Not enough information to search reliably.</p>
+          <p>Add a brand/manufacturer, model, SKU/product code, supplier, invoice details, photo, or document before source search. You can still manually upload/enter the required handover information or accept this item incomplete.</p>
+        </div>
+      ) : null}
+
+      {item.valueSources.includes("database_autofill") ? (
+        <p className="mt-2 rounded-md border border-cyan-200 bg-cyan-50 p-2.5 text-xs leading-5 text-cyan-900">
+          Autofilled from the database. Check and edit every section before treating it as homeowner-ready.
         </p>
       ) : null}
 
-      {contextSchema.missingFields.length || contextSchema.builderInfoNeeded.length || contextSchema.sourceEvidenceText ? (
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
-          {contextSchema.missingFields.length ? (
-            <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
-              <p className="text-xs font-semibold uppercase tracking-normal text-amber-900">Missing fields</p>
-              <ul className="mt-2 space-y-1 text-xs leading-5 text-amber-900">
-                {contextSchema.missingFields.map((field) => (
-                  <li key={field}>{field}</li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-          {contextSchema.builderInfoNeeded.length ? (
-            <div className="rounded-md border border-cyan-200 bg-cyan-50 p-3">
-              <p className="text-xs font-semibold uppercase tracking-normal text-cyan-900">Ask builder for</p>
-              <ul className="mt-2 space-y-1 text-xs leading-5 text-cyan-900">
-                {contextSchema.builderInfoNeeded.map((field) => (
-                  <li key={field}>{field}</li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-          {contextSchema.sourceEvidenceText ? (
-            <div className="rounded-md border border-slate-200 bg-slate-50 p-3 md:col-span-1">
-              <p className="text-xs font-semibold uppercase tracking-normal text-slate-600">Document evidence</p>
-              <p className="mt-2 line-clamp-4 text-xs leading-5 text-slate-700">{contextSchema.sourceEvidenceText}</p>
-            </div>
-          ) : null}
-        </div>
+      {missingSections.length ? (
+        <p className="mt-2 text-xs leading-5 text-slate-600">
+          Missing or unchecked: {missingSections.join(", ")}.
+        </p>
       ) : null}
 
-      <details className="mt-4 rounded-md border border-slate-200 bg-white">
-        <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-slate-800">
-          Edit item, category, and variation
+      <div className="mt-2 grid gap-1.5 text-[11px] text-slate-600 sm:grid-cols-3">
+        <ChecklistSectionStatus label="Care" status={item.sectionStatuses.careInstructions} />
+        <ChecklistSectionStatus label="Manual" status={item.sectionStatuses.manual} />
+        <ChecklistSectionStatus label="Warranty" status={item.sectionStatuses.warranty} />
+        <ChecklistSectionStatus label="Invoice" status={item.sectionStatuses.invoice} />
+        <ChecklistSectionStatus label="Code Compliance" status={item.sectionStatuses.codeCompliance} />
+        <ChecklistSectionStatus label="Supporting docs" status={item.sectionStatuses.supportingDocuments} />
+      </div>
+
+      <details className="mt-3 rounded-md border border-slate-200 bg-slate-50">
+        <summary className="cursor-pointer px-2.5 py-1.5 text-xs font-semibold text-slate-800">
+          Check / edit item details
         </summary>
-        <div className="border-t border-slate-100 p-3">
-          <div className="rounded-md border border-slate-200 bg-slate-50">
-            <div className="grid border-b border-slate-200 px-3 py-2 text-xs font-semibold uppercase tracking-normal text-slate-500 sm:grid-cols-[0.8fr_1fr_1fr]">
-              <span>Field</span>
-              <span>Original extracted</span>
-              <span>Current edited</span>
-            </div>
-            <div className="divide-y divide-slate-200">
-              {comparisonRows.map((row) => (
-                <div className="grid gap-2 px-3 py-2 text-xs sm:grid-cols-[0.8fr_1fr_1fr]" key={row.label}>
-                  <span className="font-semibold text-slate-700">{row.label}</span>
-                  <span className="text-slate-500">{row.original}</span>
-                  <span className={row.changed ? "font-semibold text-slate-950" : "text-slate-600"}>{row.current}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-          <p className="mt-2 text-xs leading-5 text-slate-500">
-            Original values come from the uploaded document where available. Older records may show fields as not captured until they are reprocessed or edited.
-          </p>
-        </div>
-        <form action={editWorkflowItemAction} className="grid gap-4 border-t border-slate-100 p-3 md:grid-cols-2">
+        <form action={updateProjectHandoverChecklistItemAction} className="grid gap-3 border-t border-slate-200 p-3 md:grid-cols-3" onChange={() => setDirty(true)}>
           <input name="itemId" type="hidden" value={item.id} />
-          <TextField label="Product or item name" name="productName" defaultValue={item.productName} required />
-          <TextField label="Manufacturer" name="manufacturer" defaultValue={item.manufacturer || item.brand} />
-          <TextField label="Model" name="model" defaultValue={item.model || variation.model} />
-          <SelectField
-            label="Approved homeowner category"
-            name="category"
-            defaultValue={item.builderApprovedCategory || item.category || "General"}
-            options={getCategoryOptions(item.builderApprovedCategory || item.category)}
-          />
-          <TextField label="Supplier" name="supplier" defaultValue={item.supplierName || item.supplier} />
+          <input name="projectId" type="hidden" value={item.projectId} />
+          <input name="selectedProductId" type="hidden" value={getChecklistMetadataValue(item, "matched_product_id")} />
+          <input name="selectedProductLabel" type="hidden" value={getChecklistMetadataValue(item, "source_label")} />
+          <TextField label="Identity / item name" name="title" defaultValue={item.title} required />
+          <SelectField label="Category" name="category" defaultValue={item.category} options={getCategoryOptions(item.category)} />
+          <TextField label="Location" name="location" defaultValue={location} />
+          <TextField label="Manufacturer / brand" name="brand" defaultValue={item.brand || item.manufacturer} />
+          <TextField label="Model" name="model" defaultValue={item.model} />
+          <TextField label="SKU" name="sku" defaultValue={item.sku} />
+          <TextField label="Product code" name="productCode" defaultValue={item.productCode} />
+          <TextField label="Supplier" name="supplier" defaultValue={item.supplier} />
           <TextField label="Supplier SKU" name="supplierSku" defaultValue={item.supplierSku} />
-          <TextField label="Quantity" name="quantity" defaultValue={item.quantity || variation.quantity} />
-          <TextField label="Finish" name="variantOrFinish" defaultValue={item.variantOrFinish || variation.finish} />
-          <TextField label="Colour" name="colour" defaultValue={variation.colour} />
-          <TextField label="Location" name="location" defaultValue={item.location} />
-          <SelectField label="Care guidance label" name="careGuidanceSourceType" defaultValue={careGuidanceSource} options={careGuidanceSourceOptions} />
+          <TextField label="Quantity" name="quantity" defaultValue={quantity} />
+          <TextField label="Finish" name="finish" defaultValue={finish} />
+          <TextField label="Colour" name="colour" defaultValue={colour} />
+          <label className="block md:col-span-2">
+            <span className="text-sm font-medium text-slate-700">Care instructions</span>
+            <textarea className="mt-1 min-h-16 w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100" defaultValue={item.careInstructions} name="careInstructions" />
+          </label>
+          <TextField label="Manual link/reference" name="manualUrl" defaultValue={item.manualUrl} />
           <label className="block md:col-span-2">
             <span className="text-sm font-medium text-slate-700">Warranty information</span>
-            <textarea
-              className="mt-2 min-h-24 w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
-              defaultValue={item.warrantyText}
-              name="warrantyText"
-            />
+            <textarea className="mt-1 min-h-16 w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100" defaultValue={item.warrantyInformation} name="warrantyInformation" />
           </label>
           <label className="block md:col-span-2">
-            <span className="text-sm font-medium text-slate-700">Care or maintenance information</span>
-            <textarea
-              className="mt-2 min-h-24 w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
-              defaultValue={item.maintenanceText}
-              name="maintenanceText"
-            />
+            <span className="text-sm font-medium text-slate-700">Invoice / purchase info</span>
+            <textarea className="mt-1 min-h-16 w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100" defaultValue={item.invoiceData} name="invoiceData" />
           </label>
           <label className="block md:col-span-2">
-            <span className="text-sm font-medium text-slate-700">Review note</span>
-            <input
-              className="mt-2 h-10 w-full rounded-md border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
-              name="notes"
-              placeholder="What changed or why this is now ready?"
-            />
+            <span className="text-sm font-medium text-slate-700">Code of Compliance / compliance docs</span>
+            <textarea className="mt-1 min-h-16 w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100" defaultValue={item.codeComplianceInformation} name="codeComplianceInformation" />
           </label>
-          <p className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs leading-5 text-slate-600 md:col-span-2">
-            Colour and quote details are saved with the review note so they remain visible during builder approval.
-          </p>
+          <label className="block md:col-span-2">
+            <span className="text-sm font-medium text-slate-700">Supporting documents/photos</span>
+            <textarea className="mt-1 min-h-16 w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100" defaultValue={supportingDocumentsNote} name="supportingDocumentsNote" />
+          </label>
+          <label className="block md:col-span-2">
+            <span className="text-sm font-medium text-slate-700">Builder notes</span>
+            <textarea className="mt-1 min-h-16 w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100" defaultValue={item.extraNotes} name="extraNotes" />
+          </label>
+          <div className="grid gap-3 rounded-md border border-slate-200 bg-white p-3 md:col-span-2 md:grid-cols-3">
+            <ChecklistStatusSelect label="Care status" name="careInstructionsStatus" value={item.sectionStatuses.careInstructions} />
+            <ChecklistStatusSelect label="Manual status" name="manualStatus" value={item.sectionStatuses.manual} />
+            <ChecklistStatusSelect label="Warranty status" name="warrantyStatus" value={item.sectionStatuses.warranty} />
+            <ChecklistStatusSelect label="Invoice status" name="invoiceStatus" value={item.sectionStatuses.invoice} />
+            <ChecklistStatusSelect label="Compliance status" name="codeComplianceStatus" value={item.sectionStatuses.codeCompliance} />
+            <ChecklistStatusSelect label="Supporting docs status" name="supportingDocumentsStatus" value={item.sectionStatuses.supportingDocuments} />
+          </div>
+          <TextField label="Accepted-incomplete reason / audit note" name="acceptedIncompleteReason" defaultValue={item.acceptedIncompleteReason} />
           <div className="flex justify-end md:col-span-2">
-            <button
-              className="inline-flex h-9 items-center rounded-md bg-slate-950 px-3 text-xs font-semibold text-white hover:bg-slate-800"
-              type="submit"
-            >
-              Save edited item
+            <button className="inline-flex h-9 items-center rounded-md bg-slate-950 px-3 text-xs font-semibold text-white hover:bg-slate-800" type="submit">
+              Save item details
             </button>
           </div>
         </form>
       </details>
 
-      <div className="mt-3 grid gap-3 lg:grid-cols-2">
-        <form action={uploadWorkflowItemSupportingDocumentAction} className="rounded-md border border-slate-200 bg-white p-3">
+      {item.acceptedIncompleteAt ? (
+        <p className="mt-3 rounded-md border border-purple-200 bg-purple-50 p-3 text-sm leading-6 text-purple-900">
+          User accepted incomplete on {formatDate(item.acceptedIncompleteAt)}{item.acceptedIncompleteReason ? `: ${item.acceptedIncompleteReason}` : "."}
+        </p>
+      ) : (
+        <form action={acceptProjectHandoverChecklistItemIncompleteAction} className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-2.5">
           <input name="itemId" type="hidden" value={item.id} />
-          <input name="documentKind" type="hidden" value={quoteLike ? "quote" : "supporting_document"} />
+          <input name="projectId" type="hidden" value={item.projectId} />
           <label className="block">
-            <span className="text-sm font-medium text-slate-700">
-              {quoteLike ? "Upload quote for this item" : "Supporting document"}
-            </span>
+            <span className="text-xs font-semibold uppercase tracking-normal text-slate-500">Accept incomplete paper trail</span>
             <input
-              className="mt-2 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-slate-700"
-              name="documentFile"
-              type="file"
-              accept=".csv,.doc,.docx,.gif,.jpeg,.jpg,.pdf,.png,.webp,.xls,.xlsx,application/pdf,image/gif,image/jpeg,image/png,image/webp,text/csv,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            />
-          </label>
-          <input
-            className="mt-3 h-10 w-full rounded-md border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
-            name="notes"
-            placeholder={quoteLike ? "Quote supplier, quote number, or what it should resolve" : "Evidence note"}
-          />
-          <div className="mt-3 flex justify-end">
-            <button
-              className="inline-flex h-9 items-center rounded-md border border-slate-200 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-              type="submit"
-            >
-              {quoteLike ? "Attach quote" : "Attach evidence"}
-            </button>
-          </div>
-        </form>
-
-        <form action={markWorkflowItemBuilderSuppliedAction} className="rounded-md border border-emerald-200 bg-emerald-50 p-3">
-          <input name="itemId" type="hidden" value={item.id} />
-          <label className="block">
-            <span className="text-sm font-medium text-emerald-950">Mark as builder supplied</span>
-            <textarea
-              className="mt-2 min-h-20 w-full rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
-              name="notes"
-              placeholder="Describe the project-specific source, quote, site decision, or builder knowledge that resolves this gap."
+              className="mt-2 h-9 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
+              name="acceptedIncompleteReason"
+              placeholder="e.g. User accepted item without manual; builder will supply if found later."
               required
             />
           </label>
-          <p className="mt-2 text-xs leading-5 text-emerald-900">
-            Use this only for project-specific facts. It can become package-ready after builder review, but it will still need admin review before global reuse.
-          </p>
-          <div className="mt-3 flex justify-end">
-            <button
-              className="inline-flex h-9 items-center rounded-md border border-emerald-300 bg-white px-3 text-xs font-semibold text-emerald-800 hover:bg-emerald-100"
-              type="submit"
-            >
-              Mark builder supplied
+          <div className="mt-3 flex items-center justify-between gap-3">
+            <p className="text-xs leading-5 text-slate-500">
+              {searchable ? "Search may be possible later, but this branch does not use spec automation to finish the demo flow." : "Search is blocked until identity improves; accepting incomplete records that choice."}
+            </p>
+            <button className="shrink-0 rounded-md border border-purple-200 bg-white px-3 py-2 text-xs font-semibold text-purple-800 hover:bg-purple-50" type="submit">
+              Accept incomplete
             </button>
           </div>
         </form>
-
-        <form action={excludeWorkflowItemAction} className="rounded-md border border-rose-200 bg-white p-3">
-          <input name="itemId" type="hidden" value={item.id} />
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700">Exclude from handover</span>
-            <input
-              className="mt-2 h-10 w-full rounded-md border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
-              name="exclusionReason"
-              placeholder="Reason this should not go to the homeowner"
-              required
-            />
-          </label>
-          <div className="mt-3 flex justify-end">
-            <button
-              className="inline-flex h-9 items-center rounded-md border border-rose-200 px-3 text-xs font-semibold text-rose-700 hover:bg-rose-50"
-              type="submit"
-            >
-              Exclude item
-            </button>
-          </div>
-        </form>
-      </div>
+      )}
     </article>
+  );
+}
+
+function ChecklistStatusSelect({ label, name, value }: { label: string; name: string; value: string }) {
+  return (
+    <label className="block">
+      <span className="text-xs font-semibold uppercase tracking-normal text-slate-500">{label}</span>
+      <select className="mt-2 h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-900 outline-none focus:border-cyan-600" defaultValue={value} name={name}>
+        {checklistSectionOptions.map((option) => (
+          <option key={option.value} value={option.value}>{option.label}</option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function ChecklistSectionStatus({ label, status }: { label: string; status: string }) {
+  return (
+    <div className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-2">
+      <span className="font-semibold text-slate-700">{label}: </span>
+      <span>{status.replaceAll("_", " ")}</span>
+    </div>
   );
 }
 
@@ -1311,110 +1574,66 @@ function SendPackagePanel({
 }: {
   project: Project;
   snapshot: {
-    awaitingAdmin: ExtractedHandoverItem[];
-    readyItems: ExtractedHandoverItem[];
+    checklist: ProjectHandoverChecklistItem[];
     tasks: MaintenanceTask[];
-    workflowDocuments: UploadedProjectDocument[];
-    workflowJobs: DocumentExtractionJob[];
-    workflowItems: ExtractedWorkflowItem[];
   };
 }) {
-  const approvedWorkflowItems = snapshot.workflowItems.filter((item) =>
-    approvedWorkflowReviewStatuses.has(item.reviewStatus),
-  );
-  const excludedWorkflowItems = snapshot.workflowItems.filter((item) => item.reviewStatus === "excluded");
-  const editedWorkflowItems = snapshot.workflowItems.filter((item) => item.reviewStatus === "edited_by_builder");
-  const builderSuppliedWorkflowItems = snapshot.workflowItems.filter((item) => item.reviewStatus === "builder_supplied");
-  const hasAiAssistedItems = snapshot.workflowItems.length > 0 || snapshot.readyItems.length > 0;
-  const packageReadyCount = snapshot.readyItems.length + approvedWorkflowItems.length;
-  const readiness = getWorkflowPublishReadiness({
-    documents: snapshot.workflowDocuments,
-    jobs: snapshot.workflowJobs,
-    items: snapshot.workflowItems,
-  });
-  const canPublish = readiness.ready && packageReadyCount > 0;
+  const readyChecklistItems = snapshot.checklist.filter((item) => item.status === "complete" || item.status === "user_accepted_incomplete");
+  const packageReadyCount = readyChecklistItems.length;
+  const canPublish = packageReadyCount > 0;
 
   return (
     <div className="grid gap-5 xl:grid-cols-[1fr_0.85fr]">
-      <section className="rounded-lg border border-slate-200 p-5">
+      <section className="rounded-lg border border-slate-200 p-4">
         <h3 className="font-semibold text-slate-950">Package checks</h3>
-        <div className="mt-4 space-y-3">
-          <CheckRow label={`${packageReadyCount} approved package items`} ok={packageReadyCount > 0} />
-          <CheckRow label={`${approvedWorkflowItems.length} approved workflow items`} ok={approvedWorkflowItems.length > 0} />
-          <CheckRow label="Workflow processing complete" ok={readiness.ready} />
-          <CheckRow label={`${snapshot.awaitingAdmin.length} items still awaiting admin`} ok={snapshot.awaitingAdmin.length === 0} />
+        <div className="mt-3 space-y-2">
+          <CheckRow label={`${packageReadyCount} handover items ready or accepted incomplete`} ok={packageReadyCount > 0} />
           <CheckRow label={`${snapshot.tasks.length} maintenance tasks attached`} ok={snapshot.tasks.length > 0} />
         </div>
-        {readiness.blockers.length ? (
-          <div className="mt-5 rounded-md border border-rose-200 bg-rose-50 p-4">
-            <p className="text-sm font-semibold text-rose-900">Publish blocked</p>
-            <ul className="mt-2 space-y-1 text-sm leading-6 text-rose-800">
-              {readiness.blockers.map((blocker) => (
-                <li key={blocker.code}>
-                  {blocker.label}: {blocker.count}
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-        <div className="mt-5 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
-          Builder confirmation: AI-assisted package details must be reviewed against the actual
-          specification, warranties, and supplied documents before sending to the homeowner.
+        <div className="mt-5 rounded-md border border-cyan-200 bg-cyan-50 p-4 text-sm leading-6 text-cyan-900">
+          Spec sheet automation is coming soon. This package is built from manual checklist items and product-database autofill only.
         </div>
         <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
           <p className="text-sm font-semibold text-slate-950">Final approval summary</p>
           <div className="mt-3 grid gap-2 text-sm text-slate-700 sm:grid-cols-2">
             <span>{packageReadyCount} items included</span>
-            <span>{approvedWorkflowItems.length} workflow items reviewed</span>
-            <span>{editedWorkflowItems.length} manually edited</span>
-            <span>{builderSuppliedWorkflowItems.length} builder-supplied</span>
-            <span>{excludedWorkflowItems.length} excluded</span>
-            <span>{readiness.blockers.length} unresolved blockers</span>
+            <span>{readyChecklistItems.length} checklist items</span>
             <span>{snapshot.tasks.length} maintenance reminders scheduled</span>
-            <span>{snapshot.workflowDocuments.length} uploaded source documents</span>
           </div>
         </div>
-        <form action={publishHandoverPackageAction} className="mt-5 space-y-4">
+        <form action={publishHandoverPackageAction} className="mt-3 space-y-2">
           <input name="projectId" type="hidden" value={project.id} />
           <label className="flex gap-3 rounded-md border border-slate-200 bg-white p-3 text-sm leading-6 text-slate-700">
             <input className="mt-1 size-4 accent-cyan-700" name="builderApprovalConfirmed" required type="checkbox" />
             <span>{builderHandoverApprovalText}</span>
           </label>
-          {hasAiAssistedItems ? (
-            <label className="flex gap-3 rounded-md border border-slate-200 bg-white p-3 text-sm leading-6 text-slate-700">
-              <input className="mt-1 size-4 accent-cyan-700" name="aiApprovalConfirmed" required type="checkbox" />
-              <span>{aiHandoverApprovalText}</span>
-            </label>
-          ) : null}
           <div className="flex justify-end">
             <SubmitButton disabled={!canPublish} icon={Send} label="Confirm and send package" />
           </div>
         </form>
       </section>
-      <section className="rounded-lg border border-slate-200 p-5">
+      <section className="rounded-lg border border-slate-200 p-4">
         <p className="text-sm font-semibold text-cyan-700">Sending package</p>
         <h3 className="mt-1 font-semibold text-slate-950">{project.name}</h3>
         <p className="mt-2 text-sm leading-6 text-slate-600">
-          The homeowner portal will show only published, builder-reviewed package information for {project.clientName}.
+          The homeowner portal will show only published builder-confirmed package information for {project.clientName}.
         </p>
-        {approvedWorkflowItems.length ? (
-          <div className="mt-4 rounded-md border border-cyan-100 bg-cyan-50 p-3 text-sm leading-6 text-cyan-900">
-            This draft includes approved workflow items. Raw AI extraction and unresolved review items stay builder-only.
-          </div>
-        ) : null}
-        <ItemColumn icon={PackageCheck} items={snapshot.readyItems.slice(0, 5)} title="Preview items" empty="No items ready to send." />
-        {approvedWorkflowItems.length ? (
-          <div className="mt-4 space-y-2">
-            {approvedWorkflowItems.slice(0, 5).map((item) => (
-              <div className="rounded-md border border-slate-200 p-3" key={item.id}>
-                <p className="text-sm font-semibold text-slate-950">{item.productName || "Approved workflow item"}</p>
-                <p className="mt-1 text-xs text-slate-500">
-                  {item.category || "Uncategorised"} - {item.reviewStatus.replaceAll("_", " ")}
+        {readyChecklistItems.length ? (
+          <div className="mt-3 space-y-1.5">
+            {readyChecklistItems.slice(0, 5).map((item) => (
+              <div className="rounded-md border border-cyan-200 bg-cyan-50 p-3" key={item.id}>
+                <p className="text-sm font-semibold text-slate-950">{item.title}</p>
+                <p className="mt-1 text-xs text-cyan-900">
+                  {item.category || "Project handover item"} - {formatChecklistStatus(item.status)}
                 </p>
               </div>
             ))}
           </div>
-        ) : null}
+        ) : (
+          <p className="mt-4 rounded-md border border-dashed border-slate-300 p-3 text-sm text-slate-500">
+            No checklist items are ready to send yet.
+          </p>
+        )}
       </section>
     </div>
   );
@@ -1432,7 +1651,7 @@ function ProjectSideTools({
   setProductQuery: (value: string) => void;
 }) {
   return (
-    <section className="rounded-lg border border-slate-200 p-5">
+    <section className="rounded-lg border border-slate-200 p-4">
       <div className="flex items-center gap-2">
         <Search className="size-4 text-cyan-700" />
         <h3 className="font-semibold text-slate-950">Product search</h3>
@@ -1457,7 +1676,7 @@ function ProjectSideTools({
         ))}
       </div>
       {projectId ? (
-        <form action={createBuilderProjectRequestAction} className="mt-4 space-y-3">
+        <form action={createBuilderProjectRequestAction} className="mt-3 space-y-2">
           <input name="projectId" type="hidden" value={projectId} />
           <input name="requestType" type="hidden" value="product" />
           <TextField label="Request product" name="title" defaultValue={productQuery} placeholder="Brand, model, or product name" required />
@@ -1465,9 +1684,9 @@ function ProjectSideTools({
           <label className="block">
             <span className="text-sm font-medium text-slate-700">Details</span>
             <textarea
-              className="mt-2 min-h-24 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-950 outline-none ring-cyan-700/20 placeholder:text-slate-400 focus:border-cyan-700 focus:ring-4"
+              className="mt-1 min-h-16 w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-950 outline-none ring-cyan-700/20 placeholder:text-slate-400 focus:border-cyan-700 focus:ring-4"
               name="details"
-              placeholder="What should admin look up or approve?"
+              placeholder="What should be looked up or approved?"
             />
           </label>
           <button
@@ -1479,51 +1698,10 @@ function ProjectSideTools({
           </button>
         </form>
       ) : (
-        <p className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-600">
+        <p className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-2.5 text-sm leading-6 text-slate-600">
           Save the project first, then request missing products from inside the project workspace.
         </p>
       )}
-    </section>
-  );
-}
-
-function ItemColumn({
-  empty,
-  icon: Icon,
-  items,
-  showNudge,
-  title,
-}: {
-  empty: string;
-  icon: ComponentType<{ className?: string }>;
-  items: ExtractedHandoverItem[];
-  showNudge?: boolean;
-  title: string;
-}) {
-  return (
-    <section className="rounded-lg border border-slate-200 p-5">
-      <div className="flex items-center gap-2">
-        <Icon className="size-4 text-cyan-700" />
-        <h3 className="font-semibold text-slate-950">{title}</h3>
-      </div>
-      <div className="mt-4 space-y-3">
-        {items.length === 0 ? <p className="text-sm text-slate-500">{empty}</p> : null}
-        {items.map((item) => (
-          <article className="rounded-md border border-slate-200 p-3" key={item.id}>
-            <p className="text-sm font-semibold text-slate-950">{item.title}</p>
-            <p className="mt-1 text-xs text-slate-500">{item.location || "No location captured"}</p>
-            <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-600">{item.extractedText}</p>
-            {showNudge ? (
-              <button
-                className="mt-3 inline-flex h-8 items-center rounded-md border border-slate-200 px-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                type="button"
-              >
-                Nudge admin
-              </button>
-            ) : null}
-          </article>
-        ))}
-      </div>
     </section>
   );
 }
@@ -1534,17 +1712,17 @@ function HelpPanel() {
       <InfoCard
         icon={Plus}
         title="Create once"
-        text="Start a project with client details first. Specification PDFs can be added now or later."
+        text="Start a project with client details first, then add handover items from the workspace."
       />
       <InfoCard
-        icon={Upload}
-        title="Upload specs"
-        text="PDF extraction proposes products, documents, and maintenance items inside the project workspace."
+        icon={PackageCheck}
+        title="Add checklist items"
+        text="Use manual entry and product-database autofill as the main workflow on this branch."
       />
       <InfoCard
-        icon={Bot}
-        title="Review uncertainty"
-        text="Known records can become package-ready. New or uncertain items wait for admin approval."
+        icon={Layers3}
+        title="Spec automation coming soon"
+        text="Automated spec sheet reading and checking is parked as a future subsection, not part of this branch workflow."
       />
       <InfoCard
         icon={Send}
@@ -1565,7 +1743,7 @@ function InfoCard({
   title: string;
 }) {
   return (
-    <div className="rounded-lg border border-slate-200 p-5">
+    <div className="rounded-lg border border-slate-200 p-4">
       <Icon className="size-5 text-cyan-700" />
       <h3 className="mt-3 font-semibold text-slate-950">{title}</h3>
       <p className="mt-2 text-sm leading-6 text-slate-600">{text}</p>
@@ -1586,7 +1764,7 @@ function Metric({
     <div className="rounded-lg border border-slate-200 bg-white p-5">
       <Icon className="size-5 text-cyan-700" />
       <p className="mt-3 text-sm font-semibold text-slate-950">{label}</p>
-      <p className="mt-1 text-2xl font-semibold tracking-normal text-slate-950">{value}</p>
+      <p className="mt-1 text-xl font-semibold tracking-normal text-slate-950">{value}</p>
     </div>
   );
 }
@@ -1615,579 +1793,18 @@ function CheckRow({ label, ok }: { label: string; ok: boolean }) {
   );
 }
 
-function WorkflowStatusPill({ status }: { status: UploadedProjectDocument["processingStatus"] }) {
-  const styles = {
-    uploaded: "border-cyan-200 bg-cyan-50 text-cyan-800",
-    processing: "border-amber-200 bg-amber-50 text-amber-800",
-    needs_review: "border-amber-200 bg-amber-50 text-amber-800",
-    package_ready: "border-emerald-200 bg-emerald-50 text-emerald-800",
-    completed: "border-emerald-200 bg-emerald-50 text-emerald-800",
-    failed: "border-rose-200 bg-rose-50 text-rose-800",
-  };
-  const labels = {
-    uploaded: "Uploaded",
-    processing: "Processing",
-    needs_review: "Needs review",
-    package_ready: "Package ready",
-    completed: "Completed",
-    failed: "Failed",
-  };
-
-  return (
-    <span className={`inline-flex h-7 items-center rounded-md border px-2.5 text-xs font-medium ${styles[status]}`}>
-      {labels[status]}
-    </span>
-  );
-}
-
-function WorkflowJobStatusPill({ status }: { status: DocumentExtractionJob["status"] }) {
-  const styles = {
-    uploaded: "border-cyan-200 bg-cyan-50 text-cyan-800",
-    queued: "border-slate-200 bg-white text-slate-700",
-    processing: "border-amber-200 bg-amber-50 text-amber-800",
-    needs_review: "border-amber-200 bg-amber-50 text-amber-800",
-    partially_reviewed: "border-indigo-200 bg-indigo-50 text-indigo-800",
-    package_ready: "border-emerald-200 bg-emerald-50 text-emerald-800",
-    completed: "border-emerald-200 bg-emerald-50 text-emerald-800",
-    failed: "border-rose-200 bg-rose-50 text-rose-800",
-  };
-
-  return (
-    <span className={`inline-flex h-7 items-center rounded-md border px-2.5 text-xs font-medium ${styles[status]}`}>
-      {formatWorkflowJobStatus(status)}
-    </span>
-  );
-}
-
-type WorkflowUsageMetrics = {
-  extractedRowCount?: number;
-  uniqueIdentityCount?: number;
-  duplicateIdentityCount?: number;
-  cacheHitCount?: number;
-  cacheMissCount?: number;
-  openAiTotalTokens?: number;
-  openAiRequestCount?: number;
-  redactionReplacementCount?: number;
-  estimatedOpenAiCostUsd?: number;
-  estimatedCostPerUniqueIdentityUsd?: number;
-  sourceEnrichableUniqueIdentityCount?: number;
-  cloudflarePipeline?: {
-    status?: string;
-    syncStatus?: string;
-    reason?: string;
-    jobId?: string;
-    candidateCount?: number;
-    batchCount?: number;
-    completedBatchCount?: number;
-    failedBatchCount?: number;
-    resultsCount?: number;
-    pipelineMode?: string;
-    dryRunEnrichment?: boolean;
-    liveEnrichmentEnabled?: boolean;
-    lastSyncedAt?: string;
-    retryStatus?: string;
-    requeuedBatchCount?: number;
-    lastRetriedAt?: string;
-    budgetUsage?: {
-      searchesUsed?: number;
-      estimatedCostUsd?: number;
-      dryRun?: boolean;
-    };
-    sourceCacheReferences?: Array<{
-      status?: string;
-      objectKey?: string;
-      dryRun?: boolean;
-      identityFingerprint?: string;
-      sourceHash?: string;
-    }>;
-    safety?: unknown;
-    error?: string;
-  };
-};
-
-type CloudflareSourceCacheReference = NonNullable<
-  NonNullable<WorkflowUsageMetrics["cloudflarePipeline"]>["sourceCacheReferences"]
->[number];
-
-function getNumber(value: unknown) {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
-}
-
-function getBoolean(value: unknown) {
-  return typeof value === "boolean" ? value : undefined;
-}
-
-function getCloudflareSourceCacheReferences(value: unknown): CloudflareSourceCacheReference[] | undefined {
-  if (!Array.isArray(value)) {
-    return undefined;
-  }
-
-  const references = value.reduce<CloudflareSourceCacheReference[]>((items, reference) => {
-    if (!reference || typeof reference !== "object") {
-      return items;
-    }
-
-    const record = reference as Record<string, unknown>;
-
-    if (typeof record.objectKey !== "string") {
-      return items;
-    }
-
-    items.push({
-      status: typeof record.status === "string" ? record.status : undefined,
-      objectKey: record.objectKey,
-      dryRun: typeof record.dryRun === "boolean" ? record.dryRun : undefined,
-      identityFingerprint: typeof record.identityFingerprint === "string" ? record.identityFingerprint : undefined,
-      sourceHash: typeof record.sourceHash === "string" ? record.sourceHash : undefined,
-    });
-
-    return items;
-  }, []);
-
-  return references.length ? references : undefined;
-}
-
-function getWorkflowUsageMetrics(
-  job: DocumentExtractionJob,
-  items: ExtractedWorkflowItem[],
-): WorkflowUsageMetrics | null {
-  const rawUsage = job.usageMetrics || items.find((item) => {
-    const usage = item.rawExtractedData?.usage;
-    return Boolean(usage && typeof usage === "object");
-  })?.rawExtractedData.usage;
-
-  if (!rawUsage || typeof rawUsage !== "object") {
-    return null;
-  }
-
-  const usage = rawUsage as Record<string, unknown>;
-  const sourceCandidateBreakdown = usage.sourceCandidateBreakdown && typeof usage.sourceCandidateBreakdown === "object"
-    ? usage.sourceCandidateBreakdown as Record<string, unknown>
-    : {};
-  const cloudflarePipeline = usage.cloudflarePipeline && typeof usage.cloudflarePipeline === "object"
-    ? usage.cloudflarePipeline as WorkflowUsageMetrics["cloudflarePipeline"]
-    : undefined;
-  const budgetUsage = cloudflarePipeline?.budgetUsage && typeof cloudflarePipeline.budgetUsage === "object"
-    ? cloudflarePipeline.budgetUsage
-    : undefined;
-  const sourceCacheReferences = getCloudflareSourceCacheReferences(cloudflarePipeline?.sourceCacheReferences);
-  const safety = cloudflarePipeline?.safety && typeof cloudflarePipeline.safety === "object"
-    ? cloudflarePipeline.safety as Record<string, unknown>
-    : {};
-
-  return {
-    extractedRowCount: getNumber(usage.extractedRowCount),
-    uniqueIdentityCount: getNumber(usage.uniqueIdentityCount),
-    duplicateIdentityCount: getNumber(usage.duplicateIdentityCount),
-    cacheHitCount: getNumber(usage.cacheHitCount),
-    cacheMissCount: getNumber(usage.cacheMissCount),
-    openAiTotalTokens: getNumber(usage.openAiTotalTokens),
-    openAiRequestCount: getNumber(usage.openAiRequestCount),
-    redactionReplacementCount: getNumber((usage.redaction as Record<string, unknown> | undefined)?.totalReplacementCount),
-    estimatedOpenAiCostUsd: getNumber(usage.estimatedOpenAiCostUsd),
-    estimatedCostPerUniqueIdentityUsd: getNumber(usage.estimatedCostPerUniqueIdentityUsd),
-    sourceEnrichableUniqueIdentityCount: getNumber(sourceCandidateBreakdown.sourceEnrichableUniqueIdentityCount),
-    cloudflarePipeline: cloudflarePipeline
-      ? {
-          status: typeof cloudflarePipeline.status === "string" ? cloudflarePipeline.status : undefined,
-          syncStatus: typeof cloudflarePipeline.syncStatus === "string" ? cloudflarePipeline.syncStatus : undefined,
-          reason: typeof cloudflarePipeline.reason === "string" ? cloudflarePipeline.reason : undefined,
-          jobId: typeof cloudflarePipeline.jobId === "string" ? cloudflarePipeline.jobId : undefined,
-          candidateCount: getNumber(cloudflarePipeline.candidateCount),
-          batchCount: getNumber(cloudflarePipeline.batchCount),
-          completedBatchCount: getNumber(cloudflarePipeline.completedBatchCount),
-          failedBatchCount: getNumber(cloudflarePipeline.failedBatchCount),
-          resultsCount: getNumber(cloudflarePipeline.resultsCount),
-          pipelineMode: typeof cloudflarePipeline.pipelineMode === "string"
-            ? cloudflarePipeline.pipelineMode
-            : typeof safety.mode === "string"
-              ? safety.mode
-              : undefined,
-          dryRunEnrichment: getBoolean(cloudflarePipeline.dryRunEnrichment ?? safety.dryRunEnrichment),
-          liveEnrichmentEnabled: getBoolean(cloudflarePipeline.liveEnrichmentEnabled ?? safety.liveEnrichmentEnabled),
-          lastSyncedAt: typeof cloudflarePipeline.lastSyncedAt === "string" ? cloudflarePipeline.lastSyncedAt : undefined,
-          retryStatus: typeof cloudflarePipeline.retryStatus === "string" ? cloudflarePipeline.retryStatus : undefined,
-          requeuedBatchCount: getNumber(cloudflarePipeline.requeuedBatchCount),
-          lastRetriedAt: typeof cloudflarePipeline.lastRetriedAt === "string" ? cloudflarePipeline.lastRetriedAt : undefined,
-          budgetUsage: budgetUsage
-            ? {
-                searchesUsed: getNumber(budgetUsage.searchesUsed),
-                estimatedCostUsd: getNumber(budgetUsage.estimatedCostUsd),
-                dryRun: typeof budgetUsage.dryRun === "boolean" ? budgetUsage.dryRun : undefined,
-              }
-            : undefined,
-          sourceCacheReferences,
-          error: typeof cloudflarePipeline.error === "string" ? cloudflarePipeline.error : undefined,
-        }
-      : undefined,
-  };
-}
-
-function formatUsageNumber(value: number | undefined) {
-  return typeof value === "number" ? value.toLocaleString() : "0";
-}
-
-function formatCloudflarePipelineLabel(pipeline: NonNullable<WorkflowUsageMetrics["cloudflarePipeline"]>) {
-  if (pipeline.pipelineMode === "live_pilot") {
-    return pipeline.liveEnrichmentEnabled ? "Cloudflare live pilot" : "Cloudflare live-pilot guard";
-  }
-
-  return pipeline.dryRunEnrichment === false ? "Cloudflare pipeline" : "Cloudflare dry-run";
-}
-
-function formatCloudflarePipelineStatus(pipeline: NonNullable<WorkflowUsageMetrics["cloudflarePipeline"]>) {
-  if (pipeline.retryStatus === "retry_queued") {
-    return `${pipeline.requeuedBatchCount || 0} failed batches requeued`;
-  }
-
-  if (pipeline.syncStatus === "failed") {
-    return `status check failed${pipeline.error ? ` (${pipeline.error})` : ""}`;
-  }
-
-  if (pipeline.status === "queued") {
-    return `${pipeline.candidateCount || 0} candidates queued${pipeline.batchCount ? ` in ${pipeline.batchCount} batches` : ""}`;
-  }
-
-  if (pipeline.status === "processing") {
-    const completed = pipeline.completedBatchCount || 0;
-    const failed = pipeline.failedBatchCount || 0;
-    const total = pipeline.batchCount || completed + failed;
-    return `${completed + failed}/${total} batches processed`;
-  }
-
-  if (pipeline.status === "completed") {
-    const results = pipeline.resultsCount ?? pipeline.candidateCount ?? 0;
-    const dryRunLabel = pipeline.dryRunEnrichment === false ? "" : "dry-run ";
-    return `completed ${dryRunLabel}for ${results} candidates`;
-  }
-
-  if (pipeline.status === "skipped") {
-    return pipeline.reason === "not_configured" ? "not configured" : "no source-ready candidates";
-  }
-
-  if (pipeline.status === "failed") {
-    return `dispatch failed${pipeline.error ? ` (${pipeline.error})` : ""}`;
-  }
-
-  return pipeline.status || "unknown";
-}
-
-function formatCloudflareBudgetUsage(budgetUsage: NonNullable<NonNullable<WorkflowUsageMetrics["cloudflarePipeline"]>["budgetUsage"]>) {
-  const searches = budgetUsage.searchesUsed ?? 0;
-  const estimatedCost = budgetUsage.estimatedCostUsd ?? 0;
-  const dryRunLabel = budgetUsage.dryRun ? " dry-run" : "";
-
-  return `${formatUsageNumber(searches)} searches, $${estimatedCost.toFixed(2)} estimated${dryRunLabel}`;
-}
-
-function formatCloudflareSourceCacheReferences(
-  references: NonNullable<NonNullable<WorkflowUsageMetrics["cloudflarePipeline"]>["sourceCacheReferences"]>,
-) {
-  const [firstReference] = references;
-  const remainingCount = Math.max(0, references.length - 1);
-  const suffix = remainingCount ? `, +${remainingCount} more planned` : "";
-
-  return `${references.length} planned keys (${firstReference.objectKey}${suffix})`;
-}
-
-function canRetryCloudflarePipeline(pipeline: NonNullable<WorkflowUsageMetrics["cloudflarePipeline"]>) {
-  return Boolean(pipeline.jobId && (pipeline.status === "failed" || (pipeline.failedBatchCount || 0) > 0));
-}
-
-function getContextSchemaMetadata(item: ExtractedWorkflowItem): ContextSchemaMetadata {
-  const contextSchema = item.rawExtractedData?.contextSchema && typeof item.rawExtractedData.contextSchema === "object"
-    ? item.rawExtractedData.contextSchema as Record<string, unknown>
-    : {};
-  const itemPayload = item.rawExtractedData?.item && typeof item.rawExtractedData.item === "object"
-    ? item.rawExtractedData.item as Record<string, unknown>
-    : {};
-
-  return {
-    itemType: getString(contextSchema.itemType) || getString(itemPayload.itemType),
-    sourceEvidenceText: getString(contextSchema.sourceEvidenceText) || getString(itemPayload.sourceEvidenceText),
-    missingFields: getStringList(contextSchema.missingFields ?? itemPayload.missingFields),
-    builderInfoNeeded: getStringList(contextSchema.builderInfoNeeded ?? itemPayload.builderInfoNeeded),
-    contextClassification: getString(contextSchema.contextClassification) || getString(itemPayload.contextClassification),
-    classificationReason: getString(contextSchema.classificationReason) || getString(itemPayload.classificationReason),
-  };
-}
-
-function getWorkflowReviewLanes(items: ExtractedWorkflowItem[], matches: ProductMatch[]) {
-  const assigned = new Set<string>();
-  const take = (predicate: (item: ExtractedWorkflowItem) => boolean) =>
-    items.filter((item) => {
-      if (assigned.has(item.id) || !predicate(item)) {
-        return false;
-      }
-
-      assigned.add(item.id);
-      return true;
-    });
-
-  const readyToAccept = take((item) => {
-    const match = matches.find((candidate) => candidate.extractedItemId === item.id);
-    return item.reviewStatus === "verified_match" || match?.matchStatus === "verified_match";
-  });
-  const projectDocuments = take((item) => {
-    const metadata = getContextSchemaMetadata(item);
-    return metadata.contextClassification === "project_document" || isQuoteLikeWorkflowItem(item, metadata);
-  });
-  const searchResultsReady = take((item) => {
-    const raw = item.rawExtractedData || {};
-    return Boolean(raw.sourceResults || raw.searchResults || raw.sourceReviewReady);
-  });
-  const notHandover = take((item) => {
-    const metadata = getContextSchemaMetadata(item);
-    return item.reviewStatus === "excluded"
-      || metadata.contextClassification === "not_handover_relevant"
-      || metadata.contextClassification === "admin_or_contract"
-      || metadata.contextClassification === "generic_allowance";
-  });
-  const needsDetail = take((item) => {
-    const metadata = getContextSchemaMetadata(item);
-    return unresolvedWorkflowReviewStatuses.has(item.reviewStatus)
-      || metadata.contextClassification === "builder_input_needed"
-      || metadata.builderInfoNeeded.length > 0
-      || metadata.missingFields.length > 0;
-  });
-
-  return {
-    readyToAccept,
-    needsDetail,
-    projectDocuments,
-    searchResultsReady,
-    notHandover,
-  };
-}
-
-function getNestedRecord(record: Record<string, unknown>, key: string) {
-  const value = record[key];
-  return value && typeof value === "object" ? value as Record<string, unknown> : {};
-}
-
-function getWorkflowVariationMetadata(item: ExtractedWorkflowItem) {
-  const raw = item.rawExtractedData || {};
-  const itemPayload = getNestedRecord(raw, "item");
-  const variation = getNestedRecord(raw, "variation");
-  const reviewMetadata = getNestedRecord(raw, "reviewMetadata");
-
-  return {
-    finish: getString(raw.finish) || getString(raw.variantOrFinish) || getString(itemPayload.finish) || getString(itemPayload.variantOrFinish) || getString(variation.finish) || getString(reviewMetadata.finish),
-    colour: getString(raw.colour) || getString(raw.color) || getString(itemPayload.colour) || getString(itemPayload.color) || getString(variation.colour) || getString(reviewMetadata.colour),
-    model: getString(raw.model) || getString(itemPayload.model) || getString(variation.model),
-    quantity: getString(raw.quantity) || getString(itemPayload.quantity) || getString(variation.quantity) || getString(reviewMetadata.quantity),
-  };
-}
-
-function getWorkflowComparisonRows(
-  item: ExtractedWorkflowItem,
-  variation: ReturnType<typeof getWorkflowVariationMetadata>,
-  careGuidanceSource: string,
-) {
-  const originalValues = item.originalExtractedValues || {};
-  const currentCategory = item.builderApprovedCategory || item.category || "";
-  const rows = [
-    {
-      label: "Item",
-      original: getOriginalValue(item, "productName") || item.productName,
-      current: item.productName,
-    },
-    {
-      label: "Manufacturer",
-      original: getOriginalValue(item, "manufacturer") || getOriginalValue(item, "brand"),
-      current: item.manufacturer || item.brand,
-    },
-    {
-      label: "Model",
-      original: getOriginalValue(item, "model") || variation.model,
-      current: item.model || variation.model,
-    },
-    {
-      label: "Supplier",
-      original: getOriginalValue(item, "supplierName") || getOriginalValue(item, "supplier"),
-      current: item.supplierName || item.supplier,
-    },
-    {
-      label: "Quantity",
-      original: getOriginalValue(item, "quantity") || variation.quantity,
-      current: item.quantity || variation.quantity,
-    },
-    {
-      label: "Finish",
-      original: getOriginalValue(item, "variantOrFinish") || variation.finish,
-      current: item.variantOrFinish || variation.finish,
-    },
-    {
-      label: "Colour",
-      original: getOriginalValue(item, "colour") || getOriginalValue(item, "color") || variation.colour,
-      current: variation.colour,
-    },
-    {
-      label: "Location",
-      original: getOriginalValue(item, "location"),
-      current: item.location,
-    },
-    {
-      label: "Category",
-      original: getOriginalValue(item, "aiSuggestedCategory") || getOriginalValue(item, "category") || item.aiSuggestedCategory || item.category,
-      current: currentCategory,
-    },
-    {
-      label: "Care label",
-      original: formatCareGuidanceSource(getString(originalValues.careGuidanceSourceType) || careGuidanceSource),
-      current: formatCareGuidanceSource(careGuidanceSource),
-    },
-  ];
-
-  return rows.map((row) => {
-    const original = formatComparisonValue(row.original);
-    const current = formatComparisonValue(row.current);
-
-    return {
-      ...row,
-      original,
-      current,
-      changed: original !== current,
-    };
-  });
-}
-
-function getOriginalValue(item: ExtractedWorkflowItem, key: string) {
-  const originalValues = item.originalExtractedValues || {};
-  const raw = item.rawExtractedData || {};
-  const rawOriginalValues = getNestedRecord(raw, "originalExtractedValues");
-  const itemPayload = getNestedRecord(raw, "item");
-
-  return getString(originalValues[key])
-    || getString(rawOriginalValues[key])
-    || getString(itemPayload[key]);
-}
-
-function formatComparisonValue(value: unknown) {
-  const text = getString(value);
-  return text || "Not captured";
-}
-
-function getAiSuggestedCategory(item: ExtractedWorkflowItem) {
-  const raw = item.rawExtractedData || {};
-  const contextSchema = getNestedRecord(raw, "contextSchema");
-  const itemPayload = getNestedRecord(raw, "item");
-
-  return item.aiSuggestedCategory
-    || getString(raw.aiCategory)
-    || getString(raw.originalCategory)
-    || getString(contextSchema.category)
-    || getString(itemPayload.category);
-}
-
-function getCareGuidanceSource(item: ExtractedWorkflowItem) {
-  const raw = item.rawExtractedData || {};
-  const reviewMetadata = getNestedRecord(raw, "reviewMetadata");
-  const value = item.careGuidanceSourceType || getString(raw.careGuidanceSource) || getString(reviewMetadata.careGuidanceSource);
-  const allowed = new Set(careGuidanceSourceOptions.map((option) => option.value));
-
-  if (allowed.has(value)) {
-    return value;
-  }
-
-  if (item.maintenanceText && item.supplier) {
-    return "supplier";
-  }
-
-  return item.maintenanceText ? "general_ai" : "manufacturer";
-}
-
-function formatCareGuidanceSource(value: string) {
-  const option = careGuidanceSourceOptions.find((candidate) => candidate.value === value);
-  return option?.label || "General AI care guidance";
-}
-
-function getCategoryOptions(current?: string) {
-  if (!current || handoverCategoryOptions.some((option) => option.value === current)) {
-    return handoverCategoryOptions;
-  }
-
-  return [{ label: current, value: current }, ...handoverCategoryOptions];
-}
-
-function isQuoteLikeWorkflowItem(item: ExtractedWorkflowItem, metadata = getContextSchemaMetadata(item)) {
-  const haystack = [
-    item.productName,
-    item.category,
-    item.supplier,
-    item.quoteReferenceText,
-    item.location,
-    metadata.contextClassification,
-    metadata.classificationReason,
-    metadata.sourceEvidenceText,
-    ...metadata.builderInfoNeeded,
-    ...metadata.missingFields,
-  ].filter(Boolean).join(" ").toLowerCase();
-
-  return haystack.includes("quote")
-    || haystack.includes("invoice")
-    || haystack.includes("supplier schedule")
-    || haystack.includes("as per")
-    || haystack.includes("tbc by supplier");
-}
-
-function getString(value: unknown) {
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function getStringList(value: unknown) {
-  return Array.isArray(value)
-    ? value.map((item) => getString(item)).filter(Boolean).slice(0, 8)
-    : [];
-}
-
-function formatContextClassification(value?: string) {
-  const labels: Record<string, string> = {
-    source_ready: "Source-ready",
-    builder_input_needed: "Builder input needed",
-    project_document: "Project document",
-    generic_allowance: "Generic allowance",
-    admin_or_contract: "Admin or contract",
-    not_handover_relevant: "Not handover-relevant",
-  };
-
-  return value ? labels[value] || value.replaceAll("_", " ") : "Document context";
-}
-
-function WorkflowMatchStatusPill({ status }: { status: ProductMatch["matchStatus"] }) {
-  const styles = {
-    verified_match: "border-emerald-200 bg-emerald-50 text-emerald-800",
-    needs_review: "border-amber-200 bg-amber-50 text-amber-800",
-    low_confidence: "border-orange-200 bg-orange-50 text-orange-800",
-    unmatched: "border-rose-200 bg-rose-50 text-rose-800",
-  };
-  const labels = {
-    verified_match: "Verified match",
-    needs_review: "Needs review",
-    low_confidence: "Low confidence",
-    unmatched: "Unmatched",
-  };
-
-  return (
-    <span className={`inline-flex h-7 items-center rounded-md border px-2.5 text-xs font-medium ${styles[status]}`}>
-      {labels[status]}
-    </span>
-  );
-}
-
-function formatWorkflowJobStatus(status: DocumentExtractionJob["status"]) {
-  return status.replaceAll("_", " ").replace(/^\w/, (character) => character.toUpperCase());
-}
-
 function getModalEyebrow(mode: ModalMode) {
   if (mode === "create") {
     return "New project";
   }
-  if (mode === "edit") {
-    return "Project workspace";
-  }
   if (mode === "send") {
     return "Package confirmation";
+  }
+  if (mode === "clientAccess") {
+    return "Client portal";
+  }
+  if (mode === "addItem") {
+    return "Project checklist";
   }
   return "Projects help";
 }
@@ -2196,13 +1813,16 @@ function getModalTitle(mode: ModalMode, project: Project | null) {
   if (mode === "create") {
     return "Add project";
   }
-  if (mode === "edit") {
-    return project?.name || "Edit project";
-  }
   if (mode === "send") {
     return `Send ${project?.name || "package"}`;
   }
-  return "How the project workflow works";
+  if (mode === "clientAccess") {
+    return `Client access${project?.name ? ` - ${project.name}` : ""}`;
+  }
+  if (mode === "addItem") {
+    return `Add item${project?.name ? ` - ${project.name}` : ""}`;
+  }
+  return "How projects work";
 }
 
 function formatInviteStatus(status?: string, invitedAt?: string) {

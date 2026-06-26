@@ -59,6 +59,23 @@ in the product workflow. OpenAI/web-search enrichment should only be enabled
 after context-first extraction, builder source-gap capture, the Cloudflare
 dry-run pipeline, cost guards, and review persistence are working end to end.
 
+## Current Product Pivot: Project Handover Checklist
+
+Investor feedback moved the active product plan to a project-scoped handover item
+checklist. The project page should be the main working surface: each item tracks
+identity, care instructions, manuals, warranty information, invoice data, Code of
+Compliance information where relevant, uploaded supporting documents, notes,
+completion state, and paper trail. Specs and supporting documents still matter,
+but extraction is now a way to populate checklist candidates rather than the
+whole product flow.
+
+Implementation should follow `docs/project-handover-item-documentation-flow.md`
+and the saved plan in
+`.hermes/plans/2026-06-22_000000-project-handover-checklist-pivot.md`. Keep
+database matching before source search, block vague items as `Not enough
+information to search`, never guess between similar product records, keep
+autofilled values editable, and record explicit incomplete acceptance.
+
 New architecture reference:
 `docs/azure-cloudflare-context-processing-architecture.md` defines the
 Azure/Cloudflare rework, including Azure conversion checks, Cloudflare D1

@@ -1,15 +1,38 @@
 import Link from "next/link";
-import { Check, FileUp, Pencil, X } from "lucide-react";
+import { Check, FileUp, Pencil, Search, X } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { StatusBanner } from "@/components/status-banner";
 import { getExtractedHandoverItems, getSpecificationUploads } from "@/lib/server/queries";
-import { acceptExtractedItemAction, rejectExtractedItemAction } from "@/lib/server/actions";
+import { acceptExtractedItemAction, overrideContextForSourceSearchAction, rejectExtractedItemAction } from "@/lib/server/actions";
 import { describeExtractedItemStatus, formatStatus } from "@/lib/status-labels";
+
+type ReviewFilter = "all" | "admin" | "context" | "ready" | "rejected";
+
+function isPackageReadyStatus(status: string) {
+  return ["accepted", "auto_approved", "builder_approved", "global_approved"].includes(status);
+}
+
+function isContextRequestStatus(status: string, reviewReason?: string) {
+  return ["request_more_context", "needs_source_document", "needs_model_code"].includes(status) ||
+    Boolean(reviewReason?.startsWith("Request "));
+}
+
+function isAdminReviewStatus(status: string) {
+  return ["admin_review", "edited", "proposed"].includes(status);
+}
+
+function normalizeFilter(value?: string): ReviewFilter {
+  if (value === "admin" || value === "context" || value === "ready" || value === "rejected") {
+    return value;
+  }
+
+  return "all";
+}
 
 export default async function SpecificationReviewPage({
   searchParams,
 }: {
-  searchParams: Promise<{ draft?: string; storage?: string; error?: string }>;
+  searchParams: Promise<{ draft?: string; storage?: string; error?: string; filter?: string }>;
 }) {
   const params = await searchParams;
   const [specifications, items] = await Promise.all([
@@ -17,18 +40,31 @@ export default async function SpecificationReviewPage({
     getExtractedHandoverItems(),
   ]);
   const activeSpec = specifications[0];
-  const packageReadyCount = items.filter((item) =>
-    ["accepted", "auto_approved", "builder_approved", "global_approved"].includes(item.status),
-  ).length;
+  const activeFilter = normalizeFilter(params.filter);
+  const packageReadyCount = items.filter((item) => isPackageReadyStatus(item.status)).length;
   const rejectedCount = items.filter((item) => item.status === "rejected").length;
-  const contextRequestCount = items.filter((item) =>
-    ["request_more_context", "needs_source_document", "needs_model_code"].includes(item.status) ||
-    item.reviewReason?.startsWith("Request "),
-  ).length;
-  const adminReviewCount = items.filter((item) =>
-    ["admin_review", "edited", "proposed"].includes(item.status),
-  ).length;
-  const sortedItems = [...items].sort((a, b) => {
+  const contextRequestCount = items.filter((item) => isContextRequestStatus(item.status, item.reviewReason)).length;
+  const adminReviewCount = items.filter((item) => isAdminReviewStatus(item.status)).length;
+  const filteredItems = items.filter((item) => {
+    if (activeFilter === "admin") {
+      return isAdminReviewStatus(item.status);
+    }
+
+    if (activeFilter === "context") {
+      return isContextRequestStatus(item.status, item.reviewReason);
+    }
+
+    if (activeFilter === "ready") {
+      return isPackageReadyStatus(item.status);
+    }
+
+    if (activeFilter === "rejected") {
+      return item.status === "rejected";
+    }
+
+    return true;
+  });
+  const sortedItems = [...filteredItems].sort((a, b) => {
     const statusRank = {
       admin_review: 0,
       request_more_context: 1,
@@ -70,14 +106,23 @@ export default async function SpecificationReviewPage({
           eyebrow={activeSpec ? activeSpec.fileName : "Specification review"}
           title="Review extracted handover package"
         />
-        <StatusBanner draft={params.draft === "accepted" || params.draft === "rejected" ? "saved" : params.draft} error={params.error} storage={params.storage} />
+        <StatusBanner
+          draft={params.draft === "accepted" || params.draft === "rejected" ? "saved" : params.draft}
+          error={params.error}
+          errorMessages={{
+            "source-search-already-used": "This item has already used its one source-search attempt. Add the product details manually.",
+            "source-search-products-only": "Source search override is only available for product items.",
+            "source-search-update-failed": "The source-search attempt could not be saved.",
+          }}
+          storage={params.storage}
+        />
 
         <section className="mt-6 grid gap-4 md:grid-cols-5">
-          <Metric label="Review items" value={items.length} />
-          <Metric label="Admin/new item review" value={adminReviewCount} />
-          <Metric label="Context requests" value={contextRequestCount} />
-          <Metric label="Package-ready" value={packageReadyCount} />
-          <Metric label="Rejected" value={rejectedCount} />
+          <Metric active={activeFilter === "all"} filter="all" label="Review items" value={items.length} />
+          <Metric active={activeFilter === "admin"} filter="admin" label="Admin/new item review" value={adminReviewCount} />
+          <Metric active={activeFilter === "context"} filter="context" label="Context requests" value={contextRequestCount} />
+          <Metric active={activeFilter === "ready"} filter="ready" label="Package-ready" value={packageReadyCount} />
+          <Metric active={activeFilter === "rejected"} filter="rejected" label="Rejected" value={rejectedCount} />
         </section>
 
         <section className="mt-6 space-y-4">
@@ -95,6 +140,15 @@ export default async function SpecificationReviewPage({
                 <FileUp className="size-4" />
                 Upload specification
               </Link>
+            </div>
+          ) : null}
+
+          {items.length > 0 && sortedItems.length === 0 ? (
+            <div className="rounded-lg border border-slate-200 bg-white p-5">
+              <p className="font-semibold text-slate-950">No items match this filter.</p>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                Choose another filter above to inspect a different review lane.
+              </p>
             </div>
           ) : null}
 
@@ -126,6 +180,18 @@ export default async function SpecificationReviewPage({
                     {describeExtractedItemStatus(item.status)}
                   </p>
                   <ContextFlag status={item.status} reviewReason={item.reviewReason} />
+                  {canTrySourceSearch(item.status, item.reviewReason, item.itemType) ? (
+                    <form action={overrideContextForSourceSearchAction} className="mt-3">
+                      <input name="itemId" type="hidden" value={item.id} />
+                      <button className="inline-flex h-9 items-center gap-2 rounded-md border border-cyan-200 bg-cyan-50 px-3 text-xs font-semibold text-cyan-800 hover:bg-cyan-100">
+                        <Search className="size-3.5" />
+                        Try source search once
+                      </button>
+                      <p className="mt-1 text-xs leading-5 text-slate-500">
+                        Use this only when the product name is enough. If no source is found, add the details manually.
+                      </p>
+                    </form>
+                  ) : null}
                   <h2 className="mt-3 text-lg font-semibold text-slate-950">{item.title}</h2>
                   <p className="mt-1 text-sm text-slate-600">
                     {item.category} - {item.location || "No location captured"}
@@ -185,6 +251,15 @@ export default async function SpecificationReviewPage({
   );
 }
 
+function canTrySourceSearch(status: string, reviewReason: string | undefined, itemType: string) {
+  if (itemType !== "product" || reviewReason?.includes("[source-search-attempted]")) {
+    return false;
+  }
+
+  return ["request_more_context", "needs_source_document", "needs_model_code"].includes(status) ||
+    Boolean(reviewReason?.startsWith("Request "));
+}
+
 function ContextFlag({ status, reviewReason }: { status: string; reviewReason?: string }) {
   const label = getContextFlagLabel(status, reviewReason);
 
@@ -215,11 +290,35 @@ function getContextFlagLabel(status: string, reviewReason?: string) {
   return "";
 }
 
-function Metric({ label, value }: { label: string; value: number }) {
+function Metric({
+  active,
+  filter,
+  label,
+  value,
+}: {
+  active: boolean;
+  filter: ReviewFilter;
+  label: string;
+  value: number;
+}) {
+  const href = filter === "all" ? "/builder/specifications/review" : `/builder/specifications/review?filter=${filter}`;
+
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-5">
-      <p className="text-sm font-medium text-slate-500">{label}</p>
+    <Link
+      aria-current={active ? "page" : undefined}
+      className={[
+        "rounded-lg border p-5 transition hover:-translate-y-0.5 hover:shadow-sm",
+        active
+          ? "border-cyan-300 bg-cyan-50 ring-2 ring-cyan-100"
+          : "border-slate-200 bg-white hover:border-cyan-200",
+      ].join(" ")}
+      href={href}
+    >
+      <p className={active ? "text-sm font-semibold text-cyan-800" : "text-sm font-medium text-slate-500"}>{label}</p>
       <p className="mt-3 text-3xl font-semibold tracking-normal text-slate-950">{value}</p>
-    </div>
+      <p className={active ? "mt-2 text-xs font-semibold text-cyan-800" : "mt-2 text-xs font-semibold text-slate-400"}>
+        {active ? "Showing" : "Click to filter"}
+      </p>
+    </Link>
   );
 }

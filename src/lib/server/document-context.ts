@@ -1,8 +1,9 @@
 import { extractPdfText, type ExtractedPdf } from "@/lib/server/pdf-extract";
 import { parseDocumentWithLlamaCloud } from "@/lib/server/llamacloud";
-import { shouldUseDoclingLocalProvider, shouldUseLlamaCloudProvider } from "@/lib/server/document-context-readiness";
+import { parseDocumentWithUnstructured } from "@/lib/server/unstructured";
+import { shouldUseDoclingLocalProvider, shouldUseLlamaCloudProvider, shouldUseUnstructuredProvider } from "@/lib/server/document-context-readiness";
 
-export type DocumentContextProvider = "local_pdf" | "llamacloud_parse" | "docling_local" | "docling_http";
+export type DocumentContextProvider = "local_pdf" | "llamacloud_parse" | "docling_local" | "docling_http" | "unstructured_api";
 
 export type DocumentContextResult = {
   provider: DocumentContextProvider;
@@ -110,7 +111,44 @@ async function extractLlamaCloudContext(input: ExtractDocumentContextInput): Pro
   }
 }
 
+async function extractUnstructuredContext(input: ExtractDocumentContextInput): Promise<DocumentContextResult> {
+  try {
+    const parsed = await parseDocumentWithUnstructured(input);
+    const text = parsed.markdown || parsed.text;
+
+    if (!text.trim()) {
+      return extractLocalPdfContext(input, [
+        "Unstructured returned no text or markdown, so the local PDF extractor was used.",
+      ]);
+    }
+
+    return {
+      provider: "unstructured_api",
+      text,
+      markdown: parsed.markdown,
+      diagnostics: {
+        pageCount: parsed.diagnostics.pageCount,
+        tableCount: parsed.diagnostics.tableCount,
+        chunkCount: parsed.diagnostics.elementCount,
+        characterCount: parsed.diagnostics.characterCount,
+        warnings: parsed.diagnostics.warnings,
+        fallbackUsed: false,
+      },
+    };
+  } catch (error) {
+    return extractLocalPdfContext(input, [
+      error instanceof Error
+        ? `Unstructured parse failed and local PDF extraction was used: ${error.message}`
+        : "Unstructured parse failed and local PDF extraction was used.",
+    ]);
+  }
+}
+
 export async function extractDocumentContext(input: ExtractDocumentContextInput): Promise<DocumentContextResult> {
+  if (shouldUseUnstructuredProvider()) {
+    return extractUnstructuredContext(input);
+  }
+
   if (shouldUseDoclingLocalProvider()) {
     return extractDoclingContext(input);
   }

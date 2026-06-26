@@ -1,0 +1,98 @@
+[
+  {
+    "name": "accepts low risk missing-space repair while preserving source code",
+    "source": {
+      "row_id": "row_001",
+      "source_text": "Engineered Timber Waterproofmembraneunder tiles laidontimber floor inginwetareas. Code WG 510 S",
+      "raw_line": "| Engineered Timber | Waterproofmembraneunder tiles laidontimber floor inginwetareas. Code WG 510 S |"
+    },
+    "row": {
+      "row_id": "row_001",
+      "source_text": "Engineered Timber Waterproofmembraneunder tiles laidontimber floor inginwetareas. Code WG 510 S",
+      "normalized_text": "Engineered Timber. Waterproof membrane under tiles laid on timber floor in wet areas. Code WG 510 S",
+      "corrections": [
+        "split Waterproofmembraneunder",
+        "split laidontimber",
+        "split inginwetareas"
+      ],
+      "risk": "low",
+      "confidence": 94
+    },
+    "expectedAccepted": true,
+    "expectedTextIncludes": [
+      "Waterproof membrane under tiles",
+      "laid on timber floor",
+      "WG 510 S"
+    ]
+  },
+  {
+    "name": "rejects high risk rewrite",
+    "source": {
+      "row_id": "row_002",
+      "source_text": "Selected vanity from Builder range TBC",
+      "raw_line": "| Selected vanity | Builder range TBC |"
+    },
+    "row": {
+      "row_id": "row_002",
+      "source_text": "Selected vanity from Builder range TBC",
+      "normalized_text": "St Michel City 50 vanity with copper terrazzo top",
+      "corrections": [
+        "guessed product model"
+      ],
+      "risk": "high",
+      "confidence": 70
+    },
+    "expectedAccepted": false,
+    "expectedErrors": [
+      "high_risk_rewrite"
+    ]
+  },
+  {
+    "name": "rejects rewrite that drops source product code",
+    "source": {
+      "row_id": "row_003",
+      "source_text": "Heirloom Genesis 510 Slimline Towel warmer Chrome WG 510 S",
+      "raw_line": "| Heated Towel Rail | Heirloom Genesis 510 Slimline Towel warmer Chrome WG 510 S |"
+    },
+    "row": {
+      "row_id": "row_003",
+      "source_text": "Heirloom Genesis 510 Slimline Towel warmer Chrome WG 510 S",
+      "normalized_text": "Heirloom Genesis slimline towel warmer in chrome",
+      "corrections": [
+        "cleaned spacing"
+      ],
+      "risk": "low",
+      "confidence": 92
+    },
+    "expectedAccepted": false,
+    "expectedErrors": [
+      "missing_source_code:WG 510"
+    ]
+  },
+  {
+    "name": "accepts generic hot-water glued-unit repair",
+    "source": {
+      "row_id": "row_004",
+      "source_text": "Hot Water Heating Level 3:180 lmainspressureelectric with 3 kwelement and the rmostat Level 2 throostat",
+      "raw_line": "| Hot Water Heating | Level 3:180 lmainspressureelectric with 3 kwelement and the rmostat Level 2 throostat |"
+    },
+    "row": {
+      "row_id": "row_004",
+      "source_text": "Hot Water Heating Level 3:180 lmainspressureelectric with 3 kwelement and the rmostat Level 2 throostat",
+      "normalized_text": "Hot Water Heating Level 3: 180L mains pressure electric with 3 kW element and thermostat Level 2 thermostat",
+      "corrections": [
+        "split litre mains pressure electric",
+        "split kW element",
+        "fixed thermostat OCR"
+      ],
+      "risk": "low",
+      "confidence": 95
+    },
+    "expectedAccepted": true,
+    "expectedTextIncludes": [
+      "180L mains pressure electric",
+      "3 kW element",
+      "thermostat"
+    ]
+  }
+]

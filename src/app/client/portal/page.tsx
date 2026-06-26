@@ -222,8 +222,8 @@ export default async function ClientPortalPage({
 
         <section className="mt-6 grid gap-4 lg:grid-cols-3">
           <PublishedColumn title="Products" items={selectedSummary.publishedPackage.products} />
-          <PublishedColumn title="Documents From Spec" items={selectedSummary.publishedPackage.documents} />
-          <PublishedColumn title="Maintenance From Spec" items={selectedSummary.publishedPackage.maintenance} />
+          <PublishedColumn title="Documents" items={selectedSummary.publishedPackage.documents} />
+          <PublishedColumn title="Maintenance" items={selectedSummary.publishedPackage.maintenance} />
         </section>
       </div>
     </main>
