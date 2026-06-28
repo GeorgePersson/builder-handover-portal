@@ -161,8 +161,8 @@ function PackageSection({
               </span>
             </div>
             <h3 className="mt-3 font-semibold text-slate-950">{item.title}</h3>
-            <p className="mt-1 text-sm text-slate-600">{item.location || "No location captured"}</p>
-            <p className="mt-3 text-sm leading-6 text-slate-600">{item.extractedText}</p>
+            {item.location ? <p className="mt-1 text-sm text-slate-600">{item.location}</p> : null}
+            {item.extractedText ? <p className="mt-3 text-sm leading-6 text-slate-600">{item.extractedText}</p> : null}
           </article>
         ))}
       </div>

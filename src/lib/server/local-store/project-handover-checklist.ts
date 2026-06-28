@@ -66,6 +66,7 @@ export async function getLocalProjectHandoverChecklistItem(itemId: string) {
 export async function saveLocalProjectHandoverChecklistItem(
   input: ProjectHandoverChecklistItemInput,
   actorId = "local-scaffold",
+  notes = "Project handover checklist item created.",
 ) {
   const store = await readStore();
   const timestamp = new Date().toISOString();
@@ -80,7 +81,7 @@ export async function saveLocalProjectHandoverChecklistItem(
     checklistItemId: item.id,
     eventType: "created",
     actorId,
-    notes: "Project handover checklist item created.",
+    notes,
     metadata: {
       status: item.status,
       value_sources: item.valueSources,

@@ -59,8 +59,8 @@ export async function prepareSpecificationPdf(formData: FormData) {
   };
 }
 
-export async function prepareProjectDocument(formData: FormData) {
-  const file = formData.get("documentFile");
+export async function prepareProjectDocument(formData: FormData, fieldName = "documentFile") {
+  const file = formData.get(fieldName);
 
   if (!(file instanceof File) || file.size === 0) {
     return null;

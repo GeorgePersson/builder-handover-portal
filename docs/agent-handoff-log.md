@@ -1,5 +1,157 @@
 # Agent Handoff Log
 
+## 2026-06-28 - Docling/Turbopack NFT Trace Warning Fix
+
+### Trigger
+
+User asked to stop treating the Docling/Turbopack NFT tracing warnings as non-blocking and solve them.
+
+### Root Cause
+
+`src/lib/server/docling.ts` and the duplicated Docling readiness helper built project-root and temp-file filesystem paths for the local Docling process. Turbopack's NFT tracing saw those dynamic filesystem calls in route bundles and traced the project root into multiple `.nft.json` files, causing warnings that `next.config.ts` and many repo/local files were unexpectedly included.
+
+### Changes
+
+- `src/lib/server/docling.ts`
+  - Marked the default Docling script path, executable working directory, script existence checks, temp input write, diagnostics/markdown reads, and temp cleanup path with `/* turbopackIgnore: true */`.
+- `src/lib/server/document-context-readiness.ts`
+  - Marked the duplicated default Docling script path and script-existence check with `/* turbopackIgnore: true */`.
+
+### Verification
+
+- `npm.cmd run build` completed successfully with zero `Encountered unexpected file in NFT list` warnings after the fix.
+
+### Follow-up
+
+- Keep future project-root/temp-file filesystem calls in route-imported server modules scoped under a stable subdirectory and mark dynamic path arguments with `/* turbopackIgnore: true */` where Turbopack cannot statically reason about them.
+
+## 2026-06-28 - Playwright MCP + E2E Hardening Baseline
+
+### Trigger
+
+User asked to start hardening the system by downloading Playwright MCP and using it to test the app.
+
+### Changes
+
+- Hermes MCP config
+  - Added MCP server `playwright` using `npx -y @playwright/mcp@latest`.
+  - `hermes mcp test playwright` connected successfully and discovered 23 tools.
+  - Note: Hermes reports a new session is required before the MCP tools are available directly as in-session tools.
+- `package.json`, `package-lock.json`
+  - Added `@playwright/test` dev dependency.
+  - Added scripts `test:e2e` and `test:e2e:ui`.
+- `playwright.config.ts`
+  - Added Chromium Playwright config, HTML/list reporters, retained traces/screenshots/videos on failure, and `reuseExistingServer` for local dev server use.
+- `tests/e2e/core-smoke.spec.ts`
+  - Added first hardening smoke suite covering home render/no console errors, builder projects route auth redirect/open behavior, and client portal guard against empty placeholder text like `No location captured`.
+
+### Verification
+
+- `npx.cmd playwright install chromium` completed.
+- `npm.cmd run test:e2e` passed: 3/3 tests.
+
+### Follow-up
+
+- Start a fresh Hermes session to expose the MCP tools directly (`mcp_playwright_*` / Playwright browser tools) in the tool list.
+- Expand e2e coverage next around authenticated builder flows: create project, set CCC/exposure, add handover item from group, attach schedule key, save from top Save button, and check client portal output after publish.
+
+## 2026-06-28 - Maintenance Schedule, Exposure Zone, Client Portal Polish
+
+### Trigger
+
+User requested the remaining builder handover list: maintenance frequency and exposure zones, shared maintenance schedule keys, CCC-based maintenance timing, top Save button, `Needs check` wording changed to `Added`, always-visible handover groups, better reordered item search, a few client portal demo items, and client-facing empty fields hidden.
+
+### Changes
+
+- `src/lib/maintenance-schedules.ts`
+  - Added shared maintenance schedule definitions and exposure-zone frequency helpers for standard/coastal sea spray/geothermal/coastal+geothermal projects.
+- `src/lib/types.ts`, `src/lib/data.ts`
+  - Added CCC granted date, exposure zone, shared maintenance schedule keys, frequency metadata, and temporary `TEMP_POC_DEMO` client portal seed items.
+- `src/components/builder/projects-workspace.tsx`
+  - Project create/edit now captures CCC granted date and exposure zone.
+  - Add/edit handover item flows now support shared maintenance schedule keys.
+  - Edit modal has a top Save button.
+  - DB/autofill review wording now shows as `Added` instead of `Needs check` / `Needs checking`.
+  - Default handover groups stay visible even when empty; clicking an empty group opens generic Add Handover Item prefilled to that group.
+  - Search now uses token matching so reordered names like `Bed 1&2`, `1&2 bed`, `bed 1 2`, and similar variants are discoverable.
+- `src/lib/server/actions.ts`, `src/lib/server/queries.ts`
+  - Server actions persist project CCC/exposure fields and checklist maintenance schedule metadata, with legacy fallbacks if new Supabase columns are not applied yet.
+  - Maintenance task queries can read shared schedule/frequency metadata.
+- `src/app/client/portal/page.tsx`, `src/app/builder/handover-package/page.tsx`
+  - Empty location/detail fields are hidden instead of showing placeholders such as `No location captured`.
+- `docs/supabase-add-project-maintenance-schedules.sql`
+  - Added migration for project CCC/exposure fields and maintenance schedule metadata.
+- `WORKSHEET.md`
+  - Updated with the completed work and verification result.
+
+### Verification
+
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed.
+- Build still emits the known non-blocking Docling/Turbopack NFT tracing warnings from the document-context/Docling import path.
+- Browser smoke note: existing dev server was already running on port 3000; direct client portal navigation redirected to login, so unauthenticated client-page visual smoke was limited.
+
+### Follow-up
+
+- Apply `docs/supabase-add-project-maintenance-schedules.sql` in Supabase before relying on the new DB columns in hosted/live environments.
+- Later cleanup: address the known Docling/Turbopack NFT tracing warnings separately.
+
+## 2026-06-26 - Project Workspace Document Upload + Item Detail Polish
+
+### Trigger
+
+User iterated on the `/builder/projects` workspace after screenshots: document upload type options needed the required-by-law NZ legal document list, document upload controls needed to align, the button should say Upload, large file uploads threw `Unexpected end of form`, and item detail review needed to be cleaner.
+
+### Changes
+
+- `src/components/builder/projects-workspace.tsx`
+  - New project modal no longer shows the product-search/product database panel; it now shows a check-mark handover record/service assurance panel with 10-year minimum record availability and homeowner email handoff wording.
+  - Add client document/upload forms now use exact legal document type labels plus Manual/Warranty/Inspection/Other options.
+  - Upload controls are full-width/matching height and the submit button says `Upload`.
+  - Item cards are clickable and open a clean two-column detail/edit modal instead of an inline details disclosure.
+  - Handover evidence fields support text/link input plus optional file upload where applicable.
+  - Required legal documents sidebar now tracks the required-by-law list supplied by the user.
+- `src/lib/server/actions.ts` and `src/lib/server/upload-utils.ts`
+  - Document uploads parse UI-level `documentKind` values such as `consent|Code Compliance Certificate`, map safely to existing broad DB enum values, and use the selected label as the default document name when Title is blank.
+  - Checklist item create/update can upload evidence files while preserving project context redirects.
+- `next.config.ts`
+  - Added `experimental.proxyClientMaxBodySize = "60mb"` alongside `experimental.serverActions.bodySizeLimit = "60mb"` so larger multipart uploads are not truncated before server-action parsing.
+- Impeccable/Codex tooling
+  - Project-local Impeccable Codex skills are installed under `.agents/skills`; the earlier npm package install was removed and audit scripts point to the harness detector.
+
+### Verification
+
+- After this documentation update, run `npm.cmd run lint` and `npm.cmd run build`.
+- Build is expected to keep the known non-blocking Docling/Turbopack NFT tracing warnings from the document-context/Docling import path.
+
+### Follow-up
+
+- Restart the dev server after `next.config.ts` changes before retesting large document uploads.
+- Browser smoke still recommended: open `/builder/projects?projectId=...`, upload a >10MB legal document, confirm the project remains selected, then open/edit one handover item modal.
+
+## 2026-06-26 - Manual Add Item Keeps Project Workspace Open
+
+### Trigger
+
+User reported that creating a handover item kicked them out of the active project workspace and clarified that manual item entry should be trusted instead of blocked by search/readiness checks. Complete manual items should still be sent to admin review for possible database reuse only when all required information is present.
+
+### Changes
+
+- `src/lib/server/actions.ts`
+  - Checklist create/update/accept-incomplete server-action redirects now include `projectId`, preserving `/builder/projects?projectId=...` after submit.
+  - Complete manual checklist items are copied into the admin review/database queue only when they are complete and have reusable identity fields; incomplete manual items remain project-specific.
+- `src/lib/project-handover-checklist.ts`
+  - Removed the `not_enough_information_to_search` status derivation for manual checklist items so manual entries are trusted as builder intent and still get added.
+- `src/components/builder/projects-workspace.tsx`
+  - Removed visible "not enough information/source search blocked" project-checklist copy and the "Too vague"/"Not enough identity" UI treatment.
+- `docs/builder-project-workspace-ui-contract.md`
+  - Added the manual-entry trust/admin-queue rule to the `/builder/projects` source-of-truth contract.
+
+### Verification
+
+- `npm.cmd run lint` passed.
+- `npm.cmd run build` passed with the known Docling/Turbopack NFT tracing warnings.
+
 ## 2026-06-26 - GitHub Push: Project Workspace Hardening
 
 ### Trigger

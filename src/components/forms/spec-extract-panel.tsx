@@ -428,7 +428,7 @@ export function SpecExtractPanel({ projects }: { projects: ProjectOption[] }) {
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
             <button
-              className="inline-flex h-10 items-center gap-2 rounded-md border border-cyan-300 bg-white px-4 text-sm font-semibold text-cyan-800 hover:bg-cyan-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
+              className="inline-flex h-10 items-center gap-2 rounded-md border border-cyan-300 bg-white px-4 text-sm font-semibold text-cyan-800 hover:bg-cyan-50 disabled:cursor-not-allowed disabled:border-cyan-200 disabled:text-cyan-900 disabled:opacity-50"
               disabled={!canProcessPdf}
               onClick={runPdfExtraction}
               type="button"

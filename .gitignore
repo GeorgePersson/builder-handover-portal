@@ -12,6 +12,8 @@
 
 # testing
 /coverage
+/playwright-report/
+/test-results/
 
 # next.js
 /.next/
@@ -44,6 +46,10 @@ dev-server.*.log
 
 # local generated artifacts from parser spikes and manual smoke tests
 .local-artifacts/
+
+# local AI agent scratch space and generated audit reports
+.hermes/
+.codex/
 
 # local Cloudflare/Wrangler state
 .wrangler/

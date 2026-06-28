@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   Bell,
   CalendarCheck2,
+  CheckCircle2,
   FileText,
   HelpCircle,
   Layers3,
@@ -13,7 +14,6 @@ import {
   PackageCheck,
   Pencil,
   Plus,
-  Search,
   Send,
   Upload,
   X,
@@ -29,13 +29,11 @@ import type {
   UploadedProjectDocument,
 } from "@/lib/document-workflow";
 import {
-  createBuilderProjectRequestAction,
   createClientInviteAction,
   createDocumentAction,
   createProjectAction,
   createProjectHandoverChecklistItemAction,
   updateProjectHandoverChecklistItemAction,
-  acceptProjectHandoverChecklistItemIncompleteAction,
   publishHandoverPackageAction,
   revokeClientInviteAction,
   sendClientInviteEmailAction,
@@ -45,6 +43,7 @@ import { formatDate } from "@/lib/utils";
 import {
   builderHandoverApprovalText,
 } from "@/lib/handover-approval";
+import { formatExposureZone, maintenanceSchedules } from "@/lib/maintenance-schedules";
 import type {
   DocumentDownloadEvent,
   ExtractedHandoverItem,
@@ -57,7 +56,7 @@ import type {
 } from "@/lib/types";
 
 import type { ProjectHandoverChecklistItem } from "@/lib/project-handover-checklist";
-import { getMissingChecklistSections, hasEnoughIdentityToSearch } from "@/lib/project-handover-checklist";
+import { getMissingChecklistSections } from "@/lib/project-handover-checklist";
 
 type ProjectsWorkspaceProps = {
   draft?: string;
@@ -119,6 +118,29 @@ function getCategoryOptions(category?: string | null) {
   return [{ label: category, value: category }, ...handoverCategoryOptions];
 }
 
+function tokenizeSearch(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/&/g, " ")
+    .split(/[^a-z0-9]+/)
+    .map((token) => token.trim())
+    .filter(Boolean);
+}
+
+function matchesSearchTokens(query: string, haystack: string) {
+  const queryTokens = tokenizeSearch(query);
+  if (!queryTokens.length) return true;
+
+  const haystackTokens = tokenizeSearch(haystack);
+  const haystackJoined = haystackTokens.join(" ");
+  return queryTokens.every((token) => haystackTokens.includes(token) || haystackJoined.includes(token));
+}
+
+function getMaintenanceScheduleLabel(key?: string | null) {
+  const schedule = maintenanceSchedules.find((candidate) => candidate.key === key);
+  return schedule ? schedule.title : "No shared maintenance schedule";
+}
+
 const projectTypeOptions = [
   { label: "New residential build", value: "New residential build" },
   { label: "Full renovation", value: "Full renovation" },
@@ -126,6 +148,26 @@ const projectTypeOptions = [
   { label: "Kitchen renovation", value: "Kitchen renovation" },
   { label: "Reclad project", value: "Reclad project" },
   { label: "Roofing project", value: "Roofing project" },
+];
+
+const exposureZoneOptions = [
+  { label: "Standard exposure", value: "standard" },
+  { label: "Coastal / sea spray zone", value: "coastal_sea_spray" },
+  { label: "Geothermal zone", value: "geothermal" },
+  { label: "Coastal + geothermal exposure", value: "coastal_and_geothermal" },
+];
+
+const defaultHandoverGroups = [
+  "Exterior",
+  "Interior",
+  "Kitchen",
+  "Bathroom",
+  "Bedrooms",
+  "Electrical",
+  "Plumbing",
+  "Cladding",
+  "Roofing",
+  "General",
 ];
 
 export function ProjectsWorkspace({
@@ -149,6 +191,7 @@ export function ProjectsWorkspace({
   );
   const [isDirty, setIsDirty] = useState(false);
   const [productQuery, setProductQuery] = useState("");
+  const [initialAddCategory, setInitialAddCategory] = useState<string | undefined>(undefined);
 
   const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? null;
   const invitePath = inviteToken ? `/client/accept-invite?token=${encodeURIComponent(inviteToken)}` : null;
@@ -192,16 +235,24 @@ export function ProjectsWorkspace({
       return product.status === "approved";
     }
 
-    return `${product.productName} ${product.brand} ${product.category}`.toLowerCase().includes(query);
+    return matchesSearchTokens(query, `${product.productName} ${product.brand} ${product.category} ${product.reviewReason}`);
   });
 
   function open(nextMode: Exclude<ModalMode, null>, projectId?: string) {
     setMode(nextMode);
     setIsDirty(false);
     setProductQuery("");
+    if (nextMode !== "addItem") {
+      setInitialAddCategory(undefined);
+    }
     if (projectId) {
       setSelectedProjectId(projectId);
     }
+  }
+
+  function openAddItem(projectId: string, category?: string) {
+    setInitialAddCategory(category);
+    open("addItem", projectId);
   }
 
   function close() {
@@ -300,7 +351,7 @@ export function ProjectsWorkspace({
 
         {selectedProject && selectedSnapshot ? (
           <ProjectEditPanel
-            onAddItem={() => open("addItem", selectedProject.id)}
+            onAddItem={(category) => openAddItem(selectedProject.id, category)}
             onBack={() => {
               setSelectedProjectId(null);
               setIsDirty(false);
@@ -421,11 +472,8 @@ export function ProjectsWorkspace({
               {mode === "help" ? <HelpPanel /> : null}
               {mode === "create" ? (
                 <ProjectCreateForm
-                  filteredProducts={filteredProducts}
                   creditStatus={creditStatus}
-                  productQuery={productQuery}
                   setDirty={setIsDirty}
-                  setProductQuery={setProductQuery}
                 />
               ) : null}
               {mode === "send" && selectedProject && selectedSnapshot ? (
@@ -435,7 +483,7 @@ export function ProjectsWorkspace({
                 <ClientAccessPanel project={selectedProject} snapshot={selectedSnapshot} />
               ) : null}
               {mode === "addItem" && selectedProject ? (
-                <AddHandoverItemForm productVersions={filteredProducts} projectId={selectedProject.id} setDirty={setIsDirty} />
+                <AddHandoverItemForm initialCategory={initialAddCategory} productVersions={filteredProducts} projectId={selectedProject.id} setDirty={setIsDirty} />
               ) : null}
             </div>
           </section>
@@ -447,16 +495,10 @@ export function ProjectsWorkspace({
 
 function ProjectCreateForm({
   creditStatus,
-  filteredProducts,
-  productQuery,
   setDirty,
-  setProductQuery,
 }: {
   creditStatus: ProjectsWorkspaceProps["creditStatus"];
-  filteredProducts: ProductVersion[];
-  productQuery: string;
   setDirty: (dirty: boolean) => void;
-  setProductQuery: (value: string) => void;
 }) {
   return (
     <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
@@ -467,6 +509,8 @@ function ProjectCreateForm({
           <SelectField label="Project type" name="projectType" options={projectTypeOptions} required />
           <TextField label="Property address" name="address" placeholder="18 Bayview Road, Tauranga" required />
           <TextField label="Target handover date" name="handoverDate" type="date" />
+          <TextField label="CCC granted date" name="cccGrantedDate" type="date" />
+          <SelectField label="Exposure zone" name="exposureZone" defaultValue="standard" options={exposureZoneOptions} />
           <TextField label="Client name" name="clientName" placeholder="Amelia and Noah Smith" required />
           <TextField label="Client email" name="clientEmail" placeholder="client@example.co.nz" required type="email" />
         </div>
@@ -497,12 +541,43 @@ function ProjectCreateForm({
           <SubmitButton icon={Plus} label="Save project" />
         </div>
       </form>
-      <ProjectSideTools
-        filteredProducts={filteredProducts}
-        productQuery={productQuery}
-        setProductQuery={setProductQuery}
-      />
+      <ProjectLegalAssurancePanel />
     </div>
+  );
+}
+
+function ProjectLegalAssurancePanel() {
+  const commitments = [
+    "We keep the project handover record available for at least 10 years.",
+    "Required legal and compliance documents stay organised with the project.",
+    "When the service period ends, the homeowner receives the stored handover information by email for permanent safekeeping.",
+  ];
+
+  return (
+    <section className="rounded-lg border border-cyan-200 bg-cyan-50 p-4 shadow-sm">
+      <div className="flex items-start gap-3">
+        <div className="mt-0.5 inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-white text-cyan-700 shadow-sm">
+          <CheckCircle2 className="size-5" />
+        </div>
+        <div>
+          <h3 className="font-semibold text-slate-950">Handover record promise</h3>
+          <p className="mt-1 text-sm leading-6 text-cyan-900">
+            Builder Handover keeps the homeowner’s final handover pack accessible, organised, and ready to pass on when they need it.
+          </p>
+        </div>
+      </div>
+      <div className="mt-4 space-y-2">
+        {commitments.map((commitment) => (
+          <div className="flex gap-2 rounded-md border border-cyan-100 bg-white/80 p-3 text-sm leading-6 text-slate-700" key={commitment}>
+            <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600" />
+            <span>{commitment}</span>
+          </div>
+        ))}
+      </div>
+      <p className="mt-4 rounded-md border border-slate-200 bg-white/80 p-3 text-xs leading-5 text-slate-600">
+        This is service and record-retention information for the handover portal. Builders should still confirm any project-specific legal obligations with their normal professional advisers.
+      </p>
+    </section>
   );
 }
 
@@ -515,7 +590,7 @@ function ProjectEditPanel({
   setDirty,
   snapshot,
 }: {
-  onAddItem: () => void;
+  onAddItem: (category?: string) => void;
   onBack: () => void;
   onClientAccess: () => void;
   onSend: () => void;
@@ -552,6 +627,9 @@ function ProjectEditPanel({
             <p className="mt-1 text-sm text-slate-500">
               {project.clientName} · {project.projectType} · Target handover {formatDate(project.handoverDate)}
             </p>
+            <p className="mt-1 text-xs text-slate-500">
+              CCC date {project.cccGrantedDate ? formatDate(project.cccGrantedDate) : "not set"} · {formatExposureZone(project.exposureZone)}
+            </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <button
@@ -578,7 +656,7 @@ function ProjectEditPanel({
                 className={`shrink-0 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition ${
                   isActive
                     ? "border-cyan-300 bg-cyan-50 text-cyan-800 shadow-sm"
-                    : "border-slate-200 bg-white text-slate-700 hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-800"
+                    : "border-slate-200 bg-white text-cyan-950 hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-800"
                 }`}
                 key={tab.id}
                 onClick={() => setActiveWorkspaceTab(tab.id)}
@@ -610,6 +688,8 @@ function ProjectEditPanel({
                   <SelectField label="Project type" name="projectType" defaultValue={project.projectType} options={projectTypeOptions} required />
                   <TextField label="Property address" name="address" defaultValue={project.address} required />
                   <TextField label="Target handover date" name="handoverDate" defaultValue={project.handoverDate?.slice(0, 10)} type="date" />
+                  <TextField label="CCC granted date" name="cccGrantedDate" defaultValue={project.cccGrantedDate?.slice(0, 10)} type="date" />
+                  <SelectField label="Exposure zone" name="exposureZone" defaultValue={project.exposureZone || "standard"} options={exposureZoneOptions} />
                   <TextField label="Client name" name="clientName" defaultValue={project.clientName} required />
                   <TextField label="Client email" name="clientEmail" defaultValue={project.clientEmail} required type="email" />
                 </div>
@@ -728,28 +808,44 @@ function ProjectDocumentUploadForm({
           <h3 className="font-semibold text-slate-950">{title}</h3>
           <p className="mt-0.5 text-xs leading-5 text-slate-500">{description}</p>
         </div>
-        <SubmitButton icon={Upload} label="Save" />
+        <SubmitButton icon={Upload} label="Upload" />
       </div>
       <div className="mt-3 grid gap-3 md:grid-cols-2">
-        <TextField label="Title" name="name" placeholder="Code Compliance Certificate" />
-        <SelectField
-          label="Type"
-          name="documentType"
-          options={[
-            { label: "Code Compliance Certificate / consent", value: "consent" },
-            { label: "Manual", value: "manual" },
-            { label: "Warranty", value: "warranty" },
-            { label: "Producer statement", value: "producer_statement" },
-            { label: "Inspection record / photo", value: "photo" },
-            { label: "Other legal / compliance record", value: "other" },
-          ]}
-          required
-        />
+        <div className="md:col-span-2">
+          <TextField label="Title" name="name" placeholder="Leave blank to use selected type" />
+        </div>
+        <div className="md:col-span-2">
+          <SelectField
+            label="Type"
+            name="documentKind"
+            options={[
+              { label: "Code Compliance Certificate", value: "consent|Code Compliance Certificate" },
+              { label: "Building consent documents", value: "consent|Building consent documents" },
+              { label: "Approved plans and specifications", value: "consent|Approved plans and specifications" },
+              { label: "Consent amendments / minor variations", value: "consent|Consent amendments / minor variations" },
+              { label: "Council inspection records", value: "consent|Council inspection records" },
+              { label: "Final inspection sign-off", value: "consent|Final inspection sign-off" },
+              { label: "Record of Building Work", value: "consent|Record of Building Work" },
+              { label: "Certificates of Design Work", value: "consent|Certificates of Design Work" },
+              { label: "Producer statements", value: "producer_statement|Producer statements" },
+              { label: "Electrical Certificate of Compliance", value: "other|Electrical Certificate of Compliance" },
+              { label: "Electrical Safety Certificate", value: "other|Electrical Safety Certificate" },
+              { label: "Gas certificate", value: "other|Gas certificate" },
+              { label: "Plumbing / drainage compliance certificates", value: "other|Plumbing / drainage compliance certificates" },
+              { label: "Compliance schedule, if applicable", value: "other|Compliance schedule, if applicable" },
+              { label: "Manual", value: "manual|Manual" },
+              { label: "Warranty", value: "warranty|Warranty" },
+              { label: "Inspection record / photo", value: "photo|Inspection record / photo" },
+              { label: "Other legal / compliance record", value: "other|Other legal / compliance record" },
+            ]}
+            required
+          />
+        </div>
         <input name="visibleToClient" type="hidden" value="on" />
         <label className="block md:col-span-2">
           <span className="text-sm font-medium text-slate-700">File</span>
           <input
-            className="mt-1 block h-9 w-full cursor-pointer rounded-md border border-dashed border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-700 file:mr-3 file:h-6 file:rounded-md file:border-0 file:bg-cyan-700 file:px-3 file:text-xs file:font-semibold file:text-white hover:border-cyan-300"
+            className="mt-1 block h-11 w-full cursor-pointer rounded-md border border-dashed border-slate-300 bg-white px-2.5 py-1.5 text-xs text-cyan-950 file:mr-3 file:h-8 file:rounded-md file:border-0 file:bg-cyan-700 file:px-3 file:text-xs file:font-semibold file:text-white hover:border-cyan-300"
             name="documentFile"
             required
             type="file"
@@ -857,11 +953,18 @@ function ProjectWorkspaceSidebar({
     firstHandoverOpenEvent?: HandoverOpenEvent;
   };
 }) {
-  const incompleteItems = snapshot.checklist.filter((item) => item.status !== "complete" && item.status !== "user_accepted_incomplete");
-  const needsReviewItems = snapshot.checklist.filter((item) => item.status === "needs_review" || item.sectionStatuses.careInstructions === "autofilled_needs_review" || item.sectionStatuses.manual === "autofilled_needs_review" || item.sectionStatuses.warranty === "autofilled_needs_review");
+  const visibleDocuments = snapshot.documents.filter((document) => document.visibleToClient);
+  const hasDocumentType = (type: HandoverDocument["type"]) => visibleDocuments.some((document) => document.type === type);
+  const hasDocumentRequirement = (keywords: string[]) => visibleDocuments.some((document) => {
+    const haystack = `${document.name} ${document.type.replaceAll("_", " ")}`.toLowerCase();
+    return keywords.some((keyword) => haystack.includes(keyword));
+  });
   const missingManualCount = snapshot.checklist.filter((item) => item.sectionStatuses.manual === "missing" || item.status === "missing_manual").length;
   const missingWarrantyCount = snapshot.checklist.filter((item) => item.sectionStatuses.warranty === "missing" || item.status === "missing_warranty_information").length;
   const missingComplianceCount = snapshot.checklist.filter((item) => item.sectionStatuses.codeCompliance === "missing" || item.status === "missing_code_compliance_information").length;
+  const manualAddedCount = Math.max(snapshot.checklist.length - missingManualCount, hasDocumentType("manual") ? 1 : 0);
+  const warrantyAddedCount = Math.max(snapshot.checklist.length - missingWarrantyCount, hasDocumentType("warranty") ? 1 : 0);
+  const complianceAddedCount = Math.max(snapshot.checklist.length - missingComplianceCount, hasDocumentType("consent") || hasDocumentRequirement(["code compliance", "ccc"]) ? 1 : 0);
   const categoryCounts = Array.from(
     snapshot.checklist.reduce((counts, item) => {
       const category = item.category || "Uncategorised";
@@ -874,32 +977,90 @@ function ProjectWorkspaceSidebar({
       return counts;
     }, new Map<string, { total: number; ready: number }>()),
   ).sort((left, right) => right[1].total - left[1].total || left[0].localeCompare(right[0]));
-  const hasDocumentType = (type: HandoverDocument["type"]) => snapshot.documents.some((document) => document.type === type && document.visibleToClient);
   const documentRequirements = [
     {
-      label: "Code Compliance Certificate / consent",
-      present: hasDocumentType("consent") || missingComplianceCount === 0 && snapshot.checklist.length > 0,
-      note: "Confirm CCC, consents, producer statements, or compliance evidence before handover.",
+      label: "Code Compliance Certificate",
+      present: hasDocumentRequirement(["code compliance", "ccc"]),
+      required: true,
+      note: "Final Code Compliance Certificate issued by council.",
     },
     {
-      label: "Product warranties",
-      present: hasDocumentType("warranty") || missingWarrantyCount === 0 && snapshot.checklist.length > 0,
-      note: "Attach warranty files or review warranty text for items where required.",
+      label: "Building consent documents",
+      present: hasDocumentRequirement(["building consent", "consent document"]),
+      required: true,
+      note: "Consent approval and related issued consent documents.",
     },
     {
-      label: "Manuals and care guides",
-      present: hasDocumentType("manual") || missingManualCount === 0 && snapshot.checklist.length > 0,
-      note: "Upload manufacturer manuals or confirm reviewed care guidance.",
+      label: "Approved plans and specifications",
+      present: hasDocumentRequirement(["approved plan", "approved specification", "plans and specifications"]),
+      required: true,
+      note: "Approved drawings/specs that the final build was checked against.",
     },
     {
-      label: "Producer statements / inspection records",
-      present: hasDocumentType("producer_statement"),
-      note: "Add PS documents, inspection records, or mark as not required where applicable.",
+      label: "Consent amendments / minor variations",
+      present: hasDocumentRequirement(["consent amendment", "minor variation", "variation"]),
+      required: true,
+      note: "Any approved amendments or minor variations to the consented work.",
     },
     {
-      label: "Photos / supporting evidence",
-      present: hasDocumentType("photo") || snapshot.checklist.some((item) => item.sectionStatuses.supportingDocuments !== "missing"),
-      note: "Photos are useful for finishes, locations, installed products, and client context.",
+      label: "Council inspection records",
+      present: hasDocumentRequirement(["inspection record", "council inspection"]),
+      required: true,
+      note: "Council inspection history/records for the consented work.",
+    },
+    {
+      label: "Final inspection sign-off",
+      present: hasDocumentRequirement(["final inspection", "final sign-off", "final sign off"]),
+      required: true,
+      note: "Final inspection pass/sign-off before handover.",
+    },
+    {
+      label: "Record of Building Work",
+      present: hasDocumentRequirement(["record of building work", "rbw"]),
+      required: true,
+      note: "Licensed building practitioner Record of Building Work.",
+    },
+    {
+      label: "Certificates of Design Work",
+      present: hasDocumentRequirement(["certificate of design work", "certificates of design work", "cdw"]),
+      required: true,
+      note: "Design work certificates where restricted building work applies.",
+    },
+    {
+      label: "Producer statements",
+      present: hasDocumentType("producer_statement") || hasDocumentRequirement(["producer statement", "ps1", "ps2", "ps3", "ps4"]),
+      required: true,
+      note: "Producer statements supplied by engineers/specialists.",
+    },
+    {
+      label: "Electrical Certificate of Compliance",
+      present: hasDocumentRequirement(["electrical certificate of compliance", "electrical coc"]),
+      required: true,
+      note: "Electrical CoC for prescribed electrical work.",
+    },
+    {
+      label: "Electrical Safety Certificate",
+      present: hasDocumentRequirement(["electrical safety certificate", "esc"]),
+      required: true,
+      note: "Electrical Safety Certificate where required.",
+    },
+    {
+      label: "Gas certificate",
+      present: hasDocumentRequirement(["gas certificate", "gasfitting certificate", "gas compliance"]),
+      required: true,
+      note: "Gasfitting certificate/compliance evidence where gas work was done.",
+    },
+    {
+      label: "Plumbing / drainage compliance certificates",
+      present: hasDocumentRequirement(["plumbing certificate", "drainage certificate", "plumbing compliance", "drainage compliance"]),
+      required: true,
+      note: "Plumbing/drainage compliance documentation where applicable work was done.",
+    },
+    {
+      label: "Compliance schedule, if applicable",
+      present: hasDocumentRequirement(["compliance schedule"]),
+      required: false,
+      note: "Required only if the building has specified systems needing a compliance schedule.",
     },
   ];
 
@@ -926,31 +1087,37 @@ function ProjectWorkspaceSidebar({
 
       <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
         <p className="text-sm font-semibold text-slate-950">To be completed</p>
-        <p className="mt-1 text-xs leading-5 text-slate-500">Builder-facing checklist only. These do not need editing here; use the item cards on the left.</p>
+        <p className="mt-1 text-xs leading-5 text-slate-500">Builder-facing summary. Manuals and warranties show what has been added; only required legal/compliance blockers show as missing.</p>
         <div className="mt-3 space-y-1.5">
-          <SidebarStatusRow label="Items still incomplete" value={incompleteItems.length} tone={incompleteItems.length ? "amber" : "emerald"} />
-          <SidebarStatusRow label="Autofill checks" value={needsReviewItems.length} tone={needsReviewItems.length ? "amber" : "emerald"} />
-          <SidebarStatusRow label="Manuals missing" value={missingManualCount} tone={missingManualCount ? "rose" : "emerald"} />
-          <SidebarStatusRow label="Warranties missing" value={missingWarrantyCount} tone={missingWarrantyCount ? "rose" : "emerald"} />
-          <SidebarStatusRow label="Compliance docs missing" value={missingComplianceCount} tone={missingComplianceCount ? "rose" : "emerald"} />
+          <SidebarStatusRow label="Manuals added" value={manualAddedCount} tone="emerald" />
+          <SidebarStatusRow label="Warranties added" value={warrantyAddedCount} tone="emerald" />
+          <SidebarStatusRow label={missingComplianceCount ? "Code Compliance missing" : "Code Compliance added"} value={missingComplianceCount || complianceAddedCount} tone={missingComplianceCount ? "rose" : "emerald"} />
         </div>
       </section>
 
       <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-        <p className="text-sm font-semibold text-slate-950">Documents to upload / confirm</p>
-        <p className="mt-1 text-xs leading-5 text-slate-500">Common NZ handover/legal pack items to confirm with the builder. Not legal advice.</p>
+        <p className="text-sm font-semibold text-slate-950">Required legal documents</p>
+        <p className="mt-1 text-xs leading-5 text-slate-500">NZ legal/compliance handover documents to upload or confirm. Not legal advice.</p>
         <div className="mt-3 space-y-2">
-          {documentRequirements.map((requirement) => (
+          {documentRequirements.map((requirement) => {
+            const requirementBadgeClass = requirement.present
+              ? "bg-emerald-100 text-emerald-900"
+              : requirement.required
+                ? "bg-rose-100 text-rose-900"
+                : "bg-slate-100 text-slate-700";
+
+            return (
             <div className="rounded-md border border-slate-200 bg-slate-50 p-2.5" key={requirement.label}>
               <div className="flex items-start justify-between gap-3">
                 <p className="text-sm font-semibold text-slate-800">{requirement.label}</p>
-                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${requirement.present ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-900"}`}>
-                  {requirement.present ? "Covered" : "Check"}
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${requirementBadgeClass}`}>
+                  {requirement.present ? "Added" : requirement.required ? "Missing" : "Not added"}
                 </span>
               </div>
               <p className="mt-1 text-xs leading-5 text-slate-500">{requirement.note}</p>
             </div>
-          ))}
+          );
+          })}
         </div>
       </section>
 
@@ -998,10 +1165,54 @@ function getChecklistMetadataValue(item: ProjectHandoverChecklistItem, key: stri
 }
 
 function getChecklistSourceLabel(item: ProjectHandoverChecklistItem) {
-  if (item.valueSources.includes("database_autofill")) return "Database autofill";
+  if (item.valueSources.includes("database_autofill")) return "DB autofill";
   if (item.valueSources.includes("extracted_document")) return "Previous import";
   if (item.valueSources.includes("manual_upload")) return "Manual upload";
   return "Manual";
+}
+
+type HandoverItemSectionSummary = {
+  label: string;
+  status: string;
+  tone: "good" | "warn" | "danger" | "neutral";
+};
+
+function getSectionStatusTone(status: string): HandoverItemSectionSummary["tone"] {
+  if (status === "missing") return "danger";
+  if (status === "autofilled_needs_review") return "good";
+  if (status === "provided" || status === "reviewed" || status === "uploaded_manually") return "good";
+  return "neutral";
+}
+
+function formatSectionStatusValue(status: string) {
+  const labels: Record<string, string> = {
+    autofilled_needs_review: "Added",
+    missing: "Missing",
+    not_required: "Not required",
+    provided: "Added",
+    reviewed: "Checked",
+    uploaded_manually: "Uploaded",
+    accepted_incomplete: "Logged",
+  };
+
+  return labels[status] || status.replaceAll("_", " ");
+}
+
+function getChecklistSectionSummaries(item: ProjectHandoverChecklistItem): HandoverItemSectionSummary[] {
+  const sections = [
+    { label: "Care", status: item.sectionStatuses.careInstructions },
+    { label: "Manual", status: item.sectionStatuses.manual },
+    { label: "Warranty", status: item.sectionStatuses.warranty },
+    { label: "Invoice", status: item.sectionStatuses.invoice },
+    { label: "Compliance", status: item.sectionStatuses.codeCompliance },
+    { label: "Supporting docs", status: item.sectionStatuses.supportingDocuments },
+  ];
+
+  return sections.map((section) => ({
+    ...section,
+    status: formatSectionStatusValue(section.status),
+    tone: getSectionStatusTone(section.status),
+  }));
 }
 
 function getChecklistSourceFilter(item: ProjectHandoverChecklistItem) {
@@ -1030,6 +1241,7 @@ function productToChecklistDraft(product: ProductVersion) {
     quantity: "",
     finish: "",
     colour: "",
+    maintenanceScheduleKey: product.maintenanceScheduleKey || "",
     careInstructions: product.maintenanceSummary,
     manualUrl: manualSource?.url || "",
     warrantyInformation: warrantyText,
@@ -1047,13 +1259,13 @@ function formatProductSuggestion(product: ProductVersion) {
 function formatChecklistStatus(status: ProjectHandoverChecklistItem["status"]) {
   const labels: Record<ProjectHandoverChecklistItem["status"], string> = {
     complete: "Complete",
-    needs_review: "Needs checking",
+    needs_review: "Added",
     missing_manual: "Missing manual",
     missing_care_instructions: "Missing care instructions",
     missing_warranty_information: "Missing warranty information",
     missing_invoice_information: "Missing invoice information",
     missing_code_compliance_information: "Missing Code of Compliance",
-    not_enough_information_to_search: "Not enough information to search",
+    not_enough_information_to_search: "Needs review",
     documents_uploaded_manually: "Documents uploaded manually",
     user_accepted_incomplete: "User accepted incomplete",
   };
@@ -1064,24 +1276,26 @@ function formatChecklistStatus(status: ProjectHandoverChecklistItem["status"]) {
 function checklistStatusStyles(status: ProjectHandoverChecklistItem["status"]) {
   if (status === "complete") return "border-emerald-200 bg-emerald-50 text-emerald-800";
   if (status === "user_accepted_incomplete") return "border-purple-200 bg-purple-50 text-purple-800";
-  if (status === "not_enough_information_to_search") return "border-amber-200 bg-amber-50 text-amber-900";
+  if (status === "not_enough_information_to_search") return "border-slate-200 bg-slate-50 text-slate-700";
   if (status.startsWith("missing_")) return "border-rose-200 bg-rose-50 text-rose-800";
   if (status === "documents_uploaded_manually") return "border-cyan-200 bg-cyan-50 text-cyan-800";
   return "border-slate-200 bg-slate-50 text-slate-700";
 }
 
 function AddHandoverItemForm({
+  initialCategory,
   productVersions,
   projectId,
   setDirty,
 }: {
+  initialCategory?: string;
   productVersions: ProductVersion[];
   projectId: string;
   setDirty: (dirty: boolean) => void;
 }) {
   const emptyDraft = {
     title: "",
-    category: "",
+    category: initialCategory || "",
     brand: "",
     manufacturer: "",
     model: "",
@@ -1092,6 +1306,7 @@ function AddHandoverItemForm({
     quantity: "",
     finish: "",
     colour: "",
+    maintenanceScheduleKey: "",
     careInstructions: "",
     manualUrl: "",
     warrantyInformation: "",
@@ -1107,7 +1322,7 @@ function AddHandoverItemForm({
     .filter((product) => {
       const query = draft.title.trim().toLowerCase();
       if (!query) return false;
-      return `${product.productName} ${product.brand} ${product.category} ${product.reviewReason}`.toLowerCase().includes(query);
+      return matchesSearchTokens(query, `${product.productName} ${product.brand} ${product.category} ${product.location} ${product.reviewReason}`);
     })
     .slice(0, 6);
 
@@ -1135,12 +1350,15 @@ function AddHandoverItemForm({
       <input name="projectId" type="hidden" value={projectId} />
       <input name="selectedProductId" type="hidden" value={selectedProduct?.id || ""} />
       <input name="selectedProductLabel" type="hidden" value={selectedProduct ? formatProductSuggestion(selectedProduct) : ""} />
-      <div>
-        <p className="text-sm font-semibold text-cyan-700">Database autofill + manual entry</p>
-        <h3 className="mt-1 text-base font-semibold text-slate-950">Add handover item</h3>
-        <p className="mt-2 text-sm leading-6 text-slate-600">
-          Type the item details below. Matching database suggestions appear automatically and can autofill known fields, or you can keep typing and add the item manually.
-        </p>
+      <div className="flex flex-col gap-3 border-b border-slate-100 pb-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-cyan-700">Database autofill + manual entry</p>
+          <h3 className="mt-1 text-base font-semibold text-slate-950">Add handover item</h3>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            Type the item details below. Matching database suggestions appear automatically and can autofill known fields, or you can keep typing and add the item manually.
+          </p>
+        </div>
+        <SubmitButton icon={Plus} label={submitLabel} />
       </div>
       <div className="rounded-md border border-cyan-200 bg-cyan-50 p-3">
         <p className="text-xs font-semibold uppercase tracking-normal text-cyan-800">Database suggestions</p>
@@ -1172,7 +1390,7 @@ function AddHandoverItemForm({
         ) : null}
       </div>
 
-      <div className="grid gap-3">
+      <div className="grid gap-3 md:grid-cols-2">
         <ChecklistSelectInput label="Category" name="category" onChange={(value) => updateDraft("category", value)} options={handoverCategoryOptions} value={draft.category} />
         <ChecklistTextInput label="Location" name="location" onChange={(value) => updateDraft("location", value)} placeholder="Kitchen, ensuite, exterior" value={draft.location} />
         <ChecklistTextInput label="Brand / manufacturer" name="brand" onChange={(value) => updateDraft("brand", value)} placeholder="Fisher & Paykel" value={draft.brand} />
@@ -1182,17 +1400,68 @@ function AddHandoverItemForm({
         <ChecklistTextInput label="Supplier SKU" name="supplierSku" onChange={(value) => updateDraft("supplierSku", value)} value={draft.supplierSku} />
         <ChecklistTextInput label="Quantity" name="quantity" onChange={(value) => updateDraft("quantity", value)} value={draft.quantity} />
         <ChecklistTextInput label="Finish / colour" name="finish" onChange={(value) => updateDraft("finish", value)} value={draft.finish} />
+        <ChecklistSelectInput
+          label="Shared maintenance schedule"
+          name="maintenanceScheduleKey"
+          onChange={(value) => updateDraft("maintenanceScheduleKey", value)}
+          options={[{ label: "No shared schedule", value: "" }, ...maintenanceSchedules.map((schedule) => ({ label: schedule.title, value: schedule.key }))]}
+          value={draft.maintenanceScheduleKey}
+        />
         <input name="colour" type="hidden" value={draft.colour} />
       </div>
 
-      <div className="grid gap-3">
-        <ChecklistTextarea label="Care instructions" name="careInstructions" onChange={(value) => updateDraft("careInstructions", value)} value={draft.careInstructions} />
-        <ChecklistTextInput label="Manual link/reference" name="manualUrl" onChange={(value) => updateDraft("manualUrl", value)} value={draft.manualUrl} />
-        <ChecklistTextarea label="Warranty information" name="warrantyInformation" onChange={(value) => updateDraft("warrantyInformation", value)} value={draft.warrantyInformation} />
-        <ChecklistTextarea label="Invoice / purchase info" name="invoiceData" onChange={(value) => updateDraft("invoiceData", value)} value={draft.invoiceData} />
-        <ChecklistTextarea label="Code of Compliance / compliance docs" name="codeComplianceInformation" onChange={(value) => updateDraft("codeComplianceInformation", value)} value={draft.codeComplianceInformation} />
-        <ChecklistTextarea label="Supporting documents/photos note" name="supportingDocumentsNote" onChange={(value) => updateDraft("supportingDocumentsNote", value)} value={draft.supportingDocumentsNote} />
-        <ChecklistTextarea label="Builder notes" name="extraNotes" onChange={(value) => updateDraft("extraNotes", value)} value={draft.extraNotes} />
+      <div className="grid gap-3 lg:grid-cols-2">
+        <DocumentEvidenceInput
+          description="Write care instructions, paste a care-guide link, or upload a care guide."
+          fileName="careDocumentFile"
+          label="Care instructions / guide"
+          name="careInstructions"
+          onChange={(value) => updateDraft("careInstructions", value)}
+          value={draft.careInstructions}
+        />
+        <DocumentEvidenceInput
+          description="Paste a manual link/reference or upload the manual file."
+          fileName="manualDocumentFile"
+          label="Manual"
+          name="manualUrl"
+          onChange={(value) => updateDraft("manualUrl", value)}
+          value={draft.manualUrl}
+        />
+        <DocumentEvidenceInput
+          description="Write warranty terms, paste a warranty link, or upload the warranty file."
+          fileName="warrantyDocumentFile"
+          label="Warranty"
+          name="warrantyInformation"
+          onChange={(value) => updateDraft("warrantyInformation", value)}
+          value={draft.warrantyInformation}
+        />
+        <DocumentEvidenceInput
+          description="Write purchase details, paste an invoice link, or upload invoice evidence."
+          fileName="invoiceDocumentFile"
+          label="Invoice / purchase evidence"
+          name="invoiceData"
+          onChange={(value) => updateDraft("invoiceData", value)}
+          value={draft.invoiceData}
+        />
+        <DocumentEvidenceInput
+          description="Write compliance notes, paste a consent/CCC link, or upload compliance evidence."
+          fileName="codeComplianceDocumentFile"
+          label="Code Compliance / consent"
+          name="codeComplianceInformation"
+          onChange={(value) => updateDraft("codeComplianceInformation", value)}
+          value={draft.codeComplianceInformation}
+        />
+        <DocumentEvidenceInput
+          description="Write supporting notes, paste a photo/document link, or upload supporting evidence."
+          fileName="supportingDocumentFile"
+          label="Supporting documents / photos"
+          name="supportingDocumentsNote"
+          onChange={(value) => updateDraft("supportingDocumentsNote", value)}
+          value={draft.supportingDocumentsNote}
+        />
+        <div className="lg:col-span-2">
+          <ChecklistTextarea label="Builder notes" name="extraNotes" onChange={(value) => updateDraft("extraNotes", value)} value={draft.extraNotes} />
+        </div>
       </div>
       <div className="flex justify-end border-t border-slate-100 pt-4">
         <SubmitButton icon={Plus} label={submitLabel} />
@@ -1207,7 +1476,7 @@ function ProjectHandoverChecklistSection({
   setDirty,
 }: {
   checklist: ProjectHandoverChecklistItem[];
-  onAddItem: () => void;
+  onAddItem: (category?: string) => void;
   setDirty: (dirty: boolean) => void;
 }) {
   const [filters, setFilters] = useState({
@@ -1218,12 +1487,18 @@ function ProjectHandoverChecklistSection({
     source: "all",
     review: "all",
   });
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const completeCount = checklist.filter((item) => item.status === "complete").length;
-  const acceptedIncompleteCount = checklist.filter((item) => item.status === "user_accepted_incomplete").length;
   const missingCount = checklist.filter((item) => item.status.startsWith("missing_")).length;
-  const notEnoughCount = checklist.filter((item) => item.status === "not_enough_information_to_search").length;
-  const needsReviewCount = checklist.filter((item) => item.status === "needs_review" || item.status === "documents_uploaded_manually").length;
-  const categoryOptions = Array.from(new Set(checklist.map((item) => item.category).filter(Boolean) as string[])).sort();
+  const needsReviewCount = checklist.filter((item) => item.status === "needs_review" || item.status === "documents_uploaded_manually" || item.status === "not_enough_information_to_search").length;
+  const categoryOptions = Array.from(new Set([
+    ...defaultHandoverGroups,
+    ...(checklist.map((item) => item.category).filter(Boolean) as string[]),
+  ])).sort((left, right) => {
+    const leftIndex = defaultHandoverGroups.indexOf(left);
+    const rightIndex = defaultHandoverGroups.indexOf(right);
+    return (leftIndex === -1 ? Number.MAX_SAFE_INTEGER : leftIndex) - (rightIndex === -1 ? Number.MAX_SAFE_INTEGER : rightIndex) || left.localeCompare(right);
+  });
   const categoryGroups = categoryOptions.map((category) => {
     const items = checklist.filter((item) => item.category === category);
     return {
@@ -1232,6 +1507,7 @@ function ProjectHandoverChecklistSection({
       ready: items.filter((item) => item.status === "complete" || item.status === "user_accepted_incomplete").length,
     };
   });
+  const selectedItem = checklist.find((item) => item.id === selectedItemId) || null;
   const filteredChecklist = checklist.filter((item) => {
     const searchHaystack = [
       item.title,
@@ -1257,7 +1533,7 @@ function ProjectHandoverChecklistSection({
           : "incomplete";
 
     return (
-      (!filters.search || searchHaystack.includes(filters.search.toLowerCase())) &&
+      (!filters.search || matchesSearchTokens(filters.search, searchHaystack)) &&
       (filters.status === "all" || item.status === filters.status || (filters.status === "missing" && item.status.startsWith("missing_"))) &&
       (filters.category === "all" || item.category === filters.category) &&
       (filters.missing === "all" || missingSections.some((section) => section.toLowerCase().includes(filters.missing.toLowerCase()))) &&
@@ -1279,7 +1555,7 @@ function ProjectHandoverChecklistSection({
         </div>
         <button
           className="inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-md bg-cyan-700 px-3 text-xs font-semibold text-white hover:bg-cyan-800 sm:w-auto"
-          onClick={onAddItem}
+          onClick={() => onAddItem()}
           type="button"
         >
           <Plus className="size-4" />
@@ -1294,38 +1570,40 @@ function ProjectHandoverChecklistSection({
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
           <button
-            className={`rounded-md border px-3 py-2 text-left text-xs font-semibold transition ${filters.category === "all" ? "border-cyan-500 bg-cyan-50 text-cyan-900" : "border-slate-200 bg-white text-slate-700 hover:border-cyan-300 hover:bg-cyan-50"}`}
+            className={`rounded-md border px-3 py-2 text-left text-xs font-semibold transition ${filters.category === "all" ? "border-cyan-500 bg-cyan-50 text-cyan-900" : "border-slate-200 bg-white text-cyan-950 hover:border-cyan-300 hover:bg-cyan-50"}`}
             onClick={() => setFilters((current) => ({ ...current, category: "all" }))}
             type="button"
           >
             <span className="block">All items</span>
             <span className="mt-0.5 block font-normal text-slate-500">{checklist.length} items</span>
           </button>
-          {categoryGroups.length ? categoryGroups.map((group) => (
+          {categoryGroups.map((group) => (
             <button
-              className={`rounded-md border px-3 py-2 text-left text-xs font-semibold transition ${filters.category === group.category ? "border-cyan-500 bg-cyan-50 text-cyan-900" : "border-slate-200 bg-white text-slate-700 hover:border-cyan-300 hover:bg-cyan-50"}`}
+              className={`rounded-md border px-3 py-2 text-left text-xs font-semibold transition ${filters.category === group.category ? "border-cyan-500 bg-cyan-50 text-cyan-900" : "border-slate-200 bg-white text-cyan-950 hover:border-cyan-300 hover:bg-cyan-50"}`}
               key={group.category}
-              onClick={() => setFilters((current) => ({ ...current, category: group.category }))}
+              onClick={() => {
+                setFilters((current) => ({ ...current, category: group.category }));
+                if (group.count === 0) {
+                  onAddItem(group.category);
+                }
+              }}
               type="button"
             >
               <span className="block">{group.category}</span>
-              <span className="mt-0.5 block font-normal text-slate-500">{group.ready}/{group.count} ready</span>
+              <span className="mt-0.5 block font-normal text-slate-500">
+                {group.count ? `${group.ready}/${group.count} ready` : "Add item"}
+              </span>
             </button>
-          )) : (
-            <p className="rounded-md border border-dashed border-slate-300 bg-white px-3 py-2 text-xs text-slate-500">
-              Add items to create category groups such as Exterior, Interior, Kitchen, Bathroom, or other project categories.
-            </p>
-          )}
+          ))}
         </div>
       </div>
 
       <div className="mt-3 grid gap-2 text-[11px] sm:grid-cols-3 lg:grid-cols-6">
         <ChecklistMetric label="Items" value={checklist.length} />
         <ChecklistMetric label="Complete" value={completeCount} />
-        <ChecklistMetric label="Needs checking" value={needsReviewCount} />
+        <ChecklistMetric label="Added" value={needsReviewCount} />
         <ChecklistMetric label="Missing" value={missingCount} />
-        <ChecklistMetric label="Too vague" value={notEnoughCount} />
-        <ChecklistMetric label="Accepted incomplete" value={acceptedIncompleteCount} />
+
       </div>
 
       <div className="mt-3 space-y-2">
@@ -1333,18 +1611,34 @@ function ProjectHandoverChecklistSection({
           <p className="text-sm font-semibold text-slate-950">Search and status filters</p>
           <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
             <ChecklistTextInput label="Search" name="filterSearch" onChange={(value) => setFilters((current) => ({ ...current, search: value }))} placeholder="Name, brand, room, supplier" value={filters.search} />
-            <ChecklistFilterSelect label="Status" onChange={(value) => setFilters((current) => ({ ...current, status: value }))} value={filters.status} options={[{ label: "All statuses", value: "all" }, { label: "Complete", value: "complete" }, { label: "Needs checking", value: "needs_review" }, { label: "Missing info", value: "missing" }, { label: "Accepted incomplete", value: "user_accepted_incomplete" }, { label: "Not enough identity", value: "not_enough_information_to_search" }]} />
+            <ChecklistFilterSelect label="Status" onChange={(value) => setFilters((current) => ({ ...current, status: value }))} value={filters.status} options={[{ label: "All statuses", value: "all" }, { label: "Complete", value: "complete" }, { label: "Added", value: "needs_review" }, { label: "Missing info", value: "missing" }]} />
             <ChecklistFilterSelect label="Missing section" onChange={(value) => setFilters((current) => ({ ...current, missing: value }))} value={filters.missing} options={[{ label: "Any section", value: "all" }, { label: "Care", value: "care" }, { label: "Manual", value: "manual" }, { label: "Warranty", value: "warranty" }, { label: "Invoice", value: "invoice" }, { label: "Compliance", value: "Compliance" }, { label: "Supporting docs", value: "supporting" }]} />
             <ChecklistFilterSelect label="Source" onChange={(value) => setFilters((current) => ({ ...current, source: value }))} value={filters.source} options={[{ label: "All sources", value: "all" }, { label: "Manual", value: "manual" }, { label: "Database autofill", value: "database_autofill" }, { label: "Previous import", value: "imported" }]} />
-            <ChecklistFilterSelect label="Completion state" onChange={(value) => setFilters((current) => ({ ...current, review: value }))} value={filters.review} options={[{ label: "Any completion state", value: "all" }, { label: "Needs checking", value: "needs_review" }, { label: "Complete", value: "complete" }, { label: "Accepted incomplete", value: "accepted_incomplete" }, { label: "Incomplete", value: "incomplete" }]} />
+            <ChecklistFilterSelect label="Completion state" onChange={(value) => setFilters((current) => ({ ...current, review: value }))} value={filters.review} options={[{ label: "Any completion state", value: "all" }, { label: "Added", value: "needs_review" }, { label: "Complete", value: "complete" }, { label: "Incomplete", value: "incomplete" }]} />
           </div>
         </div>
-        {filteredChecklist.length ? filteredChecklist.map((item) => <ProjectHandoverChecklistCard item={item} key={item.id} setDirty={setDirty} />) : (
+        {filteredChecklist.length ? (
+          <div className="handover-item-list">
+            {filteredChecklist.map((item) => <ProjectHandoverChecklistCard item={item} key={item.id} onOpen={() => setSelectedItemId(item.id)} />)}
+          </div>
+        ) : (
           <div className="rounded-lg border border-dashed border-slate-300 bg-white p-4 text-xs leading-6 text-slate-600">
             No checklist items match these filters. Add a manual item or clear filters.
+            {filters.category !== "all" ? (
+              <button className="ml-2 font-semibold text-cyan-700 underline" onClick={() => onAddItem(filters.category)} type="button">
+                Add {filters.category} item
+              </button>
+            ) : null}
           </div>
         )}
       </div>
+      {selectedItem ? (
+        <HandoverChecklistItemModal
+          item={selectedItem}
+          onClose={() => setSelectedItemId(null)}
+          setDirty={setDirty}
+        />
+      ) : null}
     </section>
   );
 }
@@ -1400,6 +1694,46 @@ function ChecklistTextarea({
         value={value}
       />
     </label>
+  );
+}
+
+function DocumentEvidenceInput({
+  description,
+  fileName,
+  label,
+  name,
+  onChange,
+  value,
+}: {
+  description: string;
+  fileName: string;
+  label: string;
+  name: string;
+  onChange: (value: string) => void;
+  value: string;
+}) {
+  return (
+    <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+      <label className="block">
+        <span className="text-sm font-semibold text-slate-800">{label}</span>
+        <span className="mt-0.5 block text-xs leading-5 text-slate-500">{description}</span>
+        <textarea
+          className="mt-2 min-h-20 w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
+          name={name}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder="Write text or paste a link/reference here."
+          value={value}
+        />
+      </label>
+      <label className="mt-2 block">
+        <span className="text-xs font-semibold text-slate-600">Or upload file</span>
+        <input
+          className="mt-1 block h-8 w-full cursor-pointer rounded-md border border-dashed border-slate-300 bg-white px-2 py-1 text-[11px] text-cyan-950 file:mr-2 file:h-5 file:rounded file:border-0 file:bg-cyan-700 file:px-2 file:text-[11px] file:font-semibold file:text-white hover:border-cyan-300"
+          name={fileName}
+          type="file"
+        />
+      </label>
+    </div>
   );
 }
 
@@ -1461,37 +1795,137 @@ function ChecklistFilterSelect({
   );
 }
 
-const checklistSectionOptions = [
-  { label: "Missing", value: "missing" },
-  { label: "Provided", value: "provided" },
-  { label: "Autofilled - needs checking", value: "autofilled_needs_review" },
-  { label: "Checked / complete", value: "reviewed" },
-  { label: "Uploaded manually", value: "uploaded_manually" },
-  { label: "Accepted incomplete", value: "accepted_incomplete" },
-  { label: "Not required", value: "not_required" },
-];
 
 function ChecklistMetric({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5">
+    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
       <p className="text-[11px] font-semibold uppercase tracking-normal text-slate-500">{label}</p>
       <p className="mt-1 text-base font-semibold text-slate-950">{value}</p>
     </div>
   );
 }
 
-function ProjectHandoverChecklistCard({ item, setDirty }: { item: ProjectHandoverChecklistItem; setDirty: (dirty: boolean) => void }) {
-  const missingSections = getMissingChecklistSections(item);
-  const searchable = hasEnoughIdentityToSearch(item);
+function CompactItemTextField({
+  label,
+  name,
+  defaultValue,
+  required,
+}: {
+  label: string;
+  name: string;
+  defaultValue?: string;
+  required?: boolean;
+}) {
+  return (
+    <label className="handover-item-field">
+      <span className="handover-item-field-label">{label}</span>
+      <input
+        className="handover-item-input"
+        defaultValue={defaultValue}
+        name={name}
+        required={required}
+      />
+    </label>
+  );
+}
+
+function CompactItemSelectField({
+  label,
+  name,
+  defaultValue,
+  options,
+}: {
+  label: string;
+  name: string;
+  defaultValue?: string;
+  options: Array<{ label: string; value: string }>;
+}) {
+  return (
+    <label className="handover-item-field">
+      <span className="handover-item-field-label">{label}</span>
+      <select
+        className="handover-item-input"
+        defaultValue={defaultValue}
+        name={name}
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>{option.label}</option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function CompactItemTextarea({
+  label,
+  name,
+  defaultValue,
+}: {
+  label: string;
+  name: string;
+  defaultValue?: string;
+}) {
+  return (
+    <label className="handover-item-field">
+      <span className="handover-item-field-label">{label}</span>
+      <textarea
+        className="handover-item-textarea"
+        defaultValue={defaultValue}
+        name={name}
+      />
+    </label>
+  );
+}
+
+function CompactDocumentEvidenceField({
+  defaultValue,
+  description,
+  fileName,
+  label,
+  name,
+}: {
+  defaultValue?: string;
+  description: string;
+  fileName: string;
+  label: string;
+  name: string;
+}) {
+  return (
+    <div className="handover-item-document-field">
+      <label className="handover-item-field">
+        <span className="handover-item-field-label">{label}</span>
+        <span className="handover-item-field-help">{description}</span>
+        <textarea
+          className="handover-item-textarea"
+          defaultValue={defaultValue}
+          name={name}
+          placeholder="Write text or paste a link/reference here."
+        />
+      </label>
+      <label className="handover-item-field">
+        <span className="handover-item-field-label">Upload file instead</span>
+        <input className="handover-item-file-input" name={fileName} type="file" />
+      </label>
+    </div>
+  );
+}
+
+function ProjectHandoverChecklistCard({ item, onOpen }: { item: ProjectHandoverChecklistItem; onOpen: () => void }) {
+  const sectionSummaries = getChecklistSectionSummaries(item);
+  const attentionSummaries = sectionSummaries.filter((section) => section.tone === "danger" || section.tone === "warn");
   const location = getChecklistMetadataValue(item, "location");
   const quantity = getChecklistMetadataValue(item, "quantity");
   const finish = getChecklistMetadataValue(item, "finish");
   const colour = getChecklistMetadataValue(item, "colour");
-  const supportingDocumentsNote = getChecklistMetadataValue(item, "supporting_documents_note");
-  const identity = [item.brand || item.manufacturer, item.model || item.productCode || item.sku, item.supplier].filter(Boolean).join(" · ");
+  const maintenanceScheduleLabel = getMaintenanceScheduleLabel(getChecklistMetadataValue(item, "maintenance_schedule_key"));
+  const primaryIdentity = [item.brand || item.manufacturer, item.model || item.productCode || item.sku].filter(Boolean).join(" · ");
+  const secondaryIdentity = [item.supplier, item.category, location].filter(Boolean).join(" · ");
 
   return (
-    <article className="rounded-lg border border-slate-200 bg-white p-3">
+    <article className="handover-item-card">
+      <button className="handover-item-open-button" onClick={onOpen} type="button">
+        <span className="sr-only">Open {item.title} details</span>
+      </button>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="flex flex-wrap items-center gap-2">
@@ -1499,13 +1933,17 @@ function ProjectHandoverChecklistCard({ item, setDirty }: { item: ProjectHandove
             <span className={`rounded-md border px-2.5 py-1 text-xs font-semibold ${checklistStatusStyles(item.status)}`}>
               {formatChecklistStatus(item.status)}
             </span>
-            <span className="rounded-md border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-xs font-semibold text-cyan-800">
+            <span className="handover-item-source-badge">
               {getChecklistSourceLabel(item)}
             </span>
           </div>
           <p className="mt-1 text-sm text-slate-600">
-            {identity || "No brand/model/supplier detail yet"}{item.category ? ` · ${item.category}` : ""}{location ? ` · ${location}` : ""}
+            {primaryIdentity || "No brand/model detail yet"}
           </p>
+          {secondaryIdentity ? <p className="mt-0.5 text-xs font-medium text-slate-500">{secondaryIdentity}</p> : null}
+          {maintenanceScheduleLabel !== "No shared maintenance schedule" ? (
+            <p className="mt-0.5 text-xs font-medium text-cyan-700">Maintenance: {maintenanceScheduleLabel}</p>
+          ) : null}
           {[quantity, finish, colour].filter(Boolean).length ? (
             <p className="mt-1 text-xs text-slate-500">
               {[quantity ? `Qty: ${quantity}` : null, finish ? `Finish: ${finish}` : null, colour ? `Colour: ${colour}` : null].filter(Boolean).join(" · ")}
@@ -1517,146 +1955,154 @@ function ProjectHandoverChecklistCard({ item, setDirty }: { item: ProjectHandove
         </span>
       </div>
 
-      {item.status === "not_enough_information_to_search" ? (
-        <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2.5 text-xs leading-5 text-amber-900">
-          <p className="font-semibold">Not enough information to search reliably.</p>
-          <p>Add a brand/manufacturer, model, SKU/product code, supplier, invoice details, photo, or document before source search. You can still manually upload/enter the required handover information or accept this item incomplete.</p>
+      {attentionSummaries.length ? (
+        <div className="handover-item-attention">
+          <span className="handover-item-attention-label">Needs attention</span>
+          <span>{attentionSummaries.map((section) => `${section.label}: ${section.status}`).join(" · ")}</span>
         </div>
-      ) : null}
-
-      {item.valueSources.includes("database_autofill") ? (
-        <p className="mt-2 rounded-md border border-cyan-200 bg-cyan-50 p-2.5 text-xs leading-5 text-cyan-900">
-          Autofilled from the database. Check and edit every section before treating it as homeowner-ready.
-        </p>
-      ) : null}
-
-      {missingSections.length ? (
-        <p className="mt-2 text-xs leading-5 text-slate-600">
-          Missing or unchecked: {missingSections.join(", ")}.
-        </p>
-      ) : null}
-
-      <div className="mt-2 grid gap-1.5 text-[11px] text-slate-600 sm:grid-cols-3">
-        <ChecklistSectionStatus label="Care" status={item.sectionStatuses.careInstructions} />
-        <ChecklistSectionStatus label="Manual" status={item.sectionStatuses.manual} />
-        <ChecklistSectionStatus label="Warranty" status={item.sectionStatuses.warranty} />
-        <ChecklistSectionStatus label="Invoice" status={item.sectionStatuses.invoice} />
-        <ChecklistSectionStatus label="Code Compliance" status={item.sectionStatuses.codeCompliance} />
-        <ChecklistSectionStatus label="Supporting docs" status={item.sectionStatuses.supportingDocuments} />
-      </div>
-
-      <details className="mt-3 rounded-md border border-slate-200 bg-slate-50">
-        <summary className="cursor-pointer px-2.5 py-1.5 text-xs font-semibold text-slate-800">
-          Check / edit item details
-        </summary>
-        <form action={updateProjectHandoverChecklistItemAction} className="space-y-3 border-t border-slate-200 p-3" onChange={() => setDirty(true)}>
-          <input name="itemId" type="hidden" value={item.id} />
-          <input name="projectId" type="hidden" value={item.projectId} />
-          <input name="selectedProductId" type="hidden" value={getChecklistMetadataValue(item, "matched_product_id")} />
-          <input name="selectedProductLabel" type="hidden" value={getChecklistMetadataValue(item, "source_label")} />
-          <TextField label="Identity / item name" name="title" defaultValue={item.title} required />
-          <SelectField label="Category" name="category" defaultValue={item.category} options={getCategoryOptions(item.category)} />
-          <TextField label="Location" name="location" defaultValue={location} />
-          <TextField label="Manufacturer / brand" name="brand" defaultValue={item.brand || item.manufacturer} />
-          <TextField label="Model" name="model" defaultValue={item.model} />
-          <TextField label="SKU" name="sku" defaultValue={item.sku} />
-          <TextField label="Product code" name="productCode" defaultValue={item.productCode} />
-          <TextField label="Supplier" name="supplier" defaultValue={item.supplier} />
-          <TextField label="Supplier SKU" name="supplierSku" defaultValue={item.supplierSku} />
-          <TextField label="Quantity" name="quantity" defaultValue={quantity} />
-          <TextField label="Finish" name="finish" defaultValue={finish} />
-          <TextField label="Colour" name="colour" defaultValue={colour} />
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700">Care instructions</span>
-            <textarea className="mt-1 min-h-16 w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100" defaultValue={item.careInstructions} name="careInstructions" />
-          </label>
-          <TextField label="Manual link/reference" name="manualUrl" defaultValue={item.manualUrl} />
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700">Warranty information</span>
-            <textarea className="mt-1 min-h-16 w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100" defaultValue={item.warrantyInformation} name="warrantyInformation" />
-          </label>
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700">Invoice / purchase info</span>
-            <textarea className="mt-1 min-h-16 w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100" defaultValue={item.invoiceData} name="invoiceData" />
-          </label>
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700">Code of Compliance / compliance docs</span>
-            <textarea className="mt-1 min-h-16 w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100" defaultValue={item.codeComplianceInformation} name="codeComplianceInformation" />
-          </label>
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700">Supporting documents/photos</span>
-            <textarea className="mt-1 min-h-16 w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100" defaultValue={supportingDocumentsNote} name="supportingDocumentsNote" />
-          </label>
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700">Builder notes</span>
-            <textarea className="mt-1 min-h-16 w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100" defaultValue={item.extraNotes} name="extraNotes" />
-          </label>
-          <div className="grid gap-3 rounded-md border border-slate-200 bg-white p-3">
-            <ChecklistStatusSelect label="Care status" name="careInstructionsStatus" value={item.sectionStatuses.careInstructions} />
-            <ChecklistStatusSelect label="Manual status" name="manualStatus" value={item.sectionStatuses.manual} />
-            <ChecklistStatusSelect label="Warranty status" name="warrantyStatus" value={item.sectionStatuses.warranty} />
-            <ChecklistStatusSelect label="Invoice status" name="invoiceStatus" value={item.sectionStatuses.invoice} />
-            <ChecklistStatusSelect label="Compliance status" name="codeComplianceStatus" value={item.sectionStatuses.codeCompliance} />
-            <ChecklistStatusSelect label="Supporting docs status" name="supportingDocumentsStatus" value={item.sectionStatuses.supportingDocuments} />
-          </div>
-          <TextField label="Accepted-incomplete reason / audit note" name="acceptedIncompleteReason" defaultValue={item.acceptedIncompleteReason} />
-          <div className="flex justify-end">
-            <button className="inline-flex h-9 items-center rounded-md bg-slate-950 px-3 text-xs font-semibold text-white hover:bg-slate-800" type="submit">
-              Save item details
-            </button>
-          </div>
-        </form>
-      </details>
-
-      {item.acceptedIncompleteAt ? (
-        <p className="mt-3 rounded-md border border-purple-200 bg-purple-50 p-3 text-sm leading-6 text-purple-900">
-          User accepted incomplete on {formatDate(item.acceptedIncompleteAt)}{item.acceptedIncompleteReason ? `: ${item.acceptedIncompleteReason}` : "."}
-        </p>
       ) : (
-        <form action={acceptProjectHandoverChecklistItemIncompleteAction} className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-2.5">
-          <input name="itemId" type="hidden" value={item.id} />
-          <input name="projectId" type="hidden" value={item.projectId} />
-          <label className="block">
-            <span className="text-xs font-semibold uppercase tracking-normal text-slate-500">Accept incomplete paper trail</span>
-            <input
-              className="mt-2 h-9 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
-              name="acceptedIncompleteReason"
-              placeholder="e.g. User accepted item without manual; builder will supply if found later."
-              required
-            />
-          </label>
-          <div className="mt-3 flex items-center justify-between gap-3">
-            <p className="text-xs leading-5 text-slate-500">
-              {searchable ? "Search may be possible later, but this branch does not use spec automation to finish the demo flow." : "Search is blocked until identity improves; accepting incomplete records that choice."}
-            </p>
-            <button className="shrink-0 rounded-md border border-purple-200 bg-white px-3 py-2 text-xs font-semibold text-purple-800 hover:bg-purple-50" type="submit">
-              Accept incomplete
-            </button>
-          </div>
-        </form>
+        <div className="handover-item-ready-note">Key handover info is added or marked not required.</div>
       )}
+
+      <div className="handover-item-status-grid">
+        {sectionSummaries.map((section) => (
+          <ChecklistSectionStatus key={section.label} label={section.label} status={section.status} tone={section.tone} />
+        ))}
+      </div>
+      <p className="mt-2 text-xs font-semibold text-cyan-800">Click to view or edit details</p>
     </article>
   );
 }
 
-function ChecklistStatusSelect({ label, name, value }: { label: string; name: string; value: string }) {
+function HandoverChecklistItemModal({
+  item,
+  onClose,
+  setDirty,
+}: {
+  item: ProjectHandoverChecklistItem;
+  onClose: () => void;
+  setDirty: (dirty: boolean) => void;
+}) {
+  const location = getChecklistMetadataValue(item, "location");
+  const quantity = getChecklistMetadataValue(item, "quantity");
+  const finish = getChecklistMetadataValue(item, "finish");
+  const colour = getChecklistMetadataValue(item, "colour");
+  const supportingDocumentsNote = getChecklistMetadataValue(item, "supporting_documents_note");
+  const careDocumentId = getChecklistMetadataValue(item, "care_document_id");
+  const sectionSummaries = getChecklistSectionSummaries(item);
+  const formId = `handover-item-form-${item.id}`;
+
   return (
-    <label className="block">
-      <span className="text-xs font-semibold uppercase tracking-normal text-slate-500">{label}</span>
-      <select className="mt-2 h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-900 outline-none focus:border-cyan-600" defaultValue={value} name={name}>
-        {checklistSectionOptions.map((option) => (
-          <option key={option.value} value={option.value}>{option.label}</option>
-        ))}
-      </select>
-    </label>
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/55 p-4 sm:p-6"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <section className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-cyan-700">Handover item</p>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <h3 className="text-xl font-semibold tracking-normal text-slate-950">{item.title}</h3>
+              <span className={`rounded-md border px-2.5 py-1 text-xs font-semibold ${checklistStatusStyles(item.status)}`}>
+                {formatChecklistStatus(item.status)}
+              </span>
+              <span className="handover-item-source-badge">{getChecklistSourceLabel(item)}</span>
+            </div>
+            <p className="mt-1 text-sm text-slate-500">Review the homeowner-facing details, then save changes without leaving this project.</p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <button className="handover-item-save-button" form={formId} type="submit">
+              Save
+            </button>
+            <button
+              aria-label="Close item details"
+              className="inline-flex size-9 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50"
+              onClick={onClose}
+              type="button"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+        </div>
+        <div className="overflow-y-auto px-5 py-5">
+          <div className="handover-item-modal-status-grid">
+            {sectionSummaries.map((section) => (
+              <ChecklistSectionStatus key={section.label} label={section.label} status={section.status} tone={section.tone} />
+            ))}
+          </div>
+          <form action={updateProjectHandoverChecklistItemAction} className="handover-item-modal-form" id={formId} onChange={() => setDirty(true)}>
+            <input name="itemId" type="hidden" value={item.id} />
+            <input name="projectId" type="hidden" value={item.projectId} />
+            <input name="selectedProductId" type="hidden" value={getChecklistMetadataValue(item, "matched_product_id")} />
+            <input name="selectedProductLabel" type="hidden" value={getChecklistMetadataValue(item, "source_label")} />
+            <input name="careDocumentId" type="hidden" value={careDocumentId} />
+            <input name="manualDocumentId" type="hidden" value={item.manualDocumentId || ""} />
+            <input name="warrantyDocumentId" type="hidden" value={item.warrantyDocumentId || ""} />
+            <input name="invoiceDocumentId" type="hidden" value={item.invoiceDocumentId || ""} />
+            <input name="codeComplianceDocumentId" type="hidden" value={item.codeComplianceDocumentId || ""} />
+            <input name="supportingDocumentIds" type="hidden" value={item.supportingDocumentIds.join(",")} />
+
+            <section className="handover-item-modal-panel">
+              <h4 className="handover-item-modal-heading">Item identity</h4>
+              <div className="handover-item-modal-grid">
+                <CompactItemTextField label="Item name" name="title" defaultValue={item.title} required />
+                <CompactItemSelectField label="Category" name="category" defaultValue={item.category} options={getCategoryOptions(item.category)} />
+                <CompactItemTextField label="Location" name="location" defaultValue={location} />
+                <CompactItemTextField label="Brand" name="brand" defaultValue={item.brand || item.manufacturer} />
+                <CompactItemTextField label="Model" name="model" defaultValue={item.model} />
+                <CompactItemTextField label="SKU" name="sku" defaultValue={item.sku} />
+                <CompactItemTextField label="Product code" name="productCode" defaultValue={item.productCode} />
+                <CompactItemTextField label="Supplier" name="supplier" defaultValue={item.supplier} />
+                <CompactItemTextField label="Supplier SKU" name="supplierSku" defaultValue={item.supplierSku} />
+                <CompactItemTextField label="Quantity" name="quantity" defaultValue={quantity} />
+                <CompactItemTextField label="Finish" name="finish" defaultValue={finish} />
+                <CompactItemTextField label="Colour" name="colour" defaultValue={colour} />
+                <CompactItemSelectField
+                  label="Shared maintenance schedule"
+                  name="maintenanceScheduleKey"
+                  defaultValue={getChecklistMetadataValue(item, "maintenance_schedule_key")}
+                  options={[{ label: "No shared schedule", value: "" }, ...maintenanceSchedules.map((schedule) => ({ label: schedule.title, value: schedule.key }))]}
+                />
+              </div>
+            </section>
+
+            <section className="handover-item-modal-panel">
+              <h4 className="handover-item-modal-heading">Documents, links, and evidence</h4>
+              <div className="handover-item-modal-grid">
+                <CompactDocumentEvidenceField defaultValue={item.careInstructions} description="Write care notes, paste a care-guide link, or upload a care guide." fileName="careDocumentFile" label="Care instructions / guide" name="careInstructions" />
+                <CompactDocumentEvidenceField defaultValue={item.manualUrl} description="Paste a manual link/reference or upload the manual file." fileName="manualDocumentFile" label="Manual" name="manualUrl" />
+                <CompactDocumentEvidenceField defaultValue={item.warrantyInformation} description="Write warranty terms, paste a warranty link, or upload warranty evidence." fileName="warrantyDocumentFile" label="Warranty" name="warrantyInformation" />
+                <CompactDocumentEvidenceField defaultValue={item.invoiceData} description="Write purchase details, paste an invoice link, or upload invoice evidence." fileName="invoiceDocumentFile" label="Invoice / purchase" name="invoiceData" />
+                <CompactDocumentEvidenceField defaultValue={item.codeComplianceInformation} description="Write compliance notes, paste a CCC/consent link, or upload compliance evidence." fileName="codeComplianceDocumentFile" label="Code compliance / consent" name="codeComplianceInformation" />
+                <CompactDocumentEvidenceField defaultValue={supportingDocumentsNote} description="Write notes, paste a photo/document link, or upload supporting evidence." fileName="supportingDocumentFile" label="Supporting documents / photos" name="supportingDocumentsNote" />
+              </div>
+            </section>
+
+            <section className="handover-item-modal-panel handover-item-modal-panel--full">
+              <CompactItemTextarea label="Builder notes" name="extraNotes" defaultValue={item.extraNotes} />
+            </section>
+
+            <div className="handover-item-save-row">
+              <button className="handover-item-save-button" type="submit">
+                Save item details
+              </button>
+            </div>
+          </form>
+        </div>
+      </section>
+    </div>
   );
 }
 
-function ChecklistSectionStatus({ label, status }: { label: string; status: string }) {
+function ChecklistSectionStatus({ label, status, tone }: { label: string; status: string; tone: HandoverItemSectionSummary["tone"] }) {
   return (
-    <div className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-2">
-      <span className="font-semibold text-slate-700">{label}: </span>
-      <span>{status.replaceAll("_", " ")}</span>
+    <div className={`handover-item-section-chip handover-item-section-chip--${tone}`}>
+      <span className="handover-item-section-label">{label}</span>
+      <span className="handover-item-section-value">{status}</span>
     </div>
   );
 }
@@ -1729,73 +2175,6 @@ function SendPackagePanel({
         )}
       </section>
     </div>
-  );
-}
-
-function ProjectSideTools({
-  filteredProducts,
-  productQuery,
-  projectId,
-  setProductQuery,
-}: {
-  filteredProducts: ProductVersion[];
-  productQuery: string;
-  projectId?: string;
-  setProductQuery: (value: string) => void;
-}) {
-  return (
-    <section className="rounded-lg border border-slate-200 p-4">
-      <div className="flex items-center gap-2">
-        <Search className="size-4 text-cyan-700" />
-        <h3 className="font-semibold text-slate-950">Product search</h3>
-      </div>
-      <input
-        className="mt-4 h-10 w-full rounded-md border border-slate-200 px-3 text-sm outline-none ring-cyan-700/20 focus:border-cyan-700 focus:ring-4"
-        onChange={(event) => setProductQuery(event.target.value)}
-        placeholder="Search global or requested products"
-        value={productQuery}
-      />
-      <div className="mt-4 max-h-52 space-y-2 overflow-y-auto">
-        {filteredProducts.slice(0, 6).map((product) => (
-          <div className="rounded-md border border-slate-200 p-3" key={product.id}>
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <p className="text-sm font-semibold text-slate-950">{product.productName}</p>
-                <p className="mt-1 text-xs text-slate-500">{product.brand} - {product.category}</p>
-              </div>
-              <StatusPill variant={product.status} />
-            </div>
-          </div>
-        ))}
-      </div>
-      {projectId ? (
-        <form action={createBuilderProjectRequestAction} className="mt-3 space-y-2">
-          <input name="projectId" type="hidden" value={projectId} />
-          <input name="requestType" type="hidden" value="product" />
-          <TextField label="Request product" name="title" defaultValue={productQuery} placeholder="Brand, model, or product name" required />
-          <TextField label="Location" name="location" placeholder="Kitchen, ensuite, exterior..." />
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700">Details</span>
-            <textarea
-              className="mt-1 min-h-16 w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-950 outline-none ring-cyan-700/20 placeholder:text-slate-400 focus:border-cyan-700 focus:ring-4"
-              name="details"
-              placeholder="What should be looked up or approved?"
-            />
-          </label>
-          <button
-            className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-            type="submit"
-          >
-            <Plus className="size-4" />
-            Request missing item
-          </button>
-        </form>
-      ) : (
-        <p className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-2.5 text-sm leading-6 text-slate-600">
-          Save the project first, then request missing products from inside the project workspace.
-        </p>
-      )}
-    </section>
   );
 }
 

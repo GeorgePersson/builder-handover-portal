@@ -4,6 +4,8 @@ export type ProjectStatus = "draft" | "in_review" | "published";
 
 export type ConfidenceLabel = "high" | "medium" | "low" | "blocked";
 
+export type ProjectExposureZone = "standard" | "coastal_sea_spray" | "geothermal" | "coastal_and_geothermal";
+
 export type ProductStatus = "approved" | "needs_review" | "draft" | "blocked";
 
 export type DocumentType =
@@ -24,6 +26,8 @@ export type Project = {
   clientInvitedAt?: string;
   projectType: string;
   handoverDate: string;
+  cccGrantedDate?: string;
+  exposureZone?: ProjectExposureZone;
   publishedAt?: string;
   status: ProjectStatus;
   documentCount: number;
@@ -78,6 +82,7 @@ export type ProductVersion = {
   location: string;
   warrantyPeriod: string;
   maintenanceSummary: string;
+  maintenanceScheduleKey?: string;
   voidConditions: string;
   confidenceScore: number;
   confidenceLabel: ConfidenceLabel;
@@ -93,6 +98,9 @@ export type MaintenanceTask = {
   projectId: string;
   title: string;
   cadence: string;
+  frequencyMonths?: number;
+  maintenanceScheduleKey?: string;
+  startsFromCcc?: boolean;
   dueDate: string;
   requiredForWarranty: boolean;
   relatedProduct: string;

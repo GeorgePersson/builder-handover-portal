@@ -201,10 +201,6 @@ export function deriveProjectHandoverChecklistStatus(
     return "user_accepted_incomplete";
   }
 
-  if (!hasEnoughIdentityToSearch(item) && getMissingChecklistSections({ sectionStatuses: item.sectionStatuses }).length > 0) {
-    return "not_enough_information_to_search";
-  }
-
   if (!sectionProvided(item.sectionStatuses.manual) && !clean(item.manualDocumentId) && !clean(item.manualUrl)) {
     return "missing_manual";
   }

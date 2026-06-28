@@ -44,7 +44,7 @@ function getDoclingScriptPath() {
     return path.resolve(/* turbopackIgnore: true */ process.cwd(), configuredScript);
   }
 
-  return path.join(process.cwd(), "scripts", "docling-convert.py");
+  return path.join(/* turbopackIgnore: true */ process.cwd(), "scripts", "docling-convert.py");
 }
 
 export function getDocumentContextReadiness(): DocumentContextReadiness {
@@ -52,7 +52,7 @@ export function getDocumentContextReadiness(): DocumentContextReadiness {
   const providerEnvPresent = requestedProvider !== "auto";
   const llamaCloudConfigured = hasLlamaCloudConfig();
   const unstructuredConfigured = hasUnstructuredConfig();
-  const doclingLocalConfigured = existsSync(getDoclingScriptPath());
+  const doclingLocalConfigured = existsSync(/* turbopackIgnore: true */ getDoclingScriptPath());
   const doclingHttpConfigured = Boolean(process.env.DOCLING_SERVICE_URL?.trim());
   const reasons: string[] = [];
   let selectedProvider: DocumentContextProvider = "local_pdf";

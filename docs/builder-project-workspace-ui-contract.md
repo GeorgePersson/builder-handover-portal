@@ -53,6 +53,18 @@ When no project is selected, `/builder/projects` should show a project browser/l
 
 The first project should not auto-open unless a valid `projectId` URL parameter was supplied.
 
+## New project modal
+
+The new project modal should stay focused on project/client creation plus service confidence.
+
+Required behaviour:
+
+- Left side: Project and client form with project name, project type, address, target handover date, client name, client email, project-credit confirmation, and Save project button.
+- Right side: Handover record/service assurance panel.
+- Do **not** show Product search/product database cards in the new project modal.
+- The assurance panel should use check-mark rows and explain in plain language that the service keeps the handover record available for at least 10 years, keeps legal/compliance documents organised, and emails the homeowner the stored handover information for permanent safekeeping when the service period ends.
+- Keep the wording as service/record-retention information, not legal advice.
+
 ## Project workspace header
 
 The selected project workspace header should include:
@@ -119,9 +131,9 @@ Right side: Add client document form
 - Type
 - File picker
 - Hidden `visibleToClient=on`
-- Save button
+- Upload button
 
-The document form must stay compact. Title + Type can sit side by side, with file picker full-width below. Do not add visible client-toggle noise unless requested.
+The document form must stay compact and consistent. Title, Type, and File should use matching full-width control sizing in the current compact card; do not add visible client-toggle noise unless requested.
 
 ## Handover Items & Products module
 
@@ -139,7 +151,11 @@ Required controls/content:
 - Include an `All items` reset button.
 - Show useful ready/total counts on category buttons.
 - Keep search/status/source/missing-section/completion filters below the group buttons as secondary filters.
-- Item cards should show product identity, source, status, missing sections, and expandable edit controls.
+- Item cards should show product identity, source, status, missing sections, and open a clean detail modal when clicked.
+- Item cards should render in a two-column grid on wide screens so the list uses the full workspace width.
+- Item card text should prioritize important handover information: title, brand/model, supplier/category/location, update date, compact inline source/status badges, a short needs-attention summary, and compact section chips with readable statuses such as `Needs check`, `Added`, `Missing`, or `Not required`.
+- Database-autofill source should be a tiny inline badge such as `DB autofill` in the title row, not a separate full-width note/banner.
+- Item-card styling should use reusable global CSS classes (`handover-item-*`) from `src/app/globals.css` instead of repeating long Tailwind class strings for every item control.
 
 ## Add handover item modal
 
@@ -153,6 +169,7 @@ Required order:
 4. Approved product database suggestions immediately below the search field.
 5. Manual/detail fields below the suggestions panel.
 6. Care/manual/warranty/compliance/supporting-doc fields below identity fields.
+   - Short identity fields (`Category`, `Location`, `Brand / manufacturer`, `Model`, `SKU / product code`, `Supplier`, `Supplier SKU`, `Quantity`, `Finish / colour`) should render as a two-column grid on medium/wide screens; they do not need full-width text fields.
 7. Submit button.
 
 Behaviour:
@@ -162,6 +179,10 @@ Behaviour:
 - The builder can still edit/review every field.
 - Submitting without a suggestion is the manual path.
 - Selected suggestion can be cleared to continue manually.
+- Manual entries are trusted as the builder's intended project handover items. Do not block them with "not enough information to search" copy/statuses and do not trigger live web/source search from this modal.
+- Missing manual/care/warranty/document fields are logged automatically when the item is added or updated; do not require a second "accept incomplete" paper-trail step after creation.
+- Do not show the editable care/manual/warranty/invoice/compliance/supporting-doc status selector block at the bottom of item edit cards; section status should be derived from the entered content and audit logging, not a second manual status step.
+- Complete manual entries may be copied to the admin review/database queue for reusable-record review only when they contain the required reusable identity/detail fields; incomplete manual entries stay project-specific.
 
 ## Documents module
 
@@ -173,15 +194,26 @@ Required top module:
 
 Purpose: upload legal/compliance/handover evidence needed before the package is complete.
 
-Supported examples in copy/type options:
+Supported legal/type options:
 
-- Code Compliance Certificate / consent records
+- Code Compliance Certificate
+- Building consent documents
+- Approved plans and specifications
+- Consent amendments / minor variations
+- Council inspection records
+- Final inspection sign-off
+- Record of Building Work
+- Certificates of Design Work
 - Producer statements
-- Warranties
-- Manuals
-- Inspection records
-- Photos / supporting evidence
-- Other legal or compliance records
+- Electrical Certificate of Compliance
+- Electrical Safety Certificate
+- Gas certificate
+- Plumbing / drainage compliance certificates
+- Compliance schedule, if applicable
+- Manual
+- Warranty
+- Inspection record / photo
+- Other legal / compliance record
 
 Upload form fields:
 
@@ -189,9 +221,9 @@ Upload form fields:
 - Type
 - File picker
 - Hidden `visibleToClient=on`
-- Save button
+- Upload button
 
-The upload form should be client-visible by default for demo/current workflow. It must not specify explicit `encType` or `method` because it uses a server action.
+The upload form should be client-visible by default for demo/current workflow. It must not specify explicit `encType` or `method` because it uses a server action. The UI may submit `documentKind` values like `consent|Code Compliance Certificate`; server code maps the enum-safe prefix to the existing database `document_type` and uses the selected label as the document name when Title is blank. Large uploads require both `experimental.serverActions.bodySizeLimit` and `experimental.proxyClientMaxBodySize` to stay aligned at `60mb`; otherwise Next can truncate the multipart body and throw `Unexpected end of form`.
 
 Below the upload module, show:
 
@@ -207,17 +239,25 @@ Expected sidebar content:
 
 - Client access card with the only Client access control.
 - To be completed summary:
-  - items incomplete
-  - autofill checks
-  - manuals missing
-  - warranties missing
-  - compliance docs missing
-- Documents to upload / confirm guidance:
-  - Code Compliance Certificate / consent
-  - Product warranties
-  - Manuals and care guides
-  - Producer statements / inspection records
-  - Photos / supporting evidence
+  - manuals added
+  - warranties added
+  - Code Compliance missing only when required compliance evidence is still absent; otherwise Code Compliance added
+  - do not show manuals/warranties as missing in this sidebar summary
+- Required legal documents guidance:
+  - Code Compliance Certificate
+  - Building consent documents
+  - Approved plans and specifications
+  - Consent amendments / minor variations
+  - Council inspection records
+  - Final inspection sign-off
+  - Record of Building Work
+  - Certificates of Design Work
+  - Producer statements
+  - Electrical Certificate of Compliance
+  - Electrical Safety Certificate
+  - Gas certificate
+  - Plumbing / drainage compliance certificates
+  - Compliance schedule, if applicable
 - Item categories with item counts and ready counts.
 - Demo path reminder if useful.
 
@@ -238,8 +278,15 @@ Use this checklist when reviewing changes:
 - Spec automation button shows only the coming-soon/future module.
 - Add item modal has database suggestions/search at the top.
 - Project details and Add client document sit side by side on wide screens.
-- Detailed item entry/editing remains stacked and readable.
+- Detailed item entry/editing uses compact two-column fields on wide screens with reduced text/control size so the expanded details panel fits in a smaller window.
+- The item card list uses a two-column layout on wide screens and avoids raw dense status text in favour of a needs-attention summary plus formatted section chips.
+- Detailed item entry/editing does not show the old bottom status-selector block.
+- Item card/edit styling comes from global `handover-item-*` CSS classes.
+- Item detail review/editing should happen in a modal with key status chips at the top and two-column sections on wide screens, including `Item identity` and `Documents, links, and evidence`.
 - Document-upload server-action forms have no explicit `encType` or `method`.
+- Document upload buttons say `Upload`, not `Save`.
+- Document upload Title/Type/File controls line up with matching full-width sizing in the compact card.
+- Upload body limits are set for both server actions and proxy/client body cloning: `serverActions.bodySizeLimit = 60mb` and `proxyClientMaxBodySize = 60mb`.
 - `npm.cmd run lint` passes.
 - `npm.cmd run build` passes, ignoring only the known Docling/Turbopack NFT tracing warnings.
 

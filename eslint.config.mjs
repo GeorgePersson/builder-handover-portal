@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Project-local agent skill packs are tool/vendor assets, not app source.
+    ".agents/**",
+    ".codex/**",
   ]),
 ]);
 

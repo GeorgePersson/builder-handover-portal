@@ -36,6 +36,7 @@ import {
   getLocalExtractedItems,
   getLocalExtractedItem,
   getLocalPublishedItems,
+  saveLocalExtraction,
   getLocalSpecificationUploads,
   publishLocalHandoverPackage,
   updateLocalExtractedItem,
@@ -67,8 +68,9 @@ import {
   buildProjectHandoverChecklistItem,
   defaultChecklistSectionStatuses,
   deriveProjectHandoverChecklistStatus,
+  getMissingChecklistSections,
 } from "@/lib/project-handover-checklist";
-import type { ProjectHandoverChecklistItem } from "@/lib/project-handover-checklist";
+import type { HandoverChecklistValueSource, ProjectHandoverChecklistItem } from "@/lib/project-handover-checklist";
 import {
   aiHandoverApprovalText,
   builderHandoverApprovalText,
@@ -84,7 +86,7 @@ import {
 } from "@/lib/server/local-store/client-requests";
 import { getLocalGlobalProducts, upsertLocalGlobalProductFromExtractedItem } from "@/lib/server/local-store/products";
 import { enrichExtractedProduct } from "@/lib/ai/source-enrichment";
-import type { ExtractedHandoverItem } from "@/lib/types";
+import type { DocumentType, ExtractedHandoverItem } from "@/lib/types";
 import type {
   DocumentExtractionJobStatus,
   ExtractedItemReviewStatus,
@@ -107,6 +109,22 @@ function getOptional(formData: FormData, key: string) {
   const value = formData.get(key);
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
+function parseProjectDocumentKind(formData: FormData) {
+  const rawKind = getOptional(formData, "documentKind");
+  const rawType = getOptional(formData, "documentType");
+  const allowedTypes: DocumentType[] = ["consent", "manual", "warranty", "producer_statement", "photo", "other"];
+
+  if (rawKind) {
+    const [maybeType, ...labelParts] = rawKind.split("|");
+    const documentType = allowedTypes.includes(maybeType as DocumentType) ? maybeType as DocumentType : "other";
+    const selectedLabel = labelParts.join("|").trim() || null;
+    return { documentType, selectedLabel };
+  }
+
+  const documentType = allowedTypes.includes(rawType as DocumentType) ? rawType as DocumentType : "other";
+  return { documentType, selectedLabel: null as string | null };
+}
+
 
 function isMissingProjectHandoverChecklistTable(error: { message?: string; code?: string } | null) {
   return Boolean(
@@ -123,24 +141,28 @@ function getSectionStatusFromForm(formData: FormData, key: string, fallback: Pro
   return allowed.includes(value || "") ? value as typeof fallback : fallback;
 }
 
-function parseChecklistSectionStatuses(formData: FormData) {
+function parseChecklistSectionStatuses(
+  formData: FormData,
+  documentUploads: ChecklistDocumentUploadResult = { supportingDocumentIds: [], sourceMetadata: {}, uploaded: false },
+) {
   const selectedProductId = getOptional(formData, "selectedProductId");
   const autofilled = Boolean(selectedProductId);
+  const careGuideUploaded = Boolean(documentUploads.sourceMetadata.care_document_id);
   const defaults = {
     ...defaultChecklistSectionStatuses,
-    careInstructions: getOptional(formData, "careInstructions")
-      ? autofilled ? "autofilled_needs_review" as const : "provided" as const
+    careInstructions: getOptional(formData, "careInstructions") || careGuideUploaded
+      ? autofilled && !careGuideUploaded ? "autofilled_needs_review" as const : "provided" as const
       : defaultChecklistSectionStatuses.careInstructions,
-    manual: getOptional(formData, "manualUrl")
-      ? autofilled ? "autofilled_needs_review" as const : "provided" as const
+    manual: getOptional(formData, "manualUrl") || documentUploads.manualDocumentId
+      ? autofilled && !documentUploads.manualDocumentId ? "autofilled_needs_review" as const : documentUploads.manualDocumentId ? "uploaded_manually" as const : "provided" as const
       : defaultChecklistSectionStatuses.manual,
-    warranty: getOptional(formData, "warrantyInformation")
-      ? autofilled ? "autofilled_needs_review" as const : "provided" as const
+    warranty: getOptional(formData, "warrantyInformation") || documentUploads.warrantyDocumentId
+      ? autofilled && !documentUploads.warrantyDocumentId ? "autofilled_needs_review" as const : documentUploads.warrantyDocumentId ? "uploaded_manually" as const : "provided" as const
       : defaultChecklistSectionStatuses.warranty,
-    invoice: getOptional(formData, "invoiceData") ? "provided" as const : defaultChecklistSectionStatuses.invoice,
-    codeCompliance: getOptional(formData, "codeComplianceInformation") ? "provided" as const : defaultChecklistSectionStatuses.codeCompliance,
-    supportingDocuments: getOptional(formData, "supportingDocumentsNote") || getOptional(formData, "extraNotes")
-      ? "provided" as const
+    invoice: getOptional(formData, "invoiceData") || documentUploads.invoiceDocumentId ? documentUploads.invoiceDocumentId ? "uploaded_manually" as const : "provided" as const : defaultChecklistSectionStatuses.invoice,
+    codeCompliance: getOptional(formData, "codeComplianceInformation") || documentUploads.codeComplianceDocumentId ? documentUploads.codeComplianceDocumentId ? "uploaded_manually" as const : "provided" as const : defaultChecklistSectionStatuses.codeCompliance,
+    supportingDocuments: getOptional(formData, "supportingDocumentsNote") || getOptional(formData, "extraNotes") || documentUploads.supportingDocumentIds.length
+      ? documentUploads.supportingDocumentIds.length ? "uploaded_manually" as const : "provided" as const
       : defaultChecklistSectionStatuses.supportingDocuments,
   };
 
@@ -154,15 +176,33 @@ function parseChecklistSectionStatuses(formData: FormData) {
   };
 }
 
-function buildChecklistInputFromForm(formData: FormData) {
+type ChecklistDocumentUploadResult = {
+  manualDocumentId?: string;
+  warrantyDocumentId?: string;
+  invoiceDocumentId?: string;
+  codeComplianceDocumentId?: string;
+  supportingDocumentIds: string[];
+  sourceMetadata: Record<string, unknown>;
+  uploaded: boolean;
+};
+
+function buildChecklistInputFromForm(
+  formData: FormData,
+  documentUploads: ChecklistDocumentUploadResult = { supportingDocumentIds: [], sourceMetadata: {}, uploaded: false },
+) {
   const selectedProductId = getOptional(formData, "selectedProductId");
   const sourceLabel = getOptional(formData, "selectedProductLabel");
   const location = getOptional(formData, "location");
   const quantity = getOptional(formData, "quantity");
   const finish = getOptional(formData, "finish");
   const colour = getOptional(formData, "colour");
+  const maintenanceScheduleKey = getOptional(formData, "maintenanceScheduleKey");
   const supportingDocumentsNote = getOptional(formData, "supportingDocumentsNote");
   const acceptedIncompleteReason = getOptional(formData, "acceptedIncompleteReason");
+  const valueSources: HandoverChecklistValueSource[] = selectedProductId ? ["database_autofill"] : ["manual_entry"];
+  if (documentUploads.uploaded) {
+    valueSources.push("manual_upload");
+  }
 
   return {
     projectId: getRequired(formData, "projectId"),
@@ -176,15 +216,20 @@ function buildChecklistInputFromForm(formData: FormData) {
     supplier: getOptional(formData, "supplier") || undefined,
     supplierSku: getOptional(formData, "supplierSku") || undefined,
     careInstructions: getOptional(formData, "careInstructions") || undefined,
+    manualDocumentId: documentUploads.manualDocumentId,
     manualUrl: getOptional(formData, "manualUrl") || undefined,
     warrantyInformation: getOptional(formData, "warrantyInformation") || undefined,
+    warrantyDocumentId: documentUploads.warrantyDocumentId,
+    invoiceDocumentId: documentUploads.invoiceDocumentId,
     invoiceData: getOptional(formData, "invoiceData") || undefined,
+    codeComplianceDocumentId: documentUploads.codeComplianceDocumentId,
     codeComplianceInformation: getOptional(formData, "codeComplianceInformation") || undefined,
+    supportingDocumentIds: documentUploads.supportingDocumentIds,
     extraNotes: getOptional(formData, "extraNotes") || undefined,
     acceptedIncompleteReason: acceptedIncompleteReason || undefined,
     acceptedIncompleteAt: acceptedIncompleteReason ? new Date().toISOString() : undefined,
-    sectionStatuses: parseChecklistSectionStatuses(formData),
-    valueSources: selectedProductId ? ["database_autofill" as const] : ["manual_entry" as const],
+    sectionStatuses: parseChecklistSectionStatuses(formData, documentUploads),
+    valueSources,
     sourceMetadata: {
       source: selectedProductId ? "database_autofill" : "manual",
       matched_product_id: selectedProductId || undefined,
@@ -194,7 +239,9 @@ function buildChecklistInputFromForm(formData: FormData) {
       quantity: quantity || undefined,
       finish: finish || undefined,
       colour: colour || undefined,
+      maintenance_schedule_key: maintenanceScheduleKey || undefined,
       supporting_documents_note: supportingDocumentsNote || undefined,
+      ...documentUploads.sourceMetadata,
     },
   };
 }
@@ -242,6 +289,301 @@ function getChecklistInsertPayload(item: ProjectHandoverChecklistItem) {
 function getStringFromRecord(record: Record<string, unknown> | undefined, key: string) {
   const value = record?.[key];
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function getChecklistProjectRedirect(projectId: string, params: Record<string, string>) {
+  const query = new URLSearchParams({ projectId, ...params });
+  return `/builder/projects?${query.toString()}`;
+}
+
+function redirectChecklistSaved(projectId: string, storage: "supabase" | "stub" | "local-fallback"): never {
+  redirect(getChecklistProjectRedirect(projectId, { draft: "checklist-item-saved", storage }));
+}
+
+function redirectChecklistError(projectId: string | null, error: string): never {
+  const targetProjectId = projectId || "";
+  if (targetProjectId) {
+    redirect(getChecklistProjectRedirect(targetProjectId, { error }));
+  }
+
+  redirect(`/builder/projects?error=${error}`);
+}
+
+function checklistItemHasReusableDatabaseIdentity(item: ProjectHandoverChecklistItem) {
+  const brandOrManufacturer = item.brand || item.manufacturer;
+  const modelOrCode = item.model || item.sku || item.productCode || item.supplierSku;
+  return Boolean(item.title && item.category && brandOrManufacturer && modelOrCode);
+}
+
+function shouldQueueManualChecklistItemForAdminReview(item: ProjectHandoverChecklistItem) {
+  return item.status === "complete"
+    && item.valueSources.includes("manual_entry")
+    && !item.valueSources.includes("database_autofill")
+    && checklistItemHasReusableDatabaseIdentity(item);
+}
+
+function buildManualChecklistAdminReviewText(item: ProjectHandoverChecklistItem) {
+  return [
+    `Builder manually entered this complete handover item for project ${item.projectId}.`,
+    `Name: ${item.title}`,
+    item.category ? `Category: ${item.category}` : null,
+    item.brand || item.manufacturer ? `Manufacturer/brand: ${item.brand || item.manufacturer}` : null,
+    item.model ? `Model: ${item.model}` : null,
+    item.sku ? `SKU: ${item.sku}` : null,
+    item.productCode ? `Product code: ${item.productCode}` : null,
+    item.supplier ? `Supplier: ${item.supplier}` : null,
+    item.supplierSku ? `Supplier SKU: ${item.supplierSku}` : null,
+    getStringFromRecord(item.sourceMetadata, "location") ? `Location: ${getStringFromRecord(item.sourceMetadata, "location")}` : null,
+    getStringFromRecord(item.sourceMetadata, "quantity") ? `Quantity: ${getStringFromRecord(item.sourceMetadata, "quantity")}` : null,
+    getStringFromRecord(item.sourceMetadata, "finish") ? `Finish: ${getStringFromRecord(item.sourceMetadata, "finish")}` : null,
+    item.careInstructions ? `Care instructions: ${item.careInstructions}` : null,
+    item.manualUrl ? `Manual/reference: ${item.manualUrl}` : null,
+    item.warrantyInformation ? `Warranty information: ${item.warrantyInformation}` : null,
+    item.invoiceData ? `Invoice/purchase info: ${item.invoiceData}` : null,
+    item.codeComplianceInformation ? `Code compliance info: ${item.codeComplianceInformation}` : null,
+    getStringFromRecord(item.sourceMetadata, "supporting_documents_note") ? `Supporting documents/photos: ${getStringFromRecord(item.sourceMetadata, "supporting_documents_note")}` : null,
+    item.extraNotes ? `Builder notes: ${item.extraNotes}` : null,
+  ].filter(Boolean).join("\n");
+}
+
+function getChecklistItemAuditNote(action: "created" | "updated", item: ProjectHandoverChecklistItem) {
+  const missingSections = getMissingChecklistSections(item);
+  const actionLabel = action === "created" ? "added" : "updated";
+
+  if (!missingSections.length) {
+    return `Project handover checklist item ${actionLabel}.`;
+  }
+
+  return `Project handover checklist item ${actionLabel} with missing/unchecked: ${missingSections.join(", ")}.`;
+}
+
+const checklistDocumentUploadFields: Array<{
+  fileField: string;
+  idField?: "manualDocumentId" | "warrantyDocumentId" | "invoiceDocumentId" | "codeComplianceDocumentId";
+  existingField: string;
+  documentType: "consent" | "manual" | "warranty" | "photo" | "other";
+  metadataKey: string;
+  title: string;
+  workflowRole: UploadedDocumentWorkflowRole;
+  supporting?: boolean;
+}> = [
+  { fileField: "careDocumentFile", existingField: "careDocumentId", documentType: "other", metadataKey: "care_document_id", title: "Care guide", workflowRole: "other", supporting: true },
+  { fileField: "manualDocumentFile", idField: "manualDocumentId", existingField: "manualDocumentId", documentType: "manual", metadataKey: "manual_document_id", title: "Manual", workflowRole: "manual" },
+  { fileField: "warrantyDocumentFile", idField: "warrantyDocumentId", existingField: "warrantyDocumentId", documentType: "warranty", metadataKey: "warranty_document_id", title: "Warranty", workflowRole: "warranty" },
+  { fileField: "invoiceDocumentFile", idField: "invoiceDocumentId", existingField: "invoiceDocumentId", documentType: "other", metadataKey: "invoice_document_id", title: "Invoice / purchase evidence", workflowRole: "invoice" },
+  { fileField: "codeComplianceDocumentFile", idField: "codeComplianceDocumentId", existingField: "codeComplianceDocumentId", documentType: "consent", metadataKey: "code_compliance_document_id", title: "Code Compliance / consent evidence", workflowRole: "other" },
+  { fileField: "supportingDocumentFile", existingField: "supportingDocumentIds", documentType: "photo", metadataKey: "supporting_document_id", title: "Supporting document / photo", workflowRole: "photo", supporting: true },
+];
+
+function parseExistingSupportingDocumentIds(value: string | null) {
+  if (!value) return [];
+  return value.split(",").map((entry) => entry.trim()).filter(Boolean);
+}
+
+async function saveChecklistDocumentUploads(input: {
+  context: BuilderActionContext | null;
+  formData: FormData;
+  projectId: string;
+}) {
+  const result: ChecklistDocumentUploadResult = {
+    manualDocumentId: getOptional(input.formData, "manualDocumentId") || undefined,
+    warrantyDocumentId: getOptional(input.formData, "warrantyDocumentId") || undefined,
+    invoiceDocumentId: getOptional(input.formData, "invoiceDocumentId") || undefined,
+    codeComplianceDocumentId: getOptional(input.formData, "codeComplianceDocumentId") || undefined,
+    supportingDocumentIds: parseExistingSupportingDocumentIds(getOptional(input.formData, "supportingDocumentIds")),
+    sourceMetadata: {},
+    uploaded: false,
+  };
+
+  const existingCareDocumentId = getOptional(input.formData, "careDocumentId");
+  if (existingCareDocumentId) {
+    result.sourceMetadata.care_document_id = existingCareDocumentId;
+    if (!result.supportingDocumentIds.includes(existingCareDocumentId)) {
+      result.supportingDocumentIds.push(existingCareDocumentId);
+    }
+  }
+
+  for (const field of checklistDocumentUploadFields) {
+    const upload = await prepareProjectDocument(input.formData, field.fileField);
+    if (!upload) {
+      continue;
+    }
+
+    result.uploaded = true;
+    if (input.context) {
+      const { error: uploadError } = await input.context.supabase.storage
+        .from("handover-documents")
+        .upload(upload.storagePath, upload.bytes, {
+          contentType: upload.type,
+          upsert: false,
+        });
+
+      if (uploadError) {
+        throw new Error("upload-document-failed");
+      }
+
+      const { data: uploadedDocument, error: uploadedDocumentError } = await input.context.supabase
+        .from("uploaded_documents")
+        .insert({
+          project_id: input.projectId,
+          original_filename: upload.fileName,
+          file_type: upload.fileType,
+          mime_type: upload.type,
+          storage_path: upload.storagePath,
+          workflow_role: field.workflowRole,
+          processing_status: "uploaded",
+          uploaded_by: input.context.userId,
+        })
+        .select("id")
+        .single();
+
+      if (uploadedDocumentError || !uploadedDocument) {
+        throw new Error("create-uploaded-document-failed");
+      }
+
+      await input.context.supabase.from("documents").insert({
+        project_id: input.projectId,
+        uploaded_by: input.context.userId,
+        name: `${field.title}: ${upload.fileName}`,
+        document_type: field.documentType,
+        storage_path: upload.storagePath,
+        mime_type: upload.type,
+        size_bytes: upload.size,
+        visible_to_client: true,
+      });
+
+      result.sourceMetadata[field.metadataKey] = uploadedDocument.id;
+      result.sourceMetadata[`${field.metadataKey}_filename`] = upload.fileName;
+      if (field.idField) {
+        result[field.idField] = uploadedDocument.id;
+      }
+      if (field.supporting && !result.supportingDocumentIds.includes(uploadedDocument.id)) {
+        result.supportingDocumentIds.push(uploadedDocument.id);
+      }
+      continue;
+    }
+
+    await saveLocalUpload(upload.storagePath, upload.bytes);
+    const uploadedDocument = await saveLocalUploadedDocument({
+      projectId: input.projectId,
+      originalFilename: upload.fileName,
+      fileType: upload.fileType,
+      mimeType: upload.type,
+      storagePath: upload.storagePath,
+      workflowRole: field.workflowRole,
+      processingStatus: "uploaded",
+      uploadedBy: "local-scaffold",
+    });
+
+    result.sourceMetadata[field.metadataKey] = uploadedDocument.id;
+    result.sourceMetadata[`${field.metadataKey}_filename`] = upload.fileName;
+    if (field.idField) {
+      result[field.idField] = uploadedDocument.id;
+    }
+    if (field.supporting && !result.supportingDocumentIds.includes(uploadedDocument.id)) {
+      result.supportingDocumentIds.push(uploadedDocument.id);
+    }
+  }
+
+  return result;
+}
+
+async function queueCompleteManualChecklistItemForAdminReview(input: {
+  context: BuilderActionContext | null;
+  checklistItemId: string;
+  item: ProjectHandoverChecklistItem;
+}) {
+  const { context, checklistItemId, item } = input;
+  if (!shouldQueueManualChecklistItemForAdminReview(item)) {
+    return;
+  }
+
+  const fileName = `Manual checklist item - ${checklistItemId}`;
+  const storagePath = `manual-checklist-items/${checklistItemId}`;
+  const extractedText = buildManualChecklistAdminReviewText(item);
+  const location = getStringFromRecord(item.sourceMetadata, "location") || "";
+
+  if (!context) {
+    const existing = await getLocalSpecificationUploads();
+    if (existing.some((specification) => specification.fileName === fileName)) {
+      return;
+    }
+
+    await saveLocalExtraction({
+      projectId: item.projectId,
+      fileName,
+      proposedItems: [{
+        item_type: "product",
+        title: item.title,
+        category: item.category || "Manual handover item",
+        location,
+        extracted_text: extractedText,
+        matched_existing_record: null,
+        confidence_score: 90,
+      }],
+    });
+    return;
+  }
+
+  const existing = await context.supabase
+    .from("specification_uploads")
+    .select("id")
+    .eq("project_id", item.projectId)
+    .eq("storage_path", storagePath)
+    .maybeSingle();
+
+  if (existing.data?.id) {
+    return;
+  }
+
+  const { data: specification, error: specificationError } = await context.supabase
+    .from("specification_uploads")
+    .insert({
+      project_id: item.projectId,
+      uploaded_by: context.userId,
+      file_name: fileName,
+      storage_path: storagePath,
+      status: "needs_review",
+    })
+    .select("id")
+    .single();
+
+  if (specificationError || !specification) {
+    console.warn("Unable to create admin review specification for manual checklist item", specificationError);
+    return;
+  }
+
+  const adminReviewItem = {
+    specification_upload_id: specification.id,
+    item_type: "product",
+    title: item.title,
+    category: item.category || "Manual handover item",
+    location,
+    extracted_text: extractedText,
+    source_snippet: extractedText,
+    review_reason: "Builder manually entered a complete project item. Review for reusable database approval; the project item is already trusted for this handover package.",
+    matched_existing_record: null,
+    confidence_score: 90,
+    status: "admin_review",
+  };
+
+  const { error: itemError } = await context.supabase.from("extracted_handover_items").insert(adminReviewItem);
+  if (!itemError) {
+    return;
+  }
+
+  if (isMissingReviewReasonColumn(itemError)) {
+    const legacyPayload = { ...adminReviewItem };
+    delete (legacyPayload as Record<string, unknown>).review_reason;
+    const { error: legacyError } = await context.supabase.from("extracted_handover_items").insert(legacyPayload);
+    if (!legacyError) {
+      return;
+    }
+    console.warn("Unable to create legacy admin review item for complete manual checklist item", legacyError);
+    return;
+  }
+
+  console.warn("Unable to create admin review item for complete manual checklist item", itemError);
 }
 
 function mapExtractedWorkflowItemToChecklistInput(item: ExtractedWorkflowItem) {
@@ -382,21 +724,27 @@ async function syncLocalChecklistItemsFromExtractedItems(items: ExtractedWorkflo
   return { upsertedCount };
 }
 
-function redirectChecklistSaved(storage: "supabase" | "stub" | "local-fallback"): never {
-  redirect(`/builder/projects?draft=checklist-item-saved&storage=${storage}`);
-}
-
-function redirectChecklistError(error: string): never {
-  redirect(`/builder/projects?error=${error}`);
-}
-
 export async function createProjectHandoverChecklistItemAction(formData: FormData) {
-  const input = buildChecklistInputFromForm(formData);
+  const projectId = getRequired(formData, "projectId");
   const context = await getBuilderContext();
+  let documentUploads: ChecklistDocumentUploadResult;
+
+  try {
+    documentUploads = await saveChecklistDocumentUploads({ context, formData, projectId });
+  } catch (error) {
+    redirectChecklistError(projectId, error instanceof Error ? error.message : "upload-document-failed");
+  }
+
+  const input = buildChecklistInputFromForm(formData, documentUploads);
 
   if (!context) {
-    await saveLocalProjectHandoverChecklistItem(input);
-    redirectChecklistSaved("stub");
+    const itemForAudit = buildProjectHandoverChecklistItem(input, {
+      id: "pending-local-checklist-item",
+      actorId: "local-scaffold",
+    });
+    const item = await saveLocalProjectHandoverChecklistItem(input, "local-scaffold", getChecklistItemAuditNote("created", itemForAudit));
+    await queueCompleteManualChecklistItemForAdminReview({ context: null, checklistItemId: item.id, item });
+    redirectChecklistSaved(input.projectId, "stub");
   }
 
   const timestamp = new Date().toISOString();
@@ -414,41 +762,57 @@ export async function createProjectHandoverChecklistItemAction(formData: FormDat
 
   if (error || !data) {
     if (isMissingProjectHandoverChecklistTable(error)) {
-      await saveLocalProjectHandoverChecklistItem(input, context.userId);
-      redirectChecklistSaved("local-fallback");
+      const fallbackItem = await saveLocalProjectHandoverChecklistItem(input, context.userId, getChecklistItemAuditNote("created", item));
+      await queueCompleteManualChecklistItemForAdminReview({ context: null, checklistItemId: fallbackItem.id, item: fallbackItem });
+      redirectChecklistSaved(input.projectId, "local-fallback");
     }
 
-    redirectChecklistError("create-checklist-item-failed");
+    redirectChecklistError(input.projectId, "create-checklist-item-failed");
   }
 
+  const savedItem = { ...item, id: data.id };
   await context.supabase.from("project_handover_checklist_events").insert({
-    project_id: item.projectId,
+    project_id: savedItem.projectId,
     checklist_item_id: data.id,
     event_type: "created",
     actor_id: context.userId,
-    notes: "Project handover checklist item created.",
+    notes: getChecklistItemAuditNote("created", savedItem),
     metadata: {
-      status: item.status,
-      value_sources: item.valueSources,
+      status: savedItem.status,
+      value_sources: savedItem.valueSources,
     },
   });
 
-  redirectChecklistSaved("supabase");
+  await queueCompleteManualChecklistItemForAdminReview({ context, checklistItemId: data.id, item: savedItem });
+  redirectChecklistSaved(input.projectId, "supabase");
 }
 
 export async function updateProjectHandoverChecklistItemAction(formData: FormData) {
   const itemId = getRequired(formData, "itemId");
-  const input = buildChecklistInputFromForm(formData);
+  const projectId = getRequired(formData, "projectId");
+  const context = await getBuilderContext();
+  let documentUploads: ChecklistDocumentUploadResult;
+
+  try {
+    documentUploads = await saveChecklistDocumentUploads({ context, formData, projectId });
+  } catch (error) {
+    redirectChecklistError(projectId, error instanceof Error ? error.message : "upload-document-failed");
+  }
+
+  const input = buildChecklistInputFromForm(formData, documentUploads);
+  const actorId = context?.userId || "local-scaffold";
   const update = buildProjectHandoverChecklistItem(input, {
     id: itemId,
-    actorId: "__current_user__",
+    actorId,
   });
   const status = deriveProjectHandoverChecklistStatus(update);
-  const context = await getBuilderContext();
 
   if (!context) {
-    await updateLocalProjectHandoverChecklistItem(itemId, { ...update, status }, "local-scaffold");
-    redirectChecklistSaved("stub");
+    const updatedItem = await updateLocalProjectHandoverChecklistItem(itemId, { ...update, status }, actorId, getChecklistItemAuditNote("updated", { ...update, status }));
+    if (updatedItem) {
+      await queueCompleteManualChecklistItemForAdminReview({ context: null, checklistItemId: itemId, item: updatedItem });
+    }
+    redirectChecklistSaved(input.projectId, "stub");
   }
 
   const payload = {
@@ -456,6 +820,7 @@ export async function updateProjectHandoverChecklistItemAction(formData: FormDat
     updated_at: new Date().toISOString(),
   };
   delete (payload as Record<string, unknown>).project_id;
+  delete (payload as Record<string, unknown>).created_by;
   const { error } = await context.supabase
     .from("project_handover_checklist_items")
     .update(payload)
@@ -464,11 +829,14 @@ export async function updateProjectHandoverChecklistItemAction(formData: FormDat
 
   if (error) {
     if (isMissingProjectHandoverChecklistTable(error)) {
-      await updateLocalProjectHandoverChecklistItem(itemId, { ...update, status }, context.userId);
-      redirectChecklistSaved("local-fallback");
+      const fallbackItem = await updateLocalProjectHandoverChecklistItem(itemId, { ...update, status }, context.userId, getChecklistItemAuditNote("updated", { ...update, status }));
+      if (fallbackItem) {
+        await queueCompleteManualChecklistItemForAdminReview({ context: null, checklistItemId: itemId, item: fallbackItem });
+      }
+      redirectChecklistSaved(input.projectId, "local-fallback");
     }
 
-    redirectChecklistError("update-checklist-item-failed");
+    redirectChecklistError(input.projectId, "update-checklist-item-failed");
   }
 
   await context.supabase.from("project_handover_checklist_events").insert({
@@ -476,12 +844,19 @@ export async function updateProjectHandoverChecklistItemAction(formData: FormDat
     checklist_item_id: itemId,
     event_type: "updated",
     actor_id: context.userId,
-    notes: "Project handover checklist item updated.",
+    notes: getChecklistItemAuditNote("updated", { ...update, status, lastEditedBy: context.userId, id: itemId }),
     metadata: { status },
   });
 
-  redirectChecklistSaved("supabase");
+  await queueCompleteManualChecklistItemForAdminReview({
+    context,
+    checklistItemId: itemId,
+    item: { ...update, status, lastEditedBy: context.userId, id: itemId },
+  });
+
+  redirectChecklistSaved(input.projectId, "supabase");
 }
+
 
 export async function acceptProjectHandoverChecklistItemIncompleteAction(formData: FormData) {
   const itemId = getRequired(formData, "itemId");
@@ -505,7 +880,7 @@ export async function acceptProjectHandoverChecklistItemIncompleteAction(formDat
         supportingDocuments: "accepted_incomplete",
       },
     }, "local-scaffold", reason);
-    redirectChecklistSaved("stub");
+    redirectChecklistSaved(projectId, "stub");
   }
 
   const update = {
@@ -538,10 +913,10 @@ export async function acceptProjectHandoverChecklistItemIncompleteAction(formDat
         acceptedIncompleteAt: timestamp,
         acceptedIncompleteBy: context.userId,
       }, context.userId, reason);
-      redirectChecklistSaved("local-fallback");
+      redirectChecklistSaved(projectId, "local-fallback");
     }
 
-    redirectChecklistError("accept-checklist-incomplete-failed");
+    redirectChecklistError(projectId, "accept-checklist-incomplete-failed");
   }
 
   await context.supabase.from("project_handover_checklist_events").insert({
@@ -555,7 +930,7 @@ export async function acceptProjectHandoverChecklistItemIncompleteAction(formDat
     },
   });
 
-  redirectChecklistSaved("supabase");
+  redirectChecklistSaved(projectId, "supabase");
 }
 
 function getSafeBuilderNext(value: FormDataEntryValue | string | null) {
@@ -989,6 +1364,8 @@ export async function createProjectAction(formData: FormData) {
   const clientName = getRequired(formData, "clientName");
   const clientEmail = getRequired(formData, "clientEmail");
   const handoverDate = getOptional(formData, "handoverDate");
+  const cccGrantedDate = getOptional(formData, "cccGrantedDate");
+  const exposureZone = getOptional(formData, "exposureZone") || "standard";
   const upload = await prepareSpecificationPdf(formData);
   const context = await getBuilderContext();
 
@@ -1011,18 +1388,30 @@ export async function createProjectAction(formData: FormData) {
       redirect("/builder/projects?error=insufficient-project-credits");
     }
 
-    const { data: project, error: projectError } = await context.supabase
+    const projectInsertPayload = {
+      organisation_id: context.organisationId,
+      name,
+      address,
+      project_type: projectType,
+      handover_date: handoverDate,
+      ccc_granted_date: cccGrantedDate || null,
+      exposure_zone: exposureZone,
+      created_by: context.userId,
+    };
+    let projectResult = await context.supabase
       .from("projects")
-      .insert({
-        organisation_id: context.organisationId,
-        name,
-        address,
-        project_type: projectType,
-        handover_date: handoverDate,
-        created_by: context.userId,
-      })
+      .insert(projectInsertPayload)
       .select("id")
       .single();
+
+    if (projectResult.error?.message.includes("ccc_granted_date") || projectResult.error?.message.includes("exposure_zone")) {
+      const legacyPayload = { ...projectInsertPayload };
+      delete (legacyPayload as Record<string, unknown>).ccc_granted_date;
+      delete (legacyPayload as Record<string, unknown>).exposure_zone;
+      projectResult = await context.supabase.from("projects").insert(legacyPayload).select("id").single();
+    }
+
+    const { data: project, error: projectError } = projectResult;
 
     if (projectError || !project) {
       redirect("/builder/projects?error=create-project-failed");
@@ -1083,21 +1472,35 @@ export async function updateProjectAction(formData: FormData) {
   const clientName = getRequired(formData, "clientName");
   const clientEmail = getRequired(formData, "clientEmail");
   const handoverDate = getOptional(formData, "handoverDate");
+  const cccGrantedDate = getOptional(formData, "cccGrantedDate");
+  const exposureZone = getOptional(formData, "exposureZone") || "standard";
   const context = await getBuilderContext();
 
   if (context) {
-    const { error: projectError } = await context.supabase
+    const projectUpdatePayload = {
+      name,
+      address,
+      project_type: projectType,
+      handover_date: handoverDate,
+      ccc_granted_date: cccGrantedDate || null,
+      exposure_zone: exposureZone,
+    };
+    let projectUpdateResult = await context.supabase
       .from("projects")
-      .update({
-        name,
-        address,
-        project_type: projectType,
-        handover_date: handoverDate,
-      })
+      .update(projectUpdatePayload)
       .eq("id", projectId);
 
+    if (projectUpdateResult.error?.message.includes("ccc_granted_date") || projectUpdateResult.error?.message.includes("exposure_zone")) {
+      const legacyPayload = { ...projectUpdatePayload };
+      delete (legacyPayload as Record<string, unknown>).ccc_granted_date;
+      delete (legacyPayload as Record<string, unknown>).exposure_zone;
+      projectUpdateResult = await context.supabase.from("projects").update(legacyPayload).eq("id", projectId);
+    }
+
+    const { error: projectError } = projectUpdateResult;
+
     if (projectError) {
-      redirect("/builder/projects?error=update-project-failed");
+      redirect(`/builder/projects?projectId=${encodeURIComponent(projectId)}&error=update-project-failed`);
     }
 
     const { data: existingClient } = await context.supabase
@@ -1129,7 +1532,7 @@ export async function updateProjectAction(formData: FormData) {
     });
   }
 
-  redirect(`/builder/projects?draft=saved&storage=${hasSupabaseConfig() ? "supabase" : "stub"}`);
+  redirect(`/builder/projects?projectId=${encodeURIComponent(projectId)}&draft=saved&storage=${hasSupabaseConfig() ? "supabase" : "stub"}`);
 }
 
 export async function createClientInviteAction(formData: FormData) {
@@ -2970,8 +3373,8 @@ export async function createDocumentAction(formData: FormData) {
     redirect("/builder/projects?error=invalid-document-upload");
   }
 
-  const name = getOptional(formData, "name") || upload?.fileName || "Project document";
-  const documentType = getRequired(formData, "documentType");
+  const { documentType, selectedLabel } = parseProjectDocumentKind(formData);
+  const name = getOptional(formData, "name") || selectedLabel || upload?.fileName || "Project document";
   const storagePath = getOptional(formData, "storagePath") || upload?.storagePath || `pending/${name}`;
   const visibleToClient = formData.get("visibleToClient") === "on";
   const context = await getBuilderContext();
@@ -3109,7 +3512,7 @@ export async function createDocumentAction(formData: FormData) {
     });
   }
 
-  redirect(`/builder/projects?draft=document-saved&storage=${hasSupabaseConfig() ? "supabase" : "stub"}`);
+  redirect(`/builder/projects?projectId=${encodeURIComponent(projectId)}&draft=document-saved&storage=${hasSupabaseConfig() ? "supabase" : "stub"}`);
 }
 
 export async function retryDocumentExtractionJobAction(formData: FormData) {

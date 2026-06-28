@@ -38,11 +38,11 @@ export function getDoclingScriptPath() {
     return path.resolve(/* turbopackIgnore: true */ process.cwd(), configuredScript);
   }
 
-  return path.join(process.cwd(), "scripts", "docling-convert.py");
+  return path.join(/* turbopackIgnore: true */ process.cwd(), "scripts", "docling-convert.py");
 }
 
 export function hasDoclingLocalScript() {
-  return existsSync(getDoclingScriptPath());
+  return existsSync(/* turbopackIgnore: true */ getDoclingScriptPath());
 }
 
 function getDoclingTimeoutMs() {
@@ -76,7 +76,7 @@ function getOutputPath(diagnostics: Record<string, unknown>, key: "markdown" | "
 export async function parseDocumentWithDoclingLocal(input: ParseDocumentWithDoclingInput): Promise<DoclingParseResult> {
   const scriptPath = getDoclingScriptPath();
 
-  if (!existsSync(scriptPath)) {
+  if (!existsSync(/* turbopackIgnore: true */ scriptPath)) {
     throw new Error(`Docling converter script not found at ${scriptPath}`);
   }
 
@@ -85,13 +85,13 @@ export async function parseDocumentWithDoclingLocal(input: ParseDocumentWithDocl
   const outDir = path.join(tempDir, "out");
 
   try {
-    await writeFile(inputPath, Buffer.from(input.bytes));
+    await writeFile(/* turbopackIgnore: true */ inputPath, Buffer.from(input.bytes));
 
     const { stdout } = await execFileAsync(
       getDoclingPython(),
       [scriptPath, inputPath, "--out-dir", outDir, "--basename", "document-context", "--quiet"],
       {
-        cwd: process.cwd(),
+        cwd: path.join(/* turbopackIgnore: true */ process.cwd()),
         timeout: getDoclingTimeoutMs(),
         maxBuffer: 20 * 1024 * 1024,
         windowsHide: true,
@@ -104,10 +104,10 @@ export async function parseDocumentWithDoclingLocal(input: ParseDocumentWithDocl
       throw new Error("Docling converter did not report a diagnostics path.");
     }
 
-    const diagnostics = JSON.parse(await readFile(diagnosticsPath, "utf-8")) as Record<string, unknown>;
+    const diagnostics = JSON.parse(await readFile(/* turbopackIgnore: true */ diagnosticsPath, "utf-8")) as Record<string, unknown>;
     const markdownPath = getOutputPath(diagnostics, "markdown");
     const jsonPath = getOutputPath(diagnostics, "json");
-    const markdown = markdownPath ? await readFile(markdownPath, "utf-8") : "";
+    const markdown = markdownPath ? await readFile(/* turbopackIgnore: true */ markdownPath, "utf-8") : "";
     const text = markdown.trim();
 
     if (!text) {
@@ -128,6 +128,6 @@ export async function parseDocumentWithDoclingLocal(input: ParseDocumentWithDocl
       },
     };
   } finally {
-    await rm(tempDir, { force: true, recursive: true });
+    await rm(/* turbopackIgnore: true */ tempDir, { force: true, recursive: true });
   }
 }

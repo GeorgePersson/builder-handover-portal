@@ -259,8 +259,8 @@ function PublishedColumn({
               {group.items.map((item) => (
                 <article className="p-4" key={item.id}>
                   <p className="text-sm font-semibold text-slate-950">{item.title}</p>
-                  <p className="mt-1 text-xs text-slate-500">{item.location || "No location captured"}</p>
-                  <p className="mt-2 whitespace-pre-line text-sm leading-6 text-slate-600">{item.extractedText}</p>
+                  {item.location ? <p className="mt-1 text-xs text-slate-500">{item.location}</p> : null}
+                  {item.extractedText ? <p className="mt-2 whitespace-pre-line text-sm leading-6 text-slate-600">{item.extractedText}</p> : null}
                 </article>
               ))}
             </div>

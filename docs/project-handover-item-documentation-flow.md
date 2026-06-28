@@ -223,6 +223,18 @@ Actions:
 - Create manual item.
 - Accept current incomplete state.
 
+
+## Current Manual Demo Workspace Notes (2026-06-26)
+
+The current `/builder/projects` branch prioritises a trusted manual/database-autofill workflow for demo reliability:
+
+- Manual handover items are allowed to be created even when not searchable; missing evidence is logged and surfaced instead of blocking creation with `not enough information to search`.
+- Item cards should open a clear detail/edit modal rather than expanding dense inline details.
+- Document-capable item fields should accept both written text/link/reference and an optional uploaded evidence file.
+- Project-level document upload Type options should expose the NZ required-by-law legal document list: Code Compliance Certificate, Building consent documents, Approved plans and specifications, Consent amendments / minor variations, Council inspection records, Final inspection sign-off, Record of Building Work, Certificates of Design Work, Producer statements, Electrical Certificate of Compliance, Electrical Safety Certificate, Gas certificate, Plumbing / drainage compliance certificates, and Compliance schedule where applicable.
+- The document upload form uses the selected Type label as the default title when Title is blank and maps that UI label to existing broad DB document categories.
+- Server-action upload forms must not specify explicit `encType`/`method`; upload body limits are configured in `next.config.ts` for both server actions and proxy/client body cloning.
+
 ## Completion Rules
 
 A project handover item is complete only when one of these is true:

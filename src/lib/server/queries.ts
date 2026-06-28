@@ -413,10 +413,17 @@ export async function getProjects(): Promise<Project[]> {
   }
 
   const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase
+  const richResult = await supabase
     .from("projects")
-    .select("id,name,address,project_type,status,handover_date,published_at,created_at,project_clients(name,email,invited_at,accepted_at)")
+    .select("id,name,address,project_type,status,handover_date,ccc_granted_date,exposure_zone,published_at,created_at,project_clients(name,email,invited_at,accepted_at)")
     .order("created_at", { ascending: false });
+  const fallbackResult = richResult.error?.message.includes("ccc_granted_date") || richResult.error?.message.includes("exposure_zone")
+    ? await supabase
+        .from("projects")
+        .select("id,name,address,project_type,status,handover_date,published_at,created_at,project_clients(name,email,invited_at,accepted_at)")
+        .order("created_at", { ascending: false })
+    : richResult;
+  const { data, error } = fallbackResult;
 
   if (error || !data) {
     return projects;
@@ -435,6 +442,8 @@ export async function getProjects(): Promise<Project[]> {
       clientInvitedAt: client?.invited_at || undefined,
       projectType: project.project_type,
       handoverDate: project.handover_date || project.created_at,
+      cccGrantedDate: getRowString(project as unknown as LooseDbRow, "ccc_granted_date"),
+      exposureZone: getRowString(project as unknown as LooseDbRow, "exposure_zone") as Project["exposureZone"],
       publishedAt: project.published_at || undefined,
       status: project.status,
       documentCount: 0,
@@ -1035,33 +1044,54 @@ export async function getMaintenanceTasks(projectId?: string): Promise<Maintenan
   const supabase = await createSupabaseServerClient();
   let query = supabase
     .from("maintenance_tasks")
-    .select("id,project_id,title,due_date,frequency,required_for_warranty,created_at,maintenance_completions(id,completed_at)")
+    .select("id,project_id,title,due_date,frequency,maintenance_schedule_key,frequency_months,starts_from_ccc,required_for_warranty,created_at,maintenance_completions(id,completed_at)")
     .order("due_date", { ascending: true });
 
   if (projectId) {
     query = query.eq("project_id", projectId);
   }
 
-  const { data, error } = await query;
+  const richResult = await query;
+  let data = richResult.data as unknown as LooseDbRow[] | null;
+  let error = richResult.error;
+
+  if (error?.message.includes("maintenance_schedule_key") || error?.message.includes("frequency_months") || error?.message.includes("starts_from_ccc")) {
+    let legacyQuery = supabase
+      .from("maintenance_tasks")
+      .select("id,project_id,title,due_date,frequency,required_for_warranty,created_at,maintenance_completions(id,completed_at)")
+      .order("due_date", { ascending: true });
+
+    if (projectId) {
+      legacyQuery = legacyQuery.eq("project_id", projectId);
+    }
+
+    const legacyResult = await legacyQuery;
+    data = legacyResult.data;
+    error = legacyResult.error;
+  }
 
   if (error || !data) {
     return projectId ? maintenanceTasks.filter((task) => task.projectId === projectId) : maintenanceTasks;
   }
 
   return data.map((task) => {
+    const dueDate = getRowString(task, "due_date") || "";
     const completions = Array.isArray(task.maintenance_completions)
       ? task.maintenance_completions
       : [];
 
     return {
-      id: task.id,
-      projectId: task.project_id,
-      title: task.title,
-      cadence: task.frequency || "One-off",
-      dueDate: task.due_date,
-      requiredForWarranty: task.required_for_warranty,
+      id: getRowString(task, "id") || "",
+      projectId: getRowString(task, "project_id") || "",
+      title: getRowString(task, "title") || "Maintenance task",
+      cadence: getRowString(task, "frequency") || "One-off",
+      frequencyMonths: getRowNumber(task, "frequency_months"),
+      maintenanceScheduleKey: getRowString(task, "maintenance_schedule_key"),
+      startsFromCcc: getRowBoolean(task, "starts_from_ccc"),
+      dueDate,
+      requiredForWarranty: Boolean(getRowBoolean(task, "required_for_warranty")),
       relatedProduct: "Project maintenance",
-      status: completions.length > 0 ? "complete" : new Date(task.due_date) < new Date() ? "overdue" : "upcoming",
+      status: completions.length > 0 ? "complete" : dueDate && new Date(dueDate) < new Date() ? "overdue" : "upcoming",
     };
   });
 }
@@ -1264,7 +1294,10 @@ export async function getPublishedClientPackagePreview(projectId?: string) {
     const checklistPackageItems = publishedAt
       ? checklistItems.filter(isChecklistPackageReady).map(checklistItemToPackageItem)
       : [];
-    const publishedItems = checklistPackageItems.length ? checklistPackageItems : workflowItems.length ? workflowItems : items;
+    const seedPublishedItems = !publishedAt && project?.publishedAt
+      ? (await getProjectExtractedHandoverItems(project.id)).filter(isPackageReadyExtractedItem)
+      : [];
+    const publishedItems = checklistPackageItems.length ? checklistPackageItems : workflowItems.length ? workflowItems : items.length ? items : seedPublishedItems;
 
     return {
       project,

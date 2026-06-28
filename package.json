@@ -27,7 +27,13 @@
     "spec-quality-audit:fixtures": "node scripts/check-spec-quality-audit-fixtures.mjs",
     "spec-route:quality-smoke": "node scripts/smoke-spec-route-quality.mjs",
     "spec-extract:smoke": "node scripts/smoke-spec-extract.mjs",
-    "spec-extract:llm-smoke": "node scripts/smoke-spec-extract-llm.mjs"
+    "spec-extract:llm-smoke": "node scripts/smoke-spec-extract-llm.mjs",
+    "ui:audit:static": "node .agents/skills/impeccable/scripts/detect.mjs src/app src/components src/app/globals.css",
+    "ui:audit:static:json": "node scripts/run-impeccable-static.mjs",
+    "ui:routes": "node scripts/check-ui-routes.mjs",
+    "ui:audit": "npm.cmd run ui:audit:static:json && npm.cmd run ui:routes",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",
@@ -42,6 +48,7 @@
     "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
